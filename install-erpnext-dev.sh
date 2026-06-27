@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.4.1"
+SCRIPT_VERSION="0.4.2"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -22,6 +22,8 @@ SITE_NAME="${SITE_NAME:-erp.test}"
 AUTO_START="${AUTO_START:-prompt}"
 ENABLE_AUTOSTART="${ENABLE_AUTOSTART:-prompt}"
 ERPNEXT_SERVICE_NAME="${ERPNEXT_SERVICE_NAME:-erpnext-dev.service}"
+READY_TIMEOUT="${READY_TIMEOUT:-90}"
+READY_INTERVAL="${READY_INTERVAL:-5}"
 
 FRAPPE_BRANCH="${FRAPPE_BRANCH:-version-16}"
 ERPNEXT_BRANCH="${ERPNEXT_BRANCH:-version-16}"
@@ -117,6 +119,84 @@ erpnext_service_path() {
 
 service_exists() {
   [[ -f "$(erpnext_service_path)" ]]
+}
+
+
+port_listens() {
+  local port="$1"
+  nc -z 127.0.0.1 "$port" >/dev/null 2>&1
+}
+
+bench_ports_ready() {
+  port_listens 8000 && port_listens 9000 && port_listens 11000 && port_listens 13000
+}
+
+bench_ready_count() {
+  local count=0
+  local port
+
+  for port in 8000 9000 11000 13000; do
+    if port_listens "$port"; then
+      count=$((count + 1))
+    fi
+  done
+
+  echo "$count"
+}
+
+bench_readiness_line() {
+  local elapsed="$1"
+  local timeout="$2"
+  local web socket queue cache
+
+  if port_listens 8000; then web="OK"; else web="wait"; fi
+  if port_listens 9000; then socket="OK"; else socket="wait"; fi
+  if port_listens 11000; then queue="OK"; else queue="wait"; fi
+  if port_listens 13000; then cache="OK"; else cache="wait"; fi
+
+  printf "  [%3ss/%3ss] web: %-4s socket: %-4s queue: %-4s cache: %-4s\n" \
+    "$elapsed" "$timeout" "$web" "$socket" "$queue" "$cache"
+}
+
+wait_for_erpnext_ready() {
+  local timeout="${1:-$READY_TIMEOUT}"
+  local interval="${2:-$READY_INTERVAL}"
+  local elapsed=0
+
+  echo
+  echo "Waiting for ERPNext services to become ready..."
+  echo "This can take 15-90 seconds after start/restart."
+  echo
+
+  while (( elapsed <= timeout )); do
+    bench_readiness_line "$elapsed" "$timeout"
+
+    if bench_ports_ready; then
+      ok "ERPNext is ready. Required development ports are listening."
+      return 0
+    fi
+
+    sleep "$interval"
+    elapsed=$((elapsed + interval))
+  done
+
+  warn "ERPNext did not become fully ready within ${timeout}s."
+  echo
+  echo "Useful checks:"
+  echo "  ./install-erpnext-dev.sh runtime-status"
+  echo "  ./install-erpnext-dev.sh logs"
+  echo "  sudo systemctl status ${ERPNEXT_SERVICE_NAME} --no-pager -l"
+  return 1
+}
+
+show_access_when_ready() {
+  if port_listens 8000; then
+    show_access_instructions
+  else
+    warn "Browser access was not shown because web port 8000 is not listening yet."
+    echo "Run this after a few seconds:"
+    echo "  ./install-erpnext-dev.sh runtime-status"
+  fi
 }
 
 path_is_dir() {
@@ -247,8 +327,12 @@ start_erpnext_service() {
 
   log "Starting ERPNext service"
   if $SUDO systemctl start "${ERPNEXT_SERVICE_NAME}"; then
-    ok "ERPNext service started"
-    show_access_instructions
+    ok "ERPNext service start command completed"
+    if wait_for_erpnext_ready; then
+      show_access_instructions
+    else
+      return 1
+    fi
   else
     err "Could not start ${ERPNEXT_SERVICE_NAME}. Check logs with: ./install-erpnext-dev.sh logs"
     return 1
@@ -281,8 +365,12 @@ restart_erpnext_service() {
 
   log "Restarting ERPNext service"
   if $SUDO systemctl restart "${ERPNEXT_SERVICE_NAME}"; then
-    ok "ERPNext service restarted"
-    show_access_instructions
+    ok "ERPNext service restart command completed"
+    if wait_for_erpnext_ready; then
+      show_access_instructions
+    else
+      return 1
+    fi
   else
     err "Could not restart ${ERPNEXT_SERVICE_NAME}. Check logs with: ./install-erpnext-dev.sh logs"
     return 1
@@ -1114,10 +1202,19 @@ install_state() {
 }
 
 runtime_state() {
+  local ready_count
+  ready_count="$(bench_ready_count)"
+
   if service_exists && systemctl is-active --quiet "${ERPNEXT_SERVICE_NAME}"; then
-    echo "Running via service"
-  elif nc -z 127.0.0.1 8000 >/dev/null 2>&1; then
-    echo "Running"
+    if bench_ports_ready; then
+      echo "Running via service"
+    elif [[ "$ready_count" -gt 0 ]]; then
+      echo "Starting / partially ready via service"
+    else
+      echo "Starting via service"
+    fi
+  elif port_listens 8000; then
+    echo "Running in foreground"
   elif id "$FRAPPE_USER" >/dev/null 2>&1 && pgrep -u "$FRAPPE_USER" -f "bench start" >/dev/null 2>&1; then
     echo "Starting / partially running"
   else
@@ -1220,8 +1317,10 @@ run_runtime_status() {
 
   if [[ "$runtime_status" == Running* ]]; then
     status_line "Runtime" "OK" "$runtime_status"
-  else
+  elif [[ "$runtime_status" == Starting* ]]; then
     status_line "Runtime" "WARN" "$runtime_status"
+  else
+    status_line "Runtime" "INFO" "$runtime_status"
   fi
 
   if [[ "$service_status" == "Running" ]]; then
@@ -1249,15 +1348,23 @@ run_runtime_status() {
   for item in "${port_checks[@]}"; do
     port="${item%%:*}"
     label="${item#*:}"
-    if nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
+    if port_listens "$port"; then
       status_line "$label" "OK" "port ${port} listening"
+    elif [[ "$service_status" == "Running" ]]; then
+      status_line "$label" "WARN" "port ${port} not listening yet"
     else
       status_line "$label" "INFO" "port ${port} not listening"
     fi
   done
 
   echo
-  echo "If installed but stopped, run: ./install-erpnext-dev.sh start"
+  if [[ "$runtime_status" == Starting* ]]; then
+    echo "ERPNext was recently started/restarted. If ports are still waiting, run:"
+    echo "  sleep 30 && ./install-erpnext-dev.sh runtime-status"
+    echo "  ./install-erpnext-dev.sh logs"
+  else
+    echo "If installed but stopped, run: ./install-erpnext-dev.sh start"
+  fi
   echo "============================================================"
 }
 
@@ -1515,7 +1622,7 @@ run_full_status() {
   for item in "${port_checks[@]}"; do
     port="${item%%:*}"
     label="${item#*:}"
-    if nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
+    if port_listens "$port"; then
       status_line "$label" "OK" "port ${port} listening"
     else
       status_line "$label" "INFO" "port ${port} not listening"
@@ -2205,7 +2312,8 @@ Advanced actions:
   migrate             Run site migration
   build               Build assets
   clear-cache         Clear site cache
-  restart             Restart ERPNext service
+  restart             Restart ERPNext service and wait until ready
+  wait-ready          Wait until ERPNext development ports are ready
   doctor              Show full health report
   full-status         Show full health report
   uninstall           Show uninstall/reset menu
@@ -2291,7 +2399,7 @@ parse_args() {
         ASSUME_YES=1
         shift
         ;;
-      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|multi-env-guide)
+      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|multi-env-guide)
         ACTION="$1"
         shift
         ;;
@@ -2332,6 +2440,7 @@ main() {
     build) maintenance_build ;;
     clear-cache) maintenance_clear_cache ;;
     restart) maintenance_restart ;;
+    wait-ready) wait_for_erpnext_ready ;;
     foreground-start) run_foreground_start ;;
     enable-autostart) enable_autostart_service ;;
     disable-autostart) disable_autostart_service ;;

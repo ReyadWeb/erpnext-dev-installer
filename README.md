@@ -12,16 +12,24 @@ This project is designed for local developer VMs, test labs, and evaluation envi
 ## Current Version
 
 ```text
-v0.4.1
+v0.4.2
 ```
 
-This version adds a focused **Backup / Restore / Maintenance** workflow on top of the stable v0.3.4 local developer VM release. It keeps the main installer workflow simple while adding safer operational tools for backups, restore, migration, asset builds, cache clearing, and service restarts.
+This version adds a reliability polish on top of the Backup / Restore / Maintenance workflow. Start and restart actions now wait visibly for ERPNext development services to become ready before showing browser access instructions.
 
 ---
 
-## v0.4.1 Backup / Restore / Maintenance
+## v0.4.2 Service Readiness Reliability
 
-v0.4.1 adds operational tools that are useful after the environment is installed:
+v0.4.2 improves the start/restart experience:
+
+- Shows visible readiness checks after starting or restarting the ERPNext service.
+- Waits for Bench web, Socket.io, Redis queue, and Redis cache ports.
+- Shows browser instructions only after the web port is ready.
+- Reports `Starting` / `partially ready` instead of incorrectly implying full readiness.
+- Adds `wait-ready` command mode for manual readiness checks.
+
+The Backup / Restore / Maintenance tools remain available:
 
 - Create a database backup.
 - Create a database + files backup.
@@ -102,9 +110,13 @@ http://VM_IP:8000
 ---
 
 
+### v0.4.2 readiness polish
+
+v0.4.2 makes service start and restart clearer. After `start`, `restart`, `service-start`, or `service-restart`, the script shows visible waiting output while checking required development ports. This prevents confusion when systemd reports the service as running but Bench is still starting internally.
+
 ### v0.4.1 backup listing polish
 
-v0.4.1 fixes the backup listing display so public file backups and private file backups are categorized separately. It also adds backup counts and shows `none` when a category has no files yet.
+v0.4.1 fixed the backup listing display so public file backups and private file backups are categorized separately. It also added backup counts and shows `none` when a category has no files yet.
 
 Correct backup grouping:
 
@@ -192,7 +204,7 @@ sudo apt update && sudo apt install -y curl ca-certificates && curl -fsSL "https
 
 ## Menu Layout
 
-v0.4.1 keeps the main menu simple:
+v0.4.2 keeps the main menu simple:
 
 ```text
 1) Recommended Setup
@@ -429,6 +441,7 @@ Maintenance command shortcuts:
 ./install-erpnext-dev.sh build
 ./install-erpnext-dev.sh clear-cache
 ./install-erpnext-dev.sh restart
+./install-erpnext-dev.sh wait-ready
 ```
 
 Maintenance menu options:
@@ -449,7 +462,7 @@ Maintenance menu options:
 
 ## Autostart on VM Boot
 
-v0.4.1 can create a local development systemd service:
+v0.4.2 can create a local development systemd service:
 
 ```text
 erpnext-dev.service
