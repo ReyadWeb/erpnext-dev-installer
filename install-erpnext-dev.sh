@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.5.2"
+SCRIPT_VERSION="0.5.3"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -462,20 +462,38 @@ EOF_PREFIX
 run_as_frappe() {
   local cmd="$1"
   local prefix
-  local full_cmd
+  local tmp_script
+  local rc
 
   if ! id "$FRAPPE_USER" >/dev/null 2>&1; then
     return 1
   fi
 
   prefix="$(frappe_shell_prefix)"
-  full_cmd="${prefix} ${cmd}"
+  tmp_script="$(mktemp /tmp/erpnext-dev-frappe-run.XXXXXX.sh)" || return 1
+
+  {
+    echo '#!/usr/bin/env bash'
+    echo 'set -o pipefail'
+    echo "$prefix"
+    echo "$cmd"
+  } > "$tmp_script"
+
+  chmod 700 "$tmp_script"
 
   if [[ "${EUID}" -eq 0 ]]; then
-    su - "$FRAPPE_USER" -s /bin/bash -c "$full_cmd"
+    chown "$FRAPPE_USER:$FRAPPE_USER" "$tmp_script" 2>/dev/null || true
+    su - "$FRAPPE_USER" -s /bin/bash -c "bash '$tmp_script'"
+    rc=$?
+    rm -f "$tmp_script"
   else
-    sudo -iu "$FRAPPE_USER" bash -lc "$full_cmd"
+    sudo chown "$FRAPPE_USER:$FRAPPE_USER" "$tmp_script" 2>/dev/null || true
+    sudo -iu "$FRAPPE_USER" bash "$tmp_script"
+    rc=$?
+    sudo rm -f "$tmp_script" 2>/dev/null || rm -f "$tmp_script"
   fi
+
+  return "$rc"
 }
 
 check_os() {

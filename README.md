@@ -1,5 +1,10 @@
 # ERPNext Developer Installer
 
+## v0.5.3 Reliability Fix
+
+This release hardens the internal `run_as_frappe` command wrapper by running Frappe-user commands through a temporary shell script instead of passing long multi-line command strings directly through `bash -lc`. This prevents command-collapsing issues such as `set -eexport` or `if ... then` syntax errors during App Library installs.
+
+
 A developer-friendly installer manager for setting up a local **Frappe + ERPNext** environment on Ubuntu.
 
 This project is designed for local developer VMs, test labs, and evaluation environments. It is especially useful when running ERPNext inside KVM/libvirt, VirtualBox, VMware, or a similar virtualization platform.
@@ -12,16 +17,16 @@ This project is designed for local developer VMs, test labs, and evaluation envi
 ## Current Version
 
 ```text
-v0.5.2
+v0.5.3
 ```
 
 This version adds an App Library on top of the stable local VM installer, backup/maintenance workflow, and service readiness checks. The App Library can show installed apps and install selected optional Frappe apps such as CRM, HRMS, Helpdesk, and Insights.
 
 ---
 
-## v0.5.2 App Library
+## v0.5.3 App Library
 
-v0.5.2 adds an optional App Library for installing common Frappe ecosystem apps into the local ERPNext developer VM.
+v0.5.3 adds an optional App Library for installing common Frappe ecosystem apps into the local ERPNext developer VM.
 
 Included app profiles:
 
@@ -133,9 +138,9 @@ http://VM_IP:8000
 ---
 
 
-### v0.5.2 readiness polish
+### v0.5.3 readiness polish
 
-v0.5.2 makes service start and restart clearer. After `start`, `restart`, `service-start`, or `service-restart`, the script shows visible waiting output while checking required development ports. This prevents confusion when systemd reports the service as running but Bench is still starting internally.
+v0.5.3 makes service start and restart clearer. After `start`, `restart`, `service-start`, or `service-restart`, the script shows visible waiting output while checking required development ports. This prevents confusion when systemd reports the service as running but Bench is still starting internally.
 
 ### v0.4.1 backup listing polish
 
@@ -227,7 +232,7 @@ sudo apt update && sudo apt install -y curl ca-certificates && curl -fsSL "https
 
 ## Menu Layout
 
-v0.5.2 keeps the main menu simple:
+v0.5.3 keeps the main menu simple:
 
 ```text
 1) Recommended Setup
@@ -407,9 +412,9 @@ Incomplete               → run repair or perform a clean setup
 ```
 
 
-### v0.5.2 reliability note
+### v0.5.3 reliability note
 
-v0.5.2 fixes a shell-prefix formatting issue in App Library commands. In v0.5.1, some `sudo -iu frappe bash -lc` calls could collapse environment setup commands together, causing errors such as `syntax error near unexpected token then`. The command runner now uses a semicolon-separated Frappe shell prefix so `bench`, `node`, `npm`, and `yarn` commands run reliably as the `frappe` user.
+v0.5.3 fixes a shell-prefix formatting issue in App Library commands. In v0.5.1, some `sudo -iu frappe bash -lc` calls could collapse environment setup commands together, causing errors such as `syntax error near unexpected token then`. The command runner now uses a semicolon-separated Frappe shell prefix so `bench`, `node`, `npm`, and `yarn` commands run reliably as the `frappe` user.
 
 ## App Library
 
@@ -546,7 +551,7 @@ Maintenance menu options:
 
 ## Autostart on VM Boot
 
-v0.5.2 can create a local development systemd service:
+v0.5.3 can create a local development systemd service:
 
 ```text
 erpnext-dev.service
