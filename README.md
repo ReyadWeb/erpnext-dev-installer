@@ -12,10 +12,10 @@ This project is designed for local developer VMs, test labs, and evaluation envi
 ## Current Version
 
 ```text
-v0.3.1
+v0.3.2
 ```
 
-This version refines the status workflow so installation, runtime, and autostart states are reported separately. It keeps the cleaner basic/advanced menu structure and optional systemd autostart service from v0.3.0.
+This version improves the interactive status experience. The main Status option now opens a submenu, individual status screens pause before returning, and quick status is shorter so users can read it comfortably in small terminal windows.
 
 ---
 
@@ -129,7 +129,7 @@ sudo apt update && sudo apt install -y curl ca-certificates && curl -fsSL "https
 
 ## Menu Layout
 
-v0.3.1 keeps the main menu simple:
+v0.3.2 keeps the main menu simple:
 
 ```text
 1) Recommended Setup
@@ -147,7 +147,7 @@ The main menu is intended for normal daily use.
 The Status option opens a focused status submenu instead of dumping every diagnostic check at once:
 
 ```text
-1) Quick Status
+1) Status Summary
 2) Runtime Status
 3) Installation Status
 4) Service / Autostart Status
@@ -164,6 +164,8 @@ Autostart enabled / disabled   = whether systemd starts ERPNext on VM boot
 ```
 
 This prevents a stopped ERPNext service from being incorrectly reported as "not installed".
+
+In interactive mode, each status screen waits for Enter before returning to the Status menu. This avoids pushing the useful output out of view in small terminal windows.
 
 Advanced tools are under:
 
@@ -258,13 +260,13 @@ Follow service logs live:
 
 ## Status Commands
 
-Quick status:
+Status summary in command mode:
 
 ```bash
 ./install-erpnext-dev.sh status
 ```
 
-Interactive status submenu:
+Interactive status submenu with readable screens and Back option:
 
 ```bash
 ./install-erpnext-dev.sh status-menu
@@ -306,7 +308,7 @@ Incomplete               → run repair or perform a clean setup
 
 ## Autostart on VM Boot
 
-v0.3.1 can create a local development systemd service:
+v0.3.2 can create a local development systemd service:
 
 ```text
 erpnext-dev.service

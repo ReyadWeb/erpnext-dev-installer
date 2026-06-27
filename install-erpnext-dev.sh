@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.3.1"
+SCRIPT_VERSION="0.3.2"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -274,6 +274,15 @@ confirm() {
 
   read -r -p "$prompt [y/N]: " reply
   [[ "$reply" =~ ^[Yy]$|^[Yy][Ee][Ss]$ ]]
+}
+
+pause_after_screen() {
+  local prompt="${1:-Press Enter to return...}"
+
+  if [[ -t 0 && "$ASSUME_YES" -ne 1 ]]; then
+    echo
+    read -r -p "$prompt" _
+  fi
 }
 
 require_sudo() {
@@ -1087,7 +1096,7 @@ recommended_action() {
 run_status() {
   require_sudo
 
-  local vm_ip installed runtime auto svc bench_dir creds_state helper_state
+  local vm_ip installed runtime auto svc bench_dir url_status
   vm_ip="$(get_vm_ip)"
   installed="$(install_state)"
   runtime="$(runtime_state)"
@@ -1095,39 +1104,26 @@ run_status() {
   svc="$(service_state)"
   bench_dir="$(active_bench_dir)"
 
-  if [[ -f "${FRAPPE_HOME}/erpnext-dev-credentials.txt" ]]; then
-    creds_state="Available"
-  else
-    creds_state="Missing"
-  fi
-
-  if [[ -x "${FRAPPE_HOME}/start-erpnext-dev.sh" ]]; then
-    helper_state="Available"
-  else
-    helper_state="Missing"
-  fi
-
   echo
   echo "============================================================"
-  echo "ERPNext Developer Quick Status"
+  echo "ERPNext Developer Status"
   echo "============================================================"
-  printf "  %-24s %s\n" "Install status:" "$installed"
-  printf "  %-24s %s\n" "Runtime status:" "$runtime"
-  printf "  %-24s %s\n" "Autostart:" "$auto"
-  printf "  %-24s %s\n" "Service:" "$svc"
-  printf "  %-24s %s\n" "Site:" "$SITE_NAME"
-  printf "  %-24s %s\n" "Bench folder:" "$bench_dir"
-  printf "  %-24s %s\n" "Credentials:" "$creds_state"
-  printf "  %-24s %s\n" "Start helper:" "$helper_state"
-  printf "  %-24s %s\n" "VM IP:" "$vm_ip"
-  printf "  %-24s http://%s:8000\n" "Direct URL:" "$vm_ip"
-  printf "  %-24s http://%s:8000\n" "Friendly URL:" "$SITE_NAME"
+  printf "  %-18s %s\n" "Install:" "$installed"
+  printf "  %-18s %s\n" "Runtime:" "$runtime"
+  printf "  %-18s %s\n" "Service:" "$svc"
+  printf "  %-18s %s\n" "Autostart:" "$auto"
+  printf "  %-18s %s\n" "Site:" "$SITE_NAME"
+  printf "  %-18s %s\n" "VM IP:" "$vm_ip"
+  printf "  %-18s http://%s:8000\n" "Direct URL:" "$vm_ip"
+  printf "  %-18s http://%s:8000\n" "Friendly URL:" "$SITE_NAME"
   echo
   echo "Recommended action:"
   echo "  $(recommended_action "$installed" "$runtime" "$auto")"
   echo
-  echo "Friendly URL note: http://${SITE_NAME}:8000 only works after ERPNext is running and your HOST /etc/hosts maps ${SITE_NAME} to ${vm_ip}."
-  echo "For detailed diagnostics, run: ./install-erpnext-dev.sh doctor"
+  echo "Notes:"
+  echo "  - Direct URL works after ERPNext is running."
+  echo "  - Friendly URL also needs the HOST /etc/hosts entry: ${vm_ip} ${SITE_NAME}"
+  echo "  - Detailed diagnostics: ./install-erpnext-dev.sh doctor"
   echo "============================================================"
 }
 
@@ -1248,7 +1244,7 @@ show_status_menu() {
     echo "============================================================"
     echo "Status"
     echo "============================================================"
-    echo "1) Quick Status"
+    echo "1) Status Summary"
     echo "2) Runtime Status"
     echo "3) Installation Status"
     echo "4) Service / Autostart Status"
@@ -1258,13 +1254,13 @@ show_status_menu() {
     read -r -p "Choose an option: " status_choice
 
     case "$status_choice" in
-      1) run_status ;;
-      2) run_runtime_status ;;
-      3) run_installation_status ;;
-      4) run_service_summary ;;
-      5) run_full_status ;;
+      1) run_status; pause_after_screen "Press Enter to return to Status Menu..." ;;
+      2) run_runtime_status; pause_after_screen "Press Enter to return to Status Menu..." ;;
+      3) run_installation_status; pause_after_screen "Press Enter to return to Status Menu..." ;;
+      4) run_service_summary; pause_after_screen "Press Enter to return to Status Menu..." ;;
+      5) run_full_status; pause_after_screen "Press Enter to return to Status Menu..." ;;
       6) return 0 ;;
-      *) warn "Invalid option" ;;
+      *) warn "Invalid option"; pause_after_screen "Press Enter to continue..." ;;
     esac
   done
 }
