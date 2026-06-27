@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.3.4"
+SCRIPT_VERSION="0.4.0"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1544,6 +1544,325 @@ run_full_status() {
   echo "============================================================"
 }
 
+# ============================================================
+# Backup / Restore / Maintenance
+# ============================================================
+
+site_backup_dir() {
+  local bench_dir
+  bench_dir="$(active_bench_dir)"
+  echo "${bench_dir}/sites/${SITE_NAME}/private/backups"
+}
+
+require_site_environment() {
+  local bench_dir
+  bench_dir="$(require_bench_dir)" || return 1
+
+  if ! path_is_dir "${bench_dir}/sites/${SITE_NAME}"; then
+    err "Site not found: ${SITE_NAME}"
+    err "Expected: ${bench_dir}/sites/${SITE_NAME}"
+    err "Run Recommended Setup first, or check SITE_NAME."
+    return 1
+  fi
+
+  echo "$bench_dir"
+}
+
+show_latest_backups() {
+  local bench_dir backup_rel
+  bench_dir="$(active_bench_dir)"
+  backup_rel="sites/${SITE_NAME}/private/backups"
+
+  if ! path_is_dir "${bench_dir}/${backup_rel}"; then
+    warn "Backup folder not found: ${bench_dir}/${backup_rel}"
+    return 0
+  fi
+
+  echo
+  echo "Latest backup files:"
+  run_as_frappe "cd '${bench_dir}' && find '${backup_rel}' -maxdepth 1 -type f -printf '%TY-%Tm-%Td %TH:%TM  %p\\n' 2>/dev/null | sort -r | head -12" || true
+}
+
+create_site_backup() {
+  require_sudo
+
+  local include_files="${1:-false}"
+  local bench_dir backup_cmd
+  bench_dir="$(require_site_environment)" || return 1
+
+  if [[ "$include_files" == "true" ]]; then
+    log "Creating database + files backup for ${SITE_NAME}"
+    backup_cmd="bench --site '${SITE_NAME}' backup --with-files"
+  else
+    log "Creating database backup for ${SITE_NAME}"
+    backup_cmd="bench --site '${SITE_NAME}' backup"
+  fi
+
+  run_as_frappe "cd '${bench_dir}' && ${backup_cmd}"
+  ok "Backup completed"
+  show_latest_backups
+}
+
+list_site_backups() {
+  require_sudo
+
+  local bench_dir backup_rel backup_abs
+  bench_dir="$(require_site_environment)" || return 1
+  backup_rel="sites/${SITE_NAME}/private/backups"
+  backup_abs="${bench_dir}/${backup_rel}"
+
+  echo
+  echo "============================================================"
+  echo "ERPNext Backups"
+  echo "============================================================"
+  echo "Site: ${SITE_NAME}"
+  echo "Backup folder: ${backup_abs}"
+  echo
+
+  if ! path_is_dir "$backup_abs"; then
+    warn "No backup folder found yet. Create a backup first."
+    echo "============================================================"
+    return 0
+  fi
+
+  echo "Database backups:"
+  run_as_frappe "cd '${bench_dir}' && find '${backup_rel}' -maxdepth 1 -type f \( -name '*.sql.gz' -o -name '*database*' \) -printf '  %TY-%Tm-%Td %TH:%TM  %f\\n' 2>/dev/null | sort -r | head -20" || true
+  echo
+  echo "Public file backups:"
+  run_as_frappe "cd '${bench_dir}' && find '${backup_rel}' -maxdepth 1 -type f \( -name '*public*files*' -o -name '*files.tar' -o -name '*files.tar.gz' \) -printf '  %TY-%Tm-%Td %TH:%TM  %f\\n' 2>/dev/null | sort -r | head -20" || true
+  echo
+  echo "Private file backups:"
+  run_as_frappe "cd '${bench_dir}' && find '${backup_rel}' -maxdepth 1 -type f \( -name '*private*files*' -o -name '*private-files*' \) -printf '  %TY-%Tm-%Td %TH:%TM  %f\\n' 2>/dev/null | sort -r | head -20" || true
+  echo
+  echo "Tip: For restore, you can paste either an absolute path or a filename from this folder."
+  echo "============================================================"
+}
+
+resolve_backup_file_path() {
+  local input="$1"
+  local backup_dir
+  backup_dir="$(site_backup_dir)"
+
+  if [[ -z "$input" ]]; then
+    return 1
+  fi
+
+  if [[ "$input" = /* ]]; then
+    echo "$input"
+  else
+    echo "${backup_dir}/${input}"
+  fi
+}
+
+confirm_restore() {
+  warn "Restore is destructive. It can overwrite the current site database and files."
+  warn "The script will try to create an emergency backup before restore."
+  echo
+  read -r -p "Type RESTORE to continue: " restore_reply
+  [[ "$restore_reply" == "RESTORE" ]]
+}
+
+restore_site_database() {
+  require_sudo
+
+  local bench_dir db_input db_file db_quoted was_running
+  bench_dir="$(require_site_environment)" || return 1
+
+  list_site_backups
+  echo
+  read -r -p "Enter database backup filename or full path: " db_input
+  db_file="$(resolve_backup_file_path "$db_input")" || fail "No database backup selected."
+
+  if ! path_is_file "$db_file"; then
+    fail "Database backup file not found: ${db_file}"
+  fi
+
+  confirm_restore || fail "Restore cancelled."
+
+  was_running=0
+  if service_exists && systemctl is-active --quiet "${ERPNEXT_SERVICE_NAME}"; then
+    was_running=1
+  fi
+
+  log "Creating emergency backup before restore"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' backup --with-files" || warn "Emergency backup failed; continuing only because restore was explicitly confirmed."
+
+  stop_erpnext_service || true
+
+  db_quoted="$(printf '%q' "$db_file")"
+
+  log "Restoring database backup"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' restore ${db_quoted}"
+
+  log "Running post-restore maintenance"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' migrate"
+  run_as_frappe "cd '${bench_dir}' && bench build"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' clear-cache"
+
+  if [[ "$was_running" -eq 1 ]]; then
+    start_erpnext_service || warn "Restore completed, but service could not be restarted automatically."
+  fi
+
+  ok "Database restore completed"
+}
+
+restore_site_full() {
+  require_sudo
+
+  local bench_dir db_input public_input private_input db_file public_file private_file cmd was_running
+  local db_quoted public_quoted private_quoted
+  bench_dir="$(require_site_environment)" || return 1
+
+  list_site_backups
+  echo
+  read -r -p "Enter database backup filename or full path: " db_input
+  read -r -p "Enter public files backup filename/path, or leave blank: " public_input
+  read -r -p "Enter private files backup filename/path, or leave blank: " private_input
+
+  db_file="$(resolve_backup_file_path "$db_input")" || fail "No database backup selected."
+  if ! path_is_file "$db_file"; then
+    fail "Database backup file not found: ${db_file}"
+  fi
+
+  cmd="bench --site '${SITE_NAME}' restore"
+  db_quoted="$(printf '%q' "$db_file")"
+  cmd="${cmd} ${db_quoted}"
+
+  if [[ -n "$public_input" ]]; then
+    public_file="$(resolve_backup_file_path "$public_input")"
+    if ! path_is_file "$public_file"; then
+      fail "Public files backup not found: ${public_file}"
+    fi
+    public_quoted="$(printf '%q' "$public_file")"
+    cmd="${cmd} --with-public-files ${public_quoted}"
+  fi
+
+  if [[ -n "$private_input" ]]; then
+    private_file="$(resolve_backup_file_path "$private_input")"
+    if ! path_is_file "$private_file"; then
+      fail "Private files backup not found: ${private_file}"
+    fi
+    private_quoted="$(printf '%q' "$private_file")"
+    cmd="${cmd} --with-private-files ${private_quoted}"
+  fi
+
+  confirm_restore || fail "Restore cancelled."
+
+  was_running=0
+  if service_exists && systemctl is-active --quiet "${ERPNEXT_SERVICE_NAME}"; then
+    was_running=1
+  fi
+
+  log "Creating emergency backup before full restore"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' backup --with-files" || warn "Emergency backup failed; continuing only because restore was explicitly confirmed."
+
+  stop_erpnext_service || true
+
+  log "Restoring database/files backup"
+  run_as_frappe "cd '${bench_dir}' && ${cmd}"
+
+  log "Running post-restore maintenance"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' migrate"
+  run_as_frappe "cd '${bench_dir}' && bench build"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' clear-cache"
+
+  if [[ "$was_running" -eq 1 ]]; then
+    start_erpnext_service || warn "Restore completed, but service could not be restarted automatically."
+  fi
+
+  ok "Full restore completed"
+}
+
+maintenance_migrate() {
+  require_sudo
+  local bench_dir
+  bench_dir="$(require_site_environment)" || return 1
+  log "Running migrate for ${SITE_NAME}"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' migrate"
+  ok "Migrate completed"
+}
+
+maintenance_build() {
+  require_sudo
+  local bench_dir
+  bench_dir="$(require_site_environment)" || return 1
+  log "Building assets"
+  run_as_frappe "cd '${bench_dir}' && bench build"
+  ok "Build completed"
+}
+
+maintenance_clear_cache() {
+  require_sudo
+  local bench_dir
+  bench_dir="$(require_site_environment)" || return 1
+  log "Clearing cache for ${SITE_NAME}"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' clear-cache"
+  ok "Cache cleared"
+}
+
+maintenance_restart() {
+  require_sudo
+  restart_erpnext_service
+}
+
+run_maintenance_menu() {
+  while true; do
+    echo
+    echo "============================================================"
+    echo "Maintenance"
+    echo "============================================================"
+    echo "1) Run migrate"
+    echo "2) Build assets"
+    echo "3) Clear cache"
+    echo "4) Restart ERPNext service"
+    echo "5) Run safe repair"
+    echo "6) Show recent service logs"
+    echo "7) Back"
+    echo
+    read -r -p "Choose an option: " maintenance_choice
+
+    case "$maintenance_choice" in
+      1) maintenance_migrate; pause_after_screen "Press Enter to return to Maintenance..." ;;
+      2) maintenance_build; pause_after_screen "Press Enter to return to Maintenance..." ;;
+      3) maintenance_clear_cache; pause_after_screen "Press Enter to return to Maintenance..." ;;
+      4) maintenance_restart; pause_after_screen "Press Enter to return to Maintenance..." ;;
+      5) run_repair; pause_after_screen "Press Enter to return to Maintenance..." ;;
+      6) show_erpnext_service_logs; pause_after_screen "Press Enter to return to Maintenance..." ;;
+      7) return 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
+}
+
+run_backup_maintenance_menu() {
+  while true; do
+    echo
+    echo "============================================================"
+    echo "Backup / Restore / Maintenance"
+    echo "============================================================"
+    echo "1) Create database backup"
+    echo "2) Create database + files backup"
+    echo "3) List backups"
+    echo "4) Restore database backup"
+    echo "5) Restore database + files backup"
+    echo "6) Maintenance tasks"
+    echo "7) Back"
+    echo
+    read -r -p "Choose an option: " backup_choice
+
+    case "$backup_choice" in
+      1) create_site_backup false; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      2) create_site_backup true; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      3) list_site_backups; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      4) restore_site_database; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      5) restore_site_full; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      6) run_maintenance_menu ;;
+      7) return 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
+}
+
 run_repair() {
   require_sudo
   check_os
@@ -1791,13 +2110,14 @@ show_advanced_menu() {
     echo "2) Repair Environment"
     echo "3) Uninstall / Reset"
     echo "4) Autostart / Service Manager"
-    echo "5) Full Health Report"
-    echo "6) KVM Fixed IP Guide"
-    echo "7) Multi-Environment Guide"
-    echo "8) Start Bench in Foreground"
-    echo "9) Show Service Logs"
-    echo "10) Access Submenu"
-    echo "11) Back"
+    echo "5) Backup / Maintenance"
+    echo "6) Full Health Report"
+    echo "7) KVM Fixed IP Guide"
+    echo "8) Multi-Environment Guide"
+    echo "9) Start Bench in Foreground"
+    echo "10) Show Service Logs"
+    echo "11) Access Submenu"
+    echo "12) Back"
     echo
     read -r -p "Choose an option: " advanced_choice
 
@@ -1806,13 +2126,14 @@ show_advanced_menu() {
       2) run_repair ;;
       3) run_uninstall_menu ;;
       4) show_service_menu ;;
-      5) run_full_status ;;
-      6) show_kvm_fixed_ip_guide ;;
-      7) show_multi_environment_guide ;;
-      8) run_foreground_start ;;
-      9) show_erpnext_service_logs ;;
-      10) show_access_menu ;;
-      11) return 0 ;;
+      5) run_backup_maintenance_menu ;;
+      6) run_full_status ;;
+      7) show_kvm_fixed_ip_guide ;;
+      8) show_multi_environment_guide ;;
+      9) run_foreground_start ;;
+      10) show_erpnext_service_logs ;;
+      11) show_access_menu ;;
+      12) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -1841,11 +2162,22 @@ Basic actions:
   install-status       Show installation/site status
   service-summary      Show service/autostart summary
   access        Show browser/IP/hostname instructions and exit
+  backup        Create database backup
+  backup-files  Create database + files backup
+  list-backups  List site backups
+  maintenance   Show maintenance menu
   menu          Show interactive menu
   help          Show this help
 
 Advanced actions:
   repair              Run safe environment repair
+  backup-menu         Show backup/restore/maintenance menu
+  restore-db          Restore a database backup interactively
+  restore-full        Restore database + files interactively
+  migrate             Run site migration
+  build               Build assets
+  clear-cache         Clear site cache
+  restart             Restart ERPNext service
   doctor              Show full health report
   full-status         Show full health report
   uninstall           Show uninstall/reset menu
@@ -1886,6 +2218,7 @@ Examples:
   ./install-erpnext-dev.sh status
   ./install-erpnext-dev.sh start
   ./install-erpnext-dev.sh access
+  ./install-erpnext-dev.sh backup
   ./install-erpnext-dev.sh doctor
 EOF_HELP
 }
@@ -1901,9 +2234,10 @@ show_menu() {
     echo "3) Stop ERPNext"
     echo "4) Status"
     echo "5) Access Instructions"
-    echo "6) Advanced Options"
-    echo "7) Help"
-    echo "8) Exit"
+    echo "6) Backup / Maintenance"
+    echo "7) Advanced Options"
+    echo "8) Help"
+    echo "9) Exit"
     echo
     read -r -p "Choose an option: " choice
 
@@ -1913,9 +2247,10 @@ show_menu() {
       3) run_stop ;;
       4) show_status_menu ;;
       5) show_access_instructions ;;
-      6) show_advanced_menu ;;
-      7) show_help ;;
-      8) exit 0 ;;
+      6) run_backup_maintenance_menu ;;
+      7) show_advanced_menu ;;
+      8) show_help ;;
+      9) exit 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -1928,7 +2263,7 @@ parse_args() {
         ASSUME_YES=1
         shift
         ;;
-      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|multi-env-guide)
+      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|multi-env-guide)
         ACTION="$1"
         shift
         ;;
@@ -1958,6 +2293,17 @@ main() {
     advanced) show_advanced_menu ;;
     access) show_access_instructions ;;
     access-menu) show_access_menu ;;
+    backup-menu) run_backup_maintenance_menu ;;
+    backup) create_site_backup false ;;
+    backup-files) create_site_backup true ;;
+    list-backups|backups) list_site_backups ;;
+    restore-db) restore_site_database ;;
+    restore-full) restore_site_full ;;
+    maintenance) run_maintenance_menu ;;
+    migrate) maintenance_migrate ;;
+    build) maintenance_build ;;
+    clear-cache) maintenance_clear_cache ;;
+    restart) maintenance_restart ;;
     foreground-start) run_foreground_start ;;
     enable-autostart) enable_autostart_service ;;
     disable-autostart) disable_autostart_service ;;

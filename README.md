@@ -12,24 +12,28 @@ This project is designed for local developer VMs, test labs, and evaluation envi
 ## Current Version
 
 ```text
-v0.3.4
+v0.4.0
 ```
 
-This version is a polish release after the successful fresh-VM test. It fixes health-report false warnings for files under `/home/frappe`, improves status labels, and reduces repeated browser instruction output during setup/start.
+This version adds a focused **Backup / Restore / Maintenance** workflow on top of the stable v0.3.4 local developer VM release. It keeps the main installer workflow simple while adding safer operational tools for backups, restore, migration, asset builds, cache clearing, and service restarts.
 
 ---
 
-## v0.3.4 Health Report and UX Polish
+## v0.4.0 Backup / Restore / Maintenance
 
-v0.3.4 improves the full health report and post-install UX:
+v0.4.0 adds operational tools that are useful after the environment is installed:
 
-- Checks `/home/frappe/start-erpnext-dev.sh` using sudo-aware executable detection.
-- Checks `/home/frappe/erpnext-dev-credentials.txt` using sudo-aware file detection.
-- Checks `sites/common_site_config.json` using the resolved bench path.
-- Shows installed/running/enabled states as `OK` instead of informational status.
-- Reduces duplicated browser-access instruction screens after setup.
+- Create a database backup.
+- Create a database + files backup.
+- List available backups.
+- Restore a database backup with strong confirmation.
+- Restore database + files with strong confirmation.
+- Run common maintenance tasks: migrate, build assets, clear cache, restart service.
+- Keep restore operations protected with an emergency pre-restore backup attempt.
 
-The previous v0.3.3 reliability fix remains: the installer uses shared bench-path detection to prevent false errors when the bench folder exists under:
+The previous health-report polish remains: the installer checks helper files, credentials, and `common_site_config.json` using the resolved bench path and sudo-aware file checks.
+
+The previous v0.3.3 reliability fix also remains: the installer uses shared bench-path detection to prevent false errors when the bench folder exists under:
 
 ```text
 /home/frappe/frappe/frappe-bench
@@ -74,6 +78,8 @@ The recommended setup can install and configure:
 - Start helper script
 - Optional ERPNext development systemd service
 - Optional autostart on VM boot
+- Backup / restore tools
+- Maintenance tasks for migrate/build/cache/restart
 
 Default local site:
 
@@ -168,7 +174,7 @@ sudo apt update && sudo apt install -y curl ca-certificates && curl -fsSL "https
 
 ## Menu Layout
 
-v0.3.4 keeps the main menu simple:
+v0.4.0 keeps the main menu simple:
 
 ```text
 1) Recommended Setup
@@ -176,9 +182,10 @@ v0.3.4 keeps the main menu simple:
 3) Stop ERPNext
 4) Status
 5) Access Instructions
-6) Advanced Options
-7) Help
-8) Exit
+6) Backup / Maintenance
+7) Advanced Options
+8) Help
+9) Exit
 ```
 
 The main menu is intended for normal daily use.
@@ -209,7 +216,7 @@ In interactive mode, each status screen waits for Enter before returning to the 
 Advanced tools are under:
 
 ```text
-6) Advanced Options
+7) Advanced Options
 ```
 
 Advanced Options include repair, uninstall/reset, full diagnostics, autostart service management, KVM fixed IP guidance, and multi-environment guidance.
@@ -345,9 +352,86 @@ Not installed            → run ./install-erpnext-dev.sh setup
 Incomplete               → run repair or perform a clean setup
 ```
 
+## Backup / Restore / Maintenance
+
+Open the backup and maintenance menu:
+
+```bash
+./install-erpnext-dev.sh backup-menu
+```
+
+The main menu also includes:
+
+```text
+6) Backup / Maintenance
+```
+
+Common backup commands:
+
+```bash
+./install-erpnext-dev.sh backup
+./install-erpnext-dev.sh backup-files
+./install-erpnext-dev.sh list-backups
+```
+
+Available backup menu options:
+
+```text
+1) Create database backup
+2) Create database + files backup
+3) List backups
+4) Restore database backup
+5) Restore database + files backup
+6) Maintenance tasks
+7) Back
+```
+
+Backups are stored under the site private backups folder:
+
+```text
+/home/frappe/frappe/frappe-bench/sites/erp.test/private/backups
+```
+
+Restore actions are intentionally protected. Before restoring, the script:
+
+```text
+- Shows the available backups
+- Requires the user to type RESTORE
+- Attempts an emergency backup before restore
+- Stops the ERPNext service during restore
+- Runs migrate, build, and clear-cache after restore
+- Restarts the service if it was running before restore
+```
+
+Maintenance command shortcuts:
+
+```bash
+./install-erpnext-dev.sh maintenance
+./install-erpnext-dev.sh migrate
+./install-erpnext-dev.sh build
+./install-erpnext-dev.sh clear-cache
+./install-erpnext-dev.sh restart
+```
+
+Maintenance menu options:
+
+```text
+1) Run migrate
+2) Build assets
+3) Clear cache
+4) Restart ERPNext service
+5) Run safe repair
+6) Show recent service logs
+7) Back
+```
+
+> For real business or production use, backup/restore must be tested before relying on the system. A backup is only useful if it can be restored successfully.
+
+---
+
 ## Autostart on VM Boot
 
-v0.3.4 can create a local development systemd service:
+v0.4.0 can create a local development systemd service:
 
 ```text
 erpnext-dev.service
@@ -502,6 +586,17 @@ Open the advanced menu:
 Available advanced commands:
 
 ```bash
+./install-erpnext-dev.sh backup-menu
+./install-erpnext-dev.sh backup
+./install-erpnext-dev.sh backup-files
+./install-erpnext-dev.sh list-backups
+./install-erpnext-dev.sh restore-db
+./install-erpnext-dev.sh restore-full
+./install-erpnext-dev.sh maintenance
+./install-erpnext-dev.sh migrate
+./install-erpnext-dev.sh build
+./install-erpnext-dev.sh clear-cache
+./install-erpnext-dev.sh restart
 ./install-erpnext-dev.sh repair
 ./install-erpnext-dev.sh doctor
 ./install-erpnext-dev.sh status-menu
@@ -566,7 +661,9 @@ sites/*/private/backups/
 
 This installer currently targets local development.
 
-Cloud/production should eventually be handled as a separate mode using:
+Future versions may add a separate small-business local production mode and a separate cloud production mode. Production should not use the development `bench start` workflow.
+
+Production should eventually be handled as a separate mode using:
 
 ```text
 real domain
