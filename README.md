@@ -12,12 +12,43 @@ This project is designed for local developer VMs, test labs, and evaluation envi
 ## Current Version
 
 ```text
-v0.3.2
+v0.3.3
 ```
 
-This version improves the interactive status experience. The main Status option now opens a submenu, individual status screens pause before returning, and quick status is shorter so users can read it comfortably in small terminal windows.
+This version fixes a post-install service/start false negative where the installer could report “Bench folder not found” after ERPNext had already installed successfully. It also improves bench path detection when the script is run by a non-frappe user and treats optional service/autostart/start failures as warnings instead of marking the install itself as failed.
 
 ---
+
+## v0.3.3 Reliability Fix
+
+v0.3.3 improves reliability after setup by using one shared bench-path detection flow. This prevents false errors when the bench folder exists under:
+
+```text
+/home/frappe/frappe/frappe-bench
+```
+
+but the installer is being run from another Linux user such as `test`.
+
+Important behavior change:
+
+```text
+ERPNext installation success is separate from optional service/autostart/start success.
+```
+
+If ERPNext installs correctly but the service cannot be created or started automatically, the installer now shows a warning and keeps the environment usable. You can still start ERPNext with:
+
+```bash
+./install-erpnext-dev.sh start
+```
+
+or manually:
+
+```bash
+sudo -iu frappe
+cd /home/frappe/frappe/frappe-bench
+bench start
+```
+
 
 ## What This Installer Does
 
@@ -129,7 +160,7 @@ sudo apt update && sudo apt install -y curl ca-certificates && curl -fsSL "https
 
 ## Menu Layout
 
-v0.3.2 keeps the main menu simple:
+v0.3.3 keeps the main menu simple:
 
 ```text
 1) Recommended Setup
@@ -308,7 +339,7 @@ Incomplete               → run repair or perform a clean setup
 
 ## Autostart on VM Boot
 
-v0.3.2 can create a local development systemd service:
+v0.3.3 can create a local development systemd service:
 
 ```text
 erpnext-dev.service

@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.3.2"
+SCRIPT_VERSION="0.3.3"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -82,9 +82,8 @@ status_line() {
 start_erpnext_foreground() {
   log "Starting ERPNext development server in foreground"
 
-  if [[ ! -d "${BENCH_DIR}" ]]; then
-    fail "Bench folder not found: ${BENCH_DIR}. Run install first."
-  fi
+  local bench_dir
+  bench_dir="$(require_bench_dir)" || return 1
 
   local vm_ip
   vm_ip="$(get_vm_ip)"
@@ -106,7 +105,7 @@ start_erpnext_foreground() {
 
   $SUDO -iu "$FRAPPE_USER" bash -lc "
     export PATH=\"\$HOME/.local/bin:\$PATH\"
-    cd \"${BENCH_DIR}\"
+    cd \"${bench_dir}\"
     bench start
   "
 }
@@ -120,11 +119,56 @@ service_exists() {
   [[ -f "$(erpnext_service_path)" ]]
 }
 
+path_is_dir() {
+  local path="$1"
+
+  [[ -d "$path" ]] && return 0
+
+  if [[ "${SUDO:-}" == "sudo" ]]; then
+    $SUDO test -d "$path" 2>/dev/null
+  else
+    test -d "$path" 2>/dev/null
+  fi
+}
+
+path_is_file() {
+  local path="$1"
+
+  [[ -f "$path" ]] && return 0
+
+  if [[ "${SUDO:-}" == "sudo" ]]; then
+    $SUDO test -f "$path" 2>/dev/null
+  else
+    test -f "$path" 2>/dev/null
+  fi
+}
+
+bench_dir_is_valid() {
+  local candidate="$1"
+
+  path_is_dir "$candidate" && path_is_dir "$candidate/apps/frappe" && path_is_dir "$candidate/sites"
+}
+
+require_bench_dir() {
+  local bench_dir
+
+  if bench_dir="$(detect_bench_dir 2>/dev/null)" && path_is_dir "$bench_dir"; then
+    echo "$bench_dir"
+    return 0
+  fi
+
+  err "Bench folder not found. Expected one of:"
+  bench_dir_candidates | awk '{print "  - " $0}' >&2
+  err "Run Recommended Setup first, or run: ./install-erpnext-dev.sh install-status"
+  return 1
+}
+
 create_erpnext_service() {
   require_sudo
 
-  if [[ ! -d "${BENCH_DIR}" ]]; then
-    fail "Bench folder not found: ${BENCH_DIR}. Run Recommended Setup first."
+  local bench_dir
+  if ! bench_dir="$(require_bench_dir)"; then
+    return 1
   fi
 
   log "Creating ERPNext development systemd service"
@@ -139,9 +183,9 @@ Wants=network-online.target
 Type=simple
 User=${FRAPPE_USER}
 Group=${FRAPPE_USER}
-WorkingDirectory=${BENCH_DIR}
+WorkingDirectory=${bench_dir}
 Environment=HOME=${FRAPPE_HOME}
-ExecStart=/bin/bash -lc 'export NVM_DIR="\$HOME/.nvm"; [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"; export PATH="\$HOME/.local/bin:\$PATH"; cd "${BENCH_DIR}" && bench start'
+ExecStart=/bin/bash -lc 'export NVM_DIR="\$HOME/.nvm"; [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"; export PATH="\$HOME/.local/bin:\$PATH"; cd "${bench_dir}" && bench start'
 Restart=on-failure
 RestartSec=10
 KillMode=control-group
@@ -158,12 +202,16 @@ enable_autostart_service() {
   require_sudo
 
   if ! service_exists; then
-    create_erpnext_service
+    create_erpnext_service || return 1
   fi
 
   log "Enabling ERPNext autostart on VM boot"
-  $SUDO systemctl enable "${ERPNEXT_SERVICE_NAME}"
-  ok "Autostart enabled"
+  if $SUDO systemctl enable "${ERPNEXT_SERVICE_NAME}"; then
+    ok "Autostart enabled"
+  else
+    err "Could not enable autostart for ${ERPNEXT_SERVICE_NAME}"
+    return 1
+  fi
 }
 
 disable_autostart_service() {
@@ -182,13 +230,17 @@ start_erpnext_service() {
   require_sudo
 
   if ! service_exists; then
-    create_erpnext_service
+    create_erpnext_service || return 1
   fi
 
   log "Starting ERPNext service"
-  $SUDO systemctl start "${ERPNEXT_SERVICE_NAME}"
-  ok "ERPNext service started"
-  show_access_instructions
+  if $SUDO systemctl start "${ERPNEXT_SERVICE_NAME}"; then
+    ok "ERPNext service started"
+    show_access_instructions
+  else
+    err "Could not start ${ERPNEXT_SERVICE_NAME}. Check logs with: ./install-erpnext-dev.sh logs"
+    return 1
+  fi
 }
 
 stop_erpnext_service() {
@@ -212,13 +264,17 @@ restart_erpnext_service() {
   require_sudo
 
   if ! service_exists; then
-    create_erpnext_service
+    create_erpnext_service || return 1
   fi
 
   log "Restarting ERPNext service"
-  $SUDO systemctl restart "${ERPNEXT_SERVICE_NAME}"
-  ok "ERPNext service restarted"
-  show_access_instructions
+  if $SUDO systemctl restart "${ERPNEXT_SERVICE_NAME}"; then
+    ok "ERPNext service restarted"
+    show_access_instructions
+  else
+    err "Could not restart ${ERPNEXT_SERVICE_NAME}. Check logs with: ./install-erpnext-dev.sh logs"
+    return 1
+  fi
 }
 
 show_erpnext_service_status() {
@@ -472,7 +528,7 @@ stop_bench_processes() {
 }
 
 archive_existing_bench_parent() {
-  if [[ -d "$BENCH_PARENT" ]]; then
+  if path_is_dir "$BENCH_PARENT"; then
     local archive_path
     archive_path="${BENCH_PARENT}-backup-$(date +%Y%m%d-%H%M%S)"
 
@@ -483,7 +539,7 @@ archive_existing_bench_parent() {
 }
 
 fix_frappe_ownership() {
-  if id "$FRAPPE_USER" >/dev/null 2>&1 && [[ -d "$FRAPPE_HOME" ]]; then
+  if id "$FRAPPE_USER" >/dev/null 2>&1 && path_is_dir "$FRAPPE_HOME"; then
     log "Fixing ${FRAPPE_HOME} ownership"
     $SUDO chown -R "$FRAPPE_USER:$FRAPPE_USER" "$FRAPPE_HOME"
     ok "Ownership fixed"
@@ -495,13 +551,16 @@ create_start_helper() {
     return 0
   fi
 
+  local bench_dir
+  bench_dir="$(active_bench_dir)"
+
   log "Creating start helper script"
 
   $SUDO tee "$FRAPPE_HOME/start-erpnext-dev.sh" >/dev/null <<EOF_HELPER
 #!/usr/bin/env bash
 set -e
 export PATH="\$HOME/.local/bin:\$PATH"
-cd "${BENCH_DIR}"
+cd "${bench_dir}"
 bench start
 EOF_HELPER
 
@@ -658,6 +717,8 @@ write_credentials_file() {
   log "Writing credentials file"
 
   local cred_file="${FRAPPE_HOME}/erpnext-dev-credentials.txt"
+  local bench_dir
+  bench_dir="$(active_bench_dir)"
 
   $SUDO tee "$cred_file" >/dev/null <<EOF_CREDS
 ERPNext Developer Environment
@@ -666,7 +727,7 @@ Site:
   ${SITE_NAME}
 
 Bench:
-  ${BENCH_DIR}
+  ${bench_dir}
 
 Login:
   Username: Administrator
@@ -679,11 +740,11 @@ MariaDB Bench Admin:
 Start ERPNext:
   sudo -iu ${FRAPPE_USER}
   export PATH="\$HOME/.local/bin:\$PATH"
-  cd ${BENCH_DIR}
+  cd ${bench_dir}
   bench start
 
 One-line start command:
-  sudo -iu ${FRAPPE_USER} bash -lc 'export PATH="\$HOME/.local/bin:\$PATH"; cd ${BENCH_DIR} && bench start'
+  sudo -iu ${FRAPPE_USER} bash -lc 'export PATH="\$HOME/.local/bin:\$PATH"; cd ${bench_dir} && bench start'
 
 Browser access:
   Direct IP URL, works while Bench is running:
@@ -708,8 +769,9 @@ get_vm_ip() {
 }
 
 show_access_instructions() {
-  local vm_ip escaped_site
+  local vm_ip escaped_site bench_dir
   vm_ip="$(get_vm_ip)"
+  bench_dir="$(active_bench_dir)"
   escaped_site="${SITE_NAME//./\\.}"
 
   echo
@@ -725,7 +787,7 @@ show_access_instructions() {
   echo "Or manually:"
   echo "  sudo -iu ${FRAPPE_USER}"
   echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
-  echo "  cd ${BENCH_DIR}"
+  echo "  cd ${bench_dir}"
   echo "  bench start"
   echo
   echo "Direct IP URL, works while Bench is running:"
@@ -904,8 +966,9 @@ show_access_menu() {
 }
 
 print_summary() {
-  local vm_ip
+  local vm_ip bench_dir
   vm_ip="$(get_vm_ip)"
+  bench_dir="$(active_bench_dir)"
 
   echo
   echo "============================================================"
@@ -913,7 +976,7 @@ print_summary() {
   echo "============================================================"
   echo
   echo "Site: ${SITE_NAME}"
-  echo "Bench: ${BENCH_DIR}"
+  echo "Bench: ${bench_dir}"
   echo
   echo "Login:"
   echo "  Username: Administrator"
@@ -925,7 +988,7 @@ print_summary() {
   echo "Manual start command:"
   echo "  sudo -iu ${FRAPPE_USER}"
   echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
-  echo "  cd ${BENCH_DIR}"
+  echo "  cd ${bench_dir}"
   echo "  bench start"
   echo
   echo "Browser access:"
@@ -960,17 +1023,21 @@ detect_bench_dir() {
 
   while IFS= read -r candidate; do
     [[ -z "$candidate" ]] && continue
-    if [[ -d "$candidate/apps/frappe" && -d "$candidate/sites" ]]; then
+    if bench_dir_is_valid "$candidate"; then
       echo "$candidate"
       return 0
     fi
-    if [[ -z "$found" && -d "$candidate" ]]; then
+    if [[ -z "$found" ]] && path_is_dir "$candidate"; then
       found="$candidate"
     fi
   done < <(bench_dir_candidates | awk '!seen[$0]++')
 
-  if [[ -d "$FRAPPE_HOME" ]]; then
-    candidate="$(find "$FRAPPE_HOME" -maxdepth 3 -type d -name "$BENCH_NAME" 2>/dev/null | head -n 1 || true)"
+  if path_is_dir "$FRAPPE_HOME"; then
+    if [[ "${SUDO:-}" == "sudo" ]]; then
+      candidate="$($SUDO find "$FRAPPE_HOME" -maxdepth 3 -type d -name "$BENCH_NAME" 2>/dev/null | head -n 1 || true)"
+    else
+      candidate="$(find "$FRAPPE_HOME" -maxdepth 3 -type d -name "$BENCH_NAME" 2>/dev/null | head -n 1 || true)"
+    fi
     if [[ -n "$candidate" ]]; then
       echo "$candidate"
       return 0
@@ -995,14 +1062,14 @@ check_bench_app_installed() {
   local bench_dir
   bench_dir="$(active_bench_dir)"
 
-  [[ -d "${bench_dir}/apps/${app}" ]]
+  path_is_dir "${bench_dir}/apps/${app}"
 }
 
 site_exists() {
   local bench_dir
   bench_dir="$(active_bench_dir)"
 
-  [[ -d "${bench_dir}/sites/${SITE_NAME}" ]]
+  path_is_dir "${bench_dir}/sites/${SITE_NAME}"
 }
 
 site_app_installed() {
@@ -1010,7 +1077,7 @@ site_app_installed() {
   local bench_dir
   bench_dir="$(active_bench_dir)"
 
-  if [[ ! -d "$bench_dir" || ! -d "${bench_dir}/sites/${SITE_NAME}" ]]; then
+  if ! path_is_dir "$bench_dir" || ! path_is_dir "${bench_dir}/sites/${SITE_NAME}"; then
     return 1
   fi
 
@@ -1021,13 +1088,13 @@ install_state() {
   local bench_dir
   bench_dir="$(active_bench_dir)"
 
-  if [[ -d "${bench_dir}" && -d "${bench_dir}/apps/frappe" && -d "${bench_dir}/apps/erpnext" && -d "${bench_dir}/sites/${SITE_NAME}" ]]; then
+  if path_is_dir "${bench_dir}" && path_is_dir "${bench_dir}/apps/frappe" && path_is_dir "${bench_dir}/apps/erpnext" && path_is_dir "${bench_dir}/sites/${SITE_NAME}"; then
     if site_app_installed erpnext || [[ -f "${bench_dir}/sites/apps.txt" ]]; then
       echo "Installed"
     else
       echo "Installed files found; site app not confirmed"
     fi
-  elif [[ -d "${bench_dir}" || -d "${FRAPPE_HOME}" ]]; then
+  elif path_is_dir "${bench_dir}" || path_is_dir "${FRAPPE_HOME}"; then
     echo "Incomplete"
   else
     echo "Not installed"
@@ -1179,7 +1246,7 @@ run_installation_status() {
     status_line "frappe user" "FAIL" "$FRAPPE_USER missing"
   fi
 
-  if [[ -d "$bench_dir" ]]; then
+  if path_is_dir "$bench_dir"; then
     status_line "Bench folder" "OK" "$bench_dir"
   else
     status_line "Bench folder" "FAIL" "$bench_dir missing"
@@ -1329,7 +1396,7 @@ run_full_status() {
   local bench_dir
   bench_dir="$(active_bench_dir)"
 
-  if [[ -d "$bench_dir" ]]; then
+  if path_is_dir "$bench_dir"; then
     status_line "Bench folder" "OK" "$bench_dir"
   else
     status_line "Bench folder" "FAIL" "$bench_dir missing"
@@ -1347,7 +1414,7 @@ run_full_status() {
     status_line "ERPNext app files" "WARN" "apps/erpnext missing"
   fi
 
-  if [[ -d "${bench_dir}/sites/${SITE_NAME}" ]]; then
+  if path_is_dir "${bench_dir}/sites/${SITE_NAME}"; then
     status_line "Site" "OK" "${SITE_NAME} exists"
   else
     status_line "Site" "WARN" "${SITE_NAME} missing"
@@ -1428,16 +1495,19 @@ run_repair() {
   fix_frappe_ownership
   create_start_helper
 
-  if [[ -d "$BENCH_DIR" && -d "${BENCH_DIR}/sites/${SITE_NAME}" ]]; then
+  local bench_dir
+  bench_dir="$(active_bench_dir)"
+
+  if path_is_dir "$bench_dir" && path_is_dir "${bench_dir}/sites/${SITE_NAME}"; then
     log "Repairing Bench site configuration"
-    run_as_frappe "cd '${BENCH_DIR}' && bench use '${SITE_NAME}' || true"
-    run_as_frappe "cd '${BENCH_DIR}' && bench set-config -g default_site '${SITE_NAME}' || true"
-    run_as_frappe "cd '${BENCH_DIR}' && bench set-config -g serve_default_site true || true"
+    run_as_frappe "cd '${bench_dir}' && bench use '${SITE_NAME}' || true"
+    run_as_frappe "cd '${bench_dir}' && bench set-config -g default_site '${SITE_NAME}' || true"
+    run_as_frappe "cd '${bench_dir}' && bench set-config -g serve_default_site true || true"
 
     if confirm "Run migrate/build/clear-cache now?"; then
-      run_as_frappe "cd '${BENCH_DIR}' && bench --site '${SITE_NAME}' migrate"
-      run_as_frappe "cd '${BENCH_DIR}' && bench build"
-      run_as_frappe "cd '${BENCH_DIR}' && bench --site '${SITE_NAME}' clear-cache"
+      run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' migrate"
+      run_as_frappe "cd '${bench_dir}' && bench build"
+      run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' clear-cache"
     fi
   else
     warn "Bench/site not found. Repair cannot migrate/build yet. Use Install first."
@@ -1452,7 +1522,7 @@ run_install() {
   check_internet
   check_resources
 
-  if [[ -d "$BENCH_PARENT" ]]; then
+  if path_is_dir "$BENCH_PARENT"; then
     warn "Existing environment detected at: $BENCH_PARENT"
     if confirm "Archive existing environment and perform clean install?"; then
       stop_bench_processes
@@ -1470,14 +1540,19 @@ run_install() {
   fix_frappe_ownership
   install_frappe_stack_as_user
   write_credentials_file
-  create_erpnext_service
+  if ! create_erpnext_service; then
+    warn "Install completed, but the ERPNext service could not be configured automatically."
+    warn "You can still start manually with: sudo -iu ${FRAPPE_USER}; cd $(active_bench_dir); bench start"
+  fi
   print_summary
   show_access_instructions
 
   local enable_boot start_now
 
   if [[ "${ENABLE_AUTOSTART}" == "true" || "$ASSUME_YES" -eq 1 ]]; then
-    enable_autostart_service
+    if ! enable_autostart_service; then
+      warn "Install completed, but autostart could not be enabled automatically."
+    fi
   elif [[ "${ENABLE_AUTOSTART}" == "false" ]]; then
     warn "Autostart was not enabled because ENABLE_AUTOSTART=false."
   elif [[ -t 0 ]]; then
@@ -1485,12 +1560,17 @@ run_install() {
     read -r -p "Enable ERPNext autostart when this VM boots? [Y/n]: " enable_boot
     enable_boot="${enable_boot:-Y}"
     if [[ "$enable_boot" =~ ^[Yy]$ ]]; then
-      enable_autostart_service
+      if ! enable_autostart_service; then
+        warn "Install completed, but autostart could not be enabled automatically."
+      fi
     fi
   fi
 
   if [[ "${AUTO_START}" == "true" || "$ASSUME_YES" -eq 1 ]]; then
-    start_erpnext_service
+    if ! start_erpnext_service; then
+      warn "Install completed, but ERPNext could not be started automatically."
+      warn "Run this later: ./install-erpnext-dev.sh start"
+    fi
   elif [[ "${AUTO_START}" == "false" ]]; then
     echo
     echo "You can start ERPNext later with:"
@@ -1500,7 +1580,10 @@ run_install() {
     read -r -p "Start ERPNext now in the background service? [Y/n]: " start_now
     start_now="${start_now:-Y}"
     if [[ "$start_now" =~ ^[Yy]$ ]]; then
-      start_erpnext_service
+      if ! start_erpnext_service; then
+        warn "Install completed, but ERPNext could not be started automatically."
+        warn "Run this later: ./install-erpnext-dev.sh start"
+      fi
     else
       echo
       echo "You can start ERPNext later with:"
@@ -1520,7 +1603,7 @@ remove_bench_files() {
   require_sudo
   stop_bench_processes
 
-  if [[ -d "$BENCH_PARENT" ]]; then
+  if path_is_dir "$BENCH_PARENT"; then
     if confirm "Delete ${BENCH_PARENT}?"; then
       $SUDO rm -rf "$BENCH_PARENT"
       ok "Removed ${BENCH_PARENT}"
