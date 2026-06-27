@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.5.3"
+SCRIPT_VERSION="0.5.4"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1839,6 +1839,36 @@ fi
   ok "Dependencies ready for ${app_name}"
 }
 
+ensure_app_in_apps_txt() {
+  local bench_dir="$1"
+  local app_name="$2"
+  local bench_q app_q
+
+  if ! app_folder_exists "$bench_dir" "$app_name"; then
+    fail "App folder apps/${app_name} is missing; cannot register it in sites/apps.txt."
+  fi
+
+  bench_q="$(printf '%q' "$bench_dir")"
+  app_q="$(printf '%q' "$app_name")"
+
+  log "Checking Bench app registry for ${app_name}"
+
+  run_as_frappe "
+set -e
+cd ${bench_q}
+mkdir -p sites
+touch sites/apps.txt
+if grep -qxF ${app_q} sites/apps.txt; then
+  echo '${app_name} already present in sites/apps.txt'
+else
+  printf '%s\\n' ${app_q} >> sites/apps.txt
+  echo 'Added ${app_name} to sites/apps.txt'
+fi
+" || fail "Could not register ${app_name} in sites/apps.txt."
+
+  ok "${app_name} is registered in sites/apps.txt"
+}
+
 show_installed_apps() {
   require_sudo
 
@@ -1861,7 +1891,41 @@ show_installed_apps() {
   run_as_frappe "cd ${bench_q} && find apps -maxdepth 1 -mindepth 1 -type d -printf '  %f\\n' | sort" || warn "Could not list downloaded app folders."
   echo
   echo "Downloaded but not installed on ${SITE_NAME}:"
-  run_as_frappe "cd ${bench_q} && installed=\$(bench --site ${site_q} list-apps 2>/dev/null | awk '{print \$1}'); missing=0; for d in apps/*; do [ -d \"\$d\" ] || continue; app=\"\${d##*/}\"; if ! printf '%s\\n' \"\$installed\" | grep -qx \"\$app\"; then echo \"  \$app\"; missing=1; fi; done; [ \"\$missing\" -eq 1 ] || echo '  none'" || warn "Could not compare downloaded apps with installed site apps."
+  run_as_frappe "
+set -e
+cd ${bench_q}
+installed=\$(bench --site ${site_q} list-apps 2>/dev/null | awk '{print \$1}')
+missing=0
+for d in apps/*; do
+  [ -d \"\$d\" ] || continue
+  app=\"\${d##*/}\"
+  if ! printf '%s\\n' \"\$installed\" | grep -qx \"\$app\"; then
+    echo \"  \$app\"
+    missing=1
+  fi
+done
+if [ \"\${missing:-0}\" = \"0\" ]; then
+  echo '  none'
+fi
+" || warn "Could not compare downloaded apps with installed site apps."
+  echo
+  echo "Downloaded but not registered in sites/apps.txt:"
+  run_as_frappe "
+set -e
+cd ${bench_q}
+missing=0
+for d in apps/*; do
+  [ -d \"\$d\" ] || continue
+  app=\"\${d##*/}\"
+  if ! grep -qxF \"\$app\" sites/apps.txt 2>/dev/null; then
+    echo \"  \$app\"
+    missing=1
+  fi
+done
+if [ \"\${missing:-0}\" = \"0\" ]; then
+  echo '  none'
+fi
+" || warn "Could not compare downloaded apps with sites/apps.txt."
   echo "============================================================"
 }
 
@@ -1956,6 +2020,7 @@ install_frappe_app() {
   fi
 
   prepare_downloaded_app_dependencies "$bench_dir" "$app_name"
+  ensure_app_in_apps_txt "$bench_dir" "$app_name"
 
   if site_app_installed "$app_name"; then
     ok "${display} is already installed on ${SITE_NAME}"
