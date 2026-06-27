@@ -5,7 +5,7 @@ IFS=$'\n\t'
 
 # ============================================================
 # ERPNext / Frappe Developer Installer
-# Target: Ubuntu 26.04 LTS developer VM
+# Target: Ubuntu 24.04 / 26.04 LTS developer VM
 # Default: Frappe v16 + ERPNext v16 + site erp.test
 # Mode: local development using bench start
 # ============================================================
@@ -111,7 +111,11 @@ check_os() {
 }
 apt_package_available() {
   local package="$1"
-  apt-cache policy "$package" | grep -qv "Candidate: (none)"
+
+  local candidate
+  candidate="$(apt-cache policy "$package" | awk '/Candidate:/ {print $2}')"
+
+  [[ -n "$candidate" && "$candidate" != "(none)" ]]
 }
 
 install_required_packages() {
@@ -190,7 +194,6 @@ create_frappe_user() {
     ok "User ${FRAPPE_USER} already exists"
   else
     $SUDO adduser --disabled-password --gecos "" "$FRAPPE_USER"
-    $SUDO usermod -aG sudo "$FRAPPE_USER"
     ok "User ${FRAPPE_USER} created"
   fi
 }
