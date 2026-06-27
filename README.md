@@ -1,6 +1,6 @@
 # ERPNext Developer Installer
 
-**Current script version:** `0.2.1`
+**Current script version:** `0.2.2`
 
 A developer-friendly installer manager for setting up a local **Frappe + ERPNext** environment on Ubuntu Server.
 
@@ -83,7 +83,7 @@ The script opens an interactive menu:
 3) Uninstall ERPNext Development Environment
 4) Show Status
 5) Start ERPNext
-6) Show Browser / Hostname Instructions
+6) Access / Hostname / VM Networking Guide
 7) Help
 8) Exit
 ```
@@ -288,6 +288,83 @@ Important: the `/etc/hosts` command must be run on the **host machine**, not ins
 
 ---
 
+
+## Access / Hostname / VM Networking Wizard
+
+Run the access wizard inside the VM:
+
+```bash
+./install-erpnext-dev.sh access
+```
+
+The wizard provides:
+
+```text
+1) Show current VM browser access instructions
+2) Show host /etc/hosts command only
+3) Show KVM/libvirt fixed IP guide
+4) Show multi-environment naming guide
+5) Back
+```
+
+Use this whenever:
+
+- `erp.test` does not open in the host browser
+- the VM IP changed after reboot
+- you need the exact host `/etc/hosts` command
+- you want to reserve a fixed KVM/libvirt IP
+- you are setting up multiple ERPNext developer VMs
+
+### Host `/etc/hosts` command
+
+The wizard prints a command like this to run on the **host machine**:
+
+```bash
+sudo sed -i '/[[:space:]]erp\.test$/d' /etc/hosts
+echo "192.168.122.66 erp.test" | sudo tee -a /etc/hosts
+```
+
+Replace the IP with the VM IP shown by the script.
+
+### KVM/libvirt fixed IP
+
+For KVM/libvirt, the wizard prints host-side commands for reserving the VM IP using the VM MAC address:
+
+```bash
+virsh list --all
+virsh domiflist "YOUR_VM_NAME"
+sudo virsh net-update default add ip-dhcp-host "<host mac='YOUR_VM_MAC' name='erpnext-dev' ip='192.168.122.66'/>" --live --config
+```
+
+Restart the VM after adding the reservation:
+
+```bash
+virsh shutdown "YOUR_VM_NAME"
+virsh start "YOUR_VM_NAME"
+```
+
+### Multiple local environments
+
+Use one VM, one fixed IP, and one site name per environment:
+
+```text
+192.168.122.61  erp1.test
+192.168.122.62  erp2.test
+192.168.122.63  school.test
+192.168.122.64  client-a.test
+```
+
+Install examples inside each VM:
+
+```bash
+SITE_NAME=erp1.test ./install-erpnext-dev.sh install
+SITE_NAME=school.test ./install-erpnext-dev.sh install
+SITE_NAME=client-a.test ./install-erpnext-dev.sh install
+```
+
+Use `.test` for local development. Avoid `.local` because it is commonly used by mDNS/Avahi and may conflict with tools like LocalWP.
+
+---
 ## Login Credentials
 
 The installer writes credentials to:
@@ -343,20 +420,19 @@ For the cleanest test, use a fresh VM or roll back to a KVM snapshot.
 
 For KVM/libvirt users, reserve a fixed IP for the VM so `erp.test` does not break after reboot.
 
-On the host machine:
+The easiest way to get the exact commands is to run:
 
 ```bash
-virsh list --all
-virsh domiflist "YOUR_VM_NAME"
+./install-erpnext-dev.sh access
 ```
 
-Then reserve the IP using the VM MAC address:
+Then choose:
 
-```bash
-sudo virsh net-update default add ip-dhcp-host "<host mac='YOUR_VM_MAC' name='erpnext-dev' ip='192.168.122.66'/>" --live --config
+```text
+3) Show KVM/libvirt fixed IP guide
 ```
 
-Restart the VM after adding the reservation.
+The reservation itself must be configured on the **KVM host**, not inside the Ubuntu VM.
 
 ---
 

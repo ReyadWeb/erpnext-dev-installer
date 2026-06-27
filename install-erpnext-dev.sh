@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.2.1"
+SCRIPT_VERSION="0.2.2"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -592,6 +592,158 @@ show_access_instructions() {
 }
 
 
+
+show_host_hosts_command() {
+  local vm_ip escaped_site
+  vm_ip="$(get_vm_ip)"
+  escaped_site="${SITE_NAME//./\\.}"
+
+  echo
+  echo "============================================================"
+  echo "Host /etc/hosts Command"
+  echo "============================================================"
+  echo
+  echo "Run these commands on your HOST machine, not inside this VM:"
+  echo
+  echo "  sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts"
+  echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
+  echo
+  echo "Then test from the host:"
+  echo "  getent hosts ${SITE_NAME}"
+  echo
+  echo "Expected:"
+  echo "  ${vm_ip} ${SITE_NAME}"
+  echo
+  echo "Direct fallback URL while Bench is running:"
+  echo "  http://${vm_ip}:8000"
+  echo
+  echo "Friendly URL after the host entry is added:"
+  echo "  http://${SITE_NAME}:8000"
+  echo
+  echo "============================================================"
+}
+
+show_kvm_fixed_ip_guide() {
+  local vm_ip clean_name escaped_site
+  vm_ip="$(get_vm_ip)"
+  clean_name="${SITE_NAME//./-}"
+  escaped_site="${SITE_NAME//./\\.}"
+
+  echo
+  echo "============================================================"
+  echo "KVM / libvirt Fixed IP Guide"
+  echo "============================================================"
+  echo
+  echo "Purpose:"
+  echo "  Keep this VM on the same IP so ${SITE_NAME} does not break after reboot."
+  echo
+  echo "Current VM IP detected inside this VM:"
+  echo "  ${vm_ip}"
+  echo
+
+  if [[ "${vm_ip}" == 192.168.122.* ]]; then
+    echo "This looks like the default libvirt NAT network range: 192.168.122.0/24"
+  else
+    echo "This IP is not in the default libvirt NAT range."
+    echo "The guide still applies, but your network may be bridged, custom NAT, VMware, VirtualBox, or cloud."
+  fi
+
+  echo
+  echo "Run these commands on the KVM HOST machine, not inside this VM:"
+  echo
+  echo "  virsh list --all"
+  echo "  virsh domiflist \"YOUR_VM_NAME\""
+  echo
+  echo "Copy the VM MAC address from domiflist, then reserve the IP:"
+  echo
+  echo "  sudo virsh net-update default add ip-dhcp-host \"<host mac='YOUR_VM_MAC' name='${clean_name}' ip='${vm_ip}'/>\" --live --config"
+  echo
+  echo "Restart the VM from the host:"
+  echo
+  echo "  virsh shutdown \"YOUR_VM_NAME\""
+  echo "  virsh start \"YOUR_VM_NAME\""
+  echo
+  echo "Verify the lease from the host:"
+  echo
+  echo "  sudo virsh net-dhcp-leases default"
+  echo
+  echo "Then update the host /etc/hosts entry:"
+  echo
+  echo "  sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts"
+  echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
+  echo
+  echo "Notes:"
+  echo "  - Use one unique fixed IP per ERPNext VM."
+  echo "  - Do not reserve the same IP for two VMs."
+  echo "  - If this VM already has a different reservation, remove/update the old one on the host."
+  echo
+  echo "============================================================"
+}
+
+show_multi_environment_guide() {
+  cat <<EOF_MULTI
+
+============================================================
+Multiple Local ERPNext Environments
+============================================================
+
+Use one VM, one site name, and one fixed IP per development environment.
+
+Recommended examples:
+
+  192.168.122.61  erp1.test
+  192.168.122.62  erp2.test
+  192.168.122.63  school.test
+  192.168.122.64  client-a.test
+  192.168.122.65  client-b.test
+
+Install examples inside each VM:
+
+  SITE_NAME=erp1.test ./install-erpnext-dev.sh install
+  SITE_NAME=school.test ./install-erpnext-dev.sh install
+  SITE_NAME=client-a.test ./install-erpnext-dev.sh install
+
+Host /etc/hosts examples on your Linux Mint host:
+
+  192.168.122.61 erp1.test
+  192.168.122.62 erp2.test
+  192.168.122.63 school.test
+  192.168.122.64 client-a.test
+
+Recommended rule:
+  - Local development: use .test domains.
+  - Avoid .local because it is commonly used by mDNS/Avahi and tools like LocalWP.
+  - Cloud/production: use a real domain and HTTPS, not bench start.
+
+============================================================
+EOF_MULTI
+}
+
+show_access_menu() {
+  while true; do
+    echo
+    echo "============================================================"
+    echo "Access / Hostname / VM Networking Guide"
+    echo "============================================================"
+    echo "1) Show current VM browser access instructions"
+    echo "2) Show host /etc/hosts command only"
+    echo "3) Show KVM/libvirt fixed IP guide"
+    echo "4) Show multi-environment naming guide"
+    echo "5) Back"
+    echo
+    read -r -p "Choose an option: " access_choice
+
+    case "$access_choice" in
+      1) show_access_instructions ;;
+      2) show_host_hosts_command ;;
+      3) show_kvm_fixed_ip_guide ;;
+      4) show_multi_environment_guide ;;
+      5) return 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
+}
+
 print_summary() {
   local vm_ip
   vm_ip="$(get_vm_ip)"
@@ -960,7 +1112,7 @@ Actions:
   status        Show environment status
   start         Start ERPNext with bench start
   uninstall     Show uninstall menu
-  access        Show browser / host /etc/hosts instructions
+  access        Show access wizard, host /etc/hosts, KVM fixed IP, and multi-environment guide
   menu          Show interactive menu
   help          Show this help
 
@@ -995,7 +1147,7 @@ show_menu() {
     echo "3) Uninstall ERPNext Development Environment"
     echo "4) Show Status"
     echo "5) Start ERPNext"
-    echo "6) Show Browser / Hostname Instructions"
+    echo "6) Access / Hostname / VM Networking Guide"
     echo "7) Help"
     echo "8) Exit"
     echo
@@ -1007,7 +1159,7 @@ show_menu() {
       3) run_uninstall_menu ;;
       4) run_status ;;
       5) run_start ;;
-      6) show_access_instructions ;;
+      6) show_access_menu ;;
       7) show_help ;;
       8) exit 0 ;;
       *) warn "Invalid option" ;;
@@ -1043,7 +1195,7 @@ main() {
     status) run_status ;;
     start) run_start ;;
     uninstall) run_uninstall_menu ;;
-    access) show_access_instructions ;;
+    access) show_access_menu ;;
     help|-h|--help) show_help ;;
     *) fail "Unknown action: ${ACTION}" ;;
   esac
