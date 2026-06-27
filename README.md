@@ -12,24 +12,46 @@ This project is designed for local developer VMs, test labs, and evaluation envi
 ## Current Version
 
 ```text
-v0.4.2
+v0.5.0
 ```
 
-This version adds a reliability polish on top of the Backup / Restore / Maintenance workflow. Start and restart actions now wait visibly for ERPNext development services to become ready before showing browser access instructions.
+This version adds an App Library on top of the stable local VM installer, backup/maintenance workflow, and service readiness checks. The App Library can show installed apps and install selected optional Frappe apps such as CRM, HRMS, Helpdesk, and Insights.
 
 ---
 
-## v0.4.2 Service Readiness Reliability
+## v0.5.0 App Library
 
-v0.4.2 improves the start/restart experience:
+v0.5.0 adds an optional App Library for installing common Frappe ecosystem apps into the local ERPNext developer VM.
 
-- Shows visible readiness checks after starting or restarting the ERPNext service.
-- Waits for Bench web, Socket.io, Redis queue, and Redis cache ports.
-- Shows browser instructions only after the web port is ready.
-- Reports `Starting` / `partially ready` instead of incorrectly implying full readiness.
-- Adds `wait-ready` command mode for manual readiness checks.
+Included app profiles:
 
-The Backup / Restore / Maintenance tools remain available:
+- Frappe CRM
+- Frappe HR / HRMS
+- Frappe Helpdesk
+- Frappe Insights
+- Custom trusted Frappe app from Git URL
+
+The App Library is intentionally safety-focused:
+
+- Shows currently installed apps before/after installation.
+- Offers a database + files backup before app installation.
+- Validates app names and branch names.
+- Checks the requested Git branch before downloading when a branch is specified.
+- Runs install-app, migrate, build, clear-cache, and service restart/readiness checks.
+- Allows branch overrides through environment variables.
+
+Example branch overrides:
+
+```bash
+CRM_BRANCH=main ./install-erpnext-dev.sh install-crm
+HRMS_BRANCH=version-16 ./install-erpnext-dev.sh install-hrms
+HELPDESK_BRANCH=main ./install-erpnext-dev.sh install-helpdesk
+INSIGHTS_BRANCH=main ./install-erpnext-dev.sh install-insights
+```
+
+The previous v0.4.2 service readiness improvements remain available. Start/restart actions wait visibly for Bench web, Socket.io, Redis queue, and Redis cache ports before showing browser instructions.
+
+The Backup / Restore / Maintenance tools also remain available:
 
 - Create a database backup.
 - Create a database + files backup.
@@ -88,6 +110,7 @@ The recommended setup can install and configure:
 - Optional autostart on VM boot
 - Backup / restore tools
 - Maintenance tasks for migrate/build/cache/restart
+- Optional App Library for Frappe CRM, HRMS, Helpdesk, Insights, and custom apps
 
 Default local site:
 
@@ -110,9 +133,9 @@ http://VM_IP:8000
 ---
 
 
-### v0.4.2 readiness polish
+### v0.5.0 readiness polish
 
-v0.4.2 makes service start and restart clearer. After `start`, `restart`, `service-start`, or `service-restart`, the script shows visible waiting output while checking required development ports. This prevents confusion when systemd reports the service as running but Bench is still starting internally.
+v0.5.0 makes service start and restart clearer. After `start`, `restart`, `service-start`, or `service-restart`, the script shows visible waiting output while checking required development ports. This prevents confusion when systemd reports the service as running but Bench is still starting internally.
 
 ### v0.4.1 backup listing polish
 
@@ -204,7 +227,7 @@ sudo apt update && sudo apt install -y curl ca-certificates && curl -fsSL "https
 
 ## Menu Layout
 
-v0.4.2 keeps the main menu simple:
+v0.5.0 keeps the main menu simple:
 
 ```text
 1) Recommended Setup
@@ -213,9 +236,10 @@ v0.4.2 keeps the main menu simple:
 4) Status
 5) Access Instructions
 6) Backup / Maintenance
-7) Advanced Options
-8) Help
-9) Exit
+7) App Library
+8) Advanced Options
+9) Help
+10) Exit
 ```
 
 The main menu is intended for normal daily use.
@@ -382,6 +406,61 @@ Not installed            → run ./install-erpnext-dev.sh setup
 Incomplete               → run repair or perform a clean setup
 ```
 
+## App Library
+
+Open the App Library menu:
+
+```bash
+./install-erpnext-dev.sh app-library
+```
+
+Alias:
+
+```bash
+./install-erpnext-dev.sh apps
+```
+
+Show installed and downloaded apps:
+
+```bash
+./install-erpnext-dev.sh list-apps
+```
+
+Curated app install commands:
+
+```bash
+./install-erpnext-dev.sh install-crm
+./install-erpnext-dev.sh install-hrms
+./install-erpnext-dev.sh install-helpdesk
+./install-erpnext-dev.sh install-insights
+```
+
+Interactive custom app installer:
+
+```bash
+./install-erpnext-dev.sh install-custom-app
+```
+
+App Library menu:
+
+```text
+1) Show installed apps
+2) Install Frappe CRM
+3) Install Frappe HR / HRMS
+4) Install Frappe Helpdesk
+5) Install Frappe Insights
+6) Install custom app from Git URL
+7) Back
+```
+
+Important notes:
+
+- ERPNext already includes classic CRM features. Frappe CRM is a separate modern CRM app.
+- Optional apps can take several minutes to download, install, migrate, and build.
+- Use VM snapshots before testing optional apps on an important environment.
+- For production or business use, confirm app compatibility before installing.
+- The script offers a backup before installing an optional app.
+
 ## Backup / Restore / Maintenance
 
 Open the backup and maintenance menu:
@@ -462,7 +541,7 @@ Maintenance menu options:
 
 ## Autostart on VM Boot
 
-v0.4.2 can create a local development systemd service:
+v0.5.0 can create a local development systemd service:
 
 ```text
 erpnext-dev.service

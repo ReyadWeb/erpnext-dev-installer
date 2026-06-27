@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.4.2"
+SCRIPT_VERSION="0.5.0"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1651,6 +1651,301 @@ run_full_status() {
   echo "============================================================"
 }
 
+
+# ============================================================
+# App Library
+# ============================================================
+
+app_profile_defaults() {
+  local profile="$1"
+
+  LIB_APP_KEY=""
+  LIB_APP_DISPLAY=""
+  LIB_APP_NAME=""
+  LIB_APP_REPO=""
+  LIB_APP_BRANCH=""
+  LIB_APP_NOTES=""
+
+  case "$profile" in
+    crm)
+      LIB_APP_KEY="crm"
+      LIB_APP_DISPLAY="Frappe CRM"
+      LIB_APP_NAME="crm"
+      LIB_APP_REPO="https://github.com/frappe/crm"
+      LIB_APP_BRANCH="${CRM_BRANCH:-main}"
+      LIB_APP_NOTES="Standalone modern CRM app. ERPNext already includes classic CRM features; install this if you want the separate Frappe CRM experience."
+      ;;
+    hrms|hr)
+      LIB_APP_KEY="hrms"
+      LIB_APP_DISPLAY="Frappe HR / HRMS"
+      LIB_APP_NAME="hrms"
+      LIB_APP_REPO="https://github.com/frappe/hrms"
+      LIB_APP_BRANCH="${HRMS_BRANCH:-version-16}"
+      LIB_APP_NOTES="HR, payroll, attendance, leave, employee lifecycle, and HR operations app for Frappe/ERPNext."
+      ;;
+    helpdesk)
+      LIB_APP_KEY="helpdesk"
+      LIB_APP_DISPLAY="Frappe Helpdesk"
+      LIB_APP_NAME="helpdesk"
+      LIB_APP_REPO="https://github.com/frappe/helpdesk"
+      LIB_APP_BRANCH="${HELPDESK_BRANCH:-main}"
+      LIB_APP_NOTES="Ticketing and customer support app. Uses the main branch by default because current Helpdesk is Frappe v16-oriented."
+      ;;
+    insights)
+      LIB_APP_KEY="insights"
+      LIB_APP_DISPLAY="Frappe Insights"
+      LIB_APP_NAME="insights"
+      LIB_APP_REPO="https://github.com/frappe/insights"
+      LIB_APP_BRANCH="${INSIGHTS_BRANCH:-main}"
+      LIB_APP_NOTES="Business intelligence, reporting, and dashboard app for Frappe sites."
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+validate_app_name() {
+  local app_name="$1"
+  [[ "$app_name" =~ ^[A-Za-z0-9_][A-Za-z0-9_-]*$ ]]
+}
+
+validate_branch_name() {
+  local branch="$1"
+  [[ -z "$branch" || "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]
+}
+
+app_folder_exists() {
+  local bench_dir="$1"
+  local app_name="$2"
+  path_is_dir "${bench_dir}/apps/${app_name}"
+}
+
+get_app_current_branch() {
+  local bench_dir="$1"
+  local app_name="$2"
+
+  if app_folder_exists "$bench_dir" "$app_name"; then
+    run_as_frappe "cd '${bench_dir}/apps/${app_name}' && git rev-parse --abbrev-ref HEAD 2>/dev/null" 2>/dev/null || true
+  fi
+}
+
+branch_available() {
+  local repo="$1"
+  local branch="$2"
+  local repo_q branch_q
+
+  [[ -z "$branch" ]] && return 0
+
+  repo_q="$(printf '%q' "$repo")"
+  branch_q="$(printf '%q' "$branch")"
+  git ls-remote --exit-code --heads "$repo" "$branch" >/dev/null 2>&1 || run_as_frappe "git ls-remote --exit-code --heads ${repo_q} ${branch_q} >/dev/null 2>&1"
+}
+
+show_installed_apps() {
+  require_sudo
+
+  local bench_dir
+  bench_dir="$(require_site_environment)" || return 1
+
+  echo
+  echo "============================================================"
+  echo "Frappe / ERPNext Apps"
+  echo "============================================================"
+  echo "Site: ${SITE_NAME}"
+  echo "Bench: ${bench_dir}"
+  echo
+  echo "Installed on site:"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' list-apps" || warn "Could not list installed apps."
+  echo
+  echo "Downloaded app folders:"
+  run_as_frappe "cd '${bench_dir}' && find apps -maxdepth 1 -mindepth 1 -type d -printf '  %f\n' | sort" || warn "Could not list downloaded app folders."
+  echo "============================================================"
+}
+
+print_app_profile() {
+  local display="$1"
+  local app_name="$2"
+  local repo="$3"
+  local branch="$4"
+  local notes="$5"
+
+  echo
+  echo "App:    ${display}"
+  echo "Name:   ${app_name}"
+  echo "Repo:   ${repo}"
+  if [[ -n "$branch" ]]; then
+    echo "Branch: ${branch}"
+  else
+    echo "Branch: default repository branch"
+  fi
+  echo "Notes:  ${notes}"
+  echo
+}
+
+install_frappe_app() {
+  require_sudo
+  check_internet
+
+  local app_name="$1"
+  local display="$2"
+  local repo="$3"
+  local branch="$4"
+  local notes="$5"
+  local bench_dir repo_q branch_q downloaded_branch was_running
+
+  bench_dir="$(require_site_environment)" || return 1
+
+  if ! validate_app_name "$app_name"; then
+    fail "Invalid app name: ${app_name}"
+  fi
+
+  if ! validate_branch_name "$branch"; then
+    fail "Invalid branch name: ${branch}"
+  fi
+
+  print_app_profile "$display" "$app_name" "$repo" "$branch" "$notes"
+
+  if site_app_installed "$app_name"; then
+    ok "${display} is already installed on ${SITE_NAME}"
+    return 0
+  fi
+
+  if ! confirm "Install ${display} on ${SITE_NAME}?"; then
+    warn "App installation cancelled."
+    return 0
+  fi
+
+  if confirm "Create a database + files backup before installing ${display}?"; then
+    create_site_backup true || warn "Pre-install backup failed. Continuing only because app installation was explicitly confirmed."
+  fi
+
+  was_running=0
+  if service_exists && systemctl is-active --quiet "${ERPNEXT_SERVICE_NAME}"; then
+    was_running=1
+  fi
+
+  if app_folder_exists "$bench_dir" "$app_name"; then
+    downloaded_branch="$(get_app_current_branch "$bench_dir" "$app_name" | tail -1 | tr -d '[:space:]')"
+    ok "App already downloaded: apps/${app_name}"
+    if [[ -n "$branch" && -n "$downloaded_branch" && "$downloaded_branch" != "$branch" ]]; then
+      warn "Downloaded app branch is '${downloaded_branch}', requested '${branch}'."
+      warn "The script will not switch branches automatically. Use Git manually if needed."
+    fi
+  else
+    if [[ -n "$branch" ]]; then
+      log "Verifying branch ${branch} exists for ${repo}"
+      if ! branch_available "$repo" "$branch"; then
+        fail "Branch '${branch}' was not found or GitHub could not be reached for ${repo}. Override the branch with an environment variable or install manually."
+      fi
+    fi
+
+    repo_q="$(printf '%q' "$repo")"
+    branch_q="$(printf '%q' "$branch")"
+
+    log "Downloading ${display}"
+    if [[ -n "$branch" ]]; then
+      run_as_frappe "cd '${bench_dir}' && bench get-app ${repo_q} --branch ${branch_q}"
+    else
+      run_as_frappe "cd '${bench_dir}' && bench get-app ${repo_q}"
+    fi
+  fi
+
+  if site_app_installed "$app_name"; then
+    ok "${display} is already installed on ${SITE_NAME}"
+  else
+    log "Installing ${display} on ${SITE_NAME}"
+    run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' install-app '${app_name}'"
+  fi
+
+  log "Running post-app maintenance"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' migrate"
+  run_as_frappe "cd '${bench_dir}' && bench build"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' clear-cache"
+
+  if [[ "$was_running" -eq 1 ]]; then
+    restart_erpnext_service || warn "${display} installed, but the service could not be restarted automatically."
+  fi
+
+  ok "${display} installation workflow completed"
+  show_installed_apps
+}
+
+install_app_profile() {
+  local profile="$1"
+
+  app_profile_defaults "$profile" || fail "Unknown app profile: ${profile}"
+  install_frappe_app "$LIB_APP_NAME" "$LIB_APP_DISPLAY" "$LIB_APP_REPO" "$LIB_APP_BRANCH" "$LIB_APP_NOTES"
+}
+
+install_custom_app_interactive() {
+  require_sudo
+
+  local app_name display repo branch notes
+
+  echo
+  echo "============================================================"
+  echo "Install Custom Frappe App"
+  echo "============================================================"
+  echo "Use this for trusted Frappe apps only. The app must be compatible with your Frappe branch."
+  echo
+
+  read -r -p "App name used by bench install-app, for example my_app: " app_name
+  if ! validate_app_name "$app_name"; then
+    fail "Invalid app name. Use letters, numbers, underscore, or hyphen only."
+  fi
+
+  read -r -p "Git repository URL: " repo
+  if [[ -z "$repo" ]]; then
+    fail "Repository URL is required."
+  fi
+
+  read -r -p "Branch [leave blank for repository default]: " branch
+  if ! validate_branch_name "$branch"; then
+    fail "Invalid branch name."
+  fi
+
+  read -r -p "Display name [${app_name}]: " display
+  display="${display:-$app_name}"
+  notes="Custom app provided by the user. Verify compatibility before using it with important data."
+
+  install_frappe_app "$app_name" "$display" "$repo" "$branch" "$notes"
+}
+
+show_app_library_menu() {
+  while true; do
+    echo
+    echo "============================================================"
+    echo "App Library"
+    echo "============================================================"
+    echo "1) Show installed apps"
+    echo "2) Install Frappe CRM"
+    echo "3) Install Frappe HR / HRMS"
+    echo "4) Install Frappe Helpdesk"
+    echo "5) Install Frappe Insights"
+    echo "6) Install custom app from Git URL"
+    echo "7) Back"
+    echo
+    echo "Notes:"
+    echo "  - App installs can take several minutes."
+    echo "  - The script offers a backup before installation."
+    echo "  - Optional apps should be tested in a VM snapshot before production use."
+    echo
+    read -r -p "Choose an option: " app_choice
+
+    case "$app_choice" in
+      1) show_installed_apps; pause_after_screen "Press Enter to return to App Library..." ;;
+      2) install_app_profile crm; pause_after_screen "Press Enter to return to App Library..." ;;
+      3) install_app_profile hrms; pause_after_screen "Press Enter to return to App Library..." ;;
+      4) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Library..." ;;
+      5) install_app_profile insights; pause_after_screen "Press Enter to return to App Library..." ;;
+      6) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Library..." ;;
+      7) return 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
+}
+
 # ============================================================
 # Backup / Restore / Maintenance
 # ============================================================
@@ -2246,13 +2541,14 @@ show_advanced_menu() {
     echo "3) Uninstall / Reset"
     echo "4) Autostart / Service Manager"
     echo "5) Backup / Maintenance"
-    echo "6) Full Health Report"
-    echo "7) KVM Fixed IP Guide"
-    echo "8) Multi-Environment Guide"
-    echo "9) Start Bench in Foreground"
-    echo "10) Show Service Logs"
-    echo "11) Access Submenu"
-    echo "12) Back"
+    echo "6) App Library"
+    echo "7) Full Health Report"
+    echo "8) KVM Fixed IP Guide"
+    echo "9) Multi-Environment Guide"
+    echo "10) Start Bench in Foreground"
+    echo "11) Show Service Logs"
+    echo "12) Access Submenu"
+    echo "13) Back"
     echo
     read -r -p "Choose an option: " advanced_choice
 
@@ -2262,13 +2558,14 @@ show_advanced_menu() {
       3) run_uninstall_menu ;;
       4) show_service_menu ;;
       5) run_backup_maintenance_menu ;;
-      6) run_full_status ;;
-      7) show_kvm_fixed_ip_guide ;;
-      8) show_multi_environment_guide ;;
-      9) run_foreground_start ;;
-      10) show_erpnext_service_logs ;;
-      11) show_access_menu ;;
-      12) return 0 ;;
+      6) show_app_library_menu ;;
+      7) run_full_status ;;
+      8) show_kvm_fixed_ip_guide ;;
+      9) show_multi_environment_guide ;;
+      10) run_foreground_start ;;
+      11) show_erpnext_service_logs ;;
+      12) show_access_menu ;;
+      13) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -2300,6 +2597,9 @@ Basic actions:
   backup        Create database backup
   backup-files  Create database + files backup
   list-backups  List site backups
+  app-library   Show optional Frappe app library
+  apps          Alias for app-library
+  list-apps     Show installed and downloaded Frappe apps
   maintenance   Show maintenance menu
   menu          Show interactive menu
   help          Show this help
@@ -2307,6 +2607,11 @@ Basic actions:
 Advanced actions:
   repair              Run safe environment repair
   backup-menu         Show backup/restore/maintenance menu
+  install-crm         Install Frappe CRM
+  install-hrms        Install Frappe HR / HRMS
+  install-helpdesk    Install Frappe Helpdesk
+  install-insights    Install Frappe Insights
+  install-custom-app  Install a custom trusted Frappe app interactively
   restore-db          Restore a database backup interactively
   restore-full        Restore database + files interactively
   migrate             Run site migration
@@ -2341,6 +2646,10 @@ Environment overrides:
   DB_ADMIN_PASSWORD='YourDbAdminPassword'
   FRAPPE_BRANCH=version-16
   ERPNEXT_BRANCH=version-16
+  CRM_BRANCH=main
+  HRMS_BRANCH=version-16
+  HELPDESK_BRANCH=main
+  INSIGHTS_BRANCH=main
   AUTO_START=true|false|prompt
   ENABLE_AUTOSTART=true|false|prompt
 
@@ -2355,6 +2664,8 @@ Examples:
   ./install-erpnext-dev.sh start
   ./install-erpnext-dev.sh access
   ./install-erpnext-dev.sh backup
+  ./install-erpnext-dev.sh app-library
+  ./install-erpnext-dev.sh install-crm
   ./install-erpnext-dev.sh doctor
 EOF_HELP
 }
@@ -2371,9 +2682,10 @@ show_menu() {
     echo "4) Status"
     echo "5) Access Instructions"
     echo "6) Backup / Maintenance"
-    echo "7) Advanced Options"
-    echo "8) Help"
-    echo "9) Exit"
+    echo "7) App Library"
+    echo "8) Advanced Options"
+    echo "9) Help"
+    echo "10) Exit"
     echo
     read -r -p "Choose an option: " choice
 
@@ -2384,9 +2696,10 @@ show_menu() {
       4) show_status_menu ;;
       5) show_access_instructions ;;
       6) run_backup_maintenance_menu ;;
-      7) show_advanced_menu ;;
-      8) show_help ;;
-      9) exit 0 ;;
+      7) show_app_library_menu ;;
+      8) show_advanced_menu ;;
+      9) show_help ;;
+      10) exit 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -2399,7 +2712,7 @@ parse_args() {
         ASSUME_YES=1
         shift
         ;;
-      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|multi-env-guide)
+      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|multi-env-guide|app-library|apps|list-apps|install-crm|install-hrms|install-helpdesk|install-insights|install-custom-app)
         ACTION="$1"
         shift
         ;;
@@ -2430,6 +2743,13 @@ main() {
     access) show_access_instructions ;;
     access-menu) show_access_menu ;;
     backup-menu) run_backup_maintenance_menu ;;
+    app-library|apps) show_app_library_menu ;;
+    list-apps) show_installed_apps ;;
+    install-crm) install_app_profile crm ;;
+    install-hrms) install_app_profile hrms ;;
+    install-helpdesk) install_app_profile helpdesk ;;
+    install-insights) install_app_profile insights ;;
+    install-custom-app) install_custom_app_interactive ;;
     backup) create_site_backup false ;;
     backup-files) create_site_backup true ;;
     list-backups|backups) list_site_backups ;;
