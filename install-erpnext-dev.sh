@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.5.4"
+SCRIPT_VERSION="0.5.5"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1839,6 +1839,125 @@ fi
   ok "Dependencies ready for ${app_name}"
 }
 
+
+normalize_apps_txt() {
+  local bench_dir="$1"
+  local required_app="${2:-}"
+  local quiet="${3:-false}"
+  local bench_q required_q quiet_q
+
+  bench_q="$(printf '%q' "$bench_dir")"
+  required_q="$(printf '%q' "$required_app")"
+  quiet_q="$(printf '%q' "$quiet")"
+
+  if [[ "$quiet" != "true" ]]; then
+    log "Normalizing Bench app registry: sites/apps.txt"
+  fi
+
+  run_as_frappe "
+set -e
+cd ${bench_q}
+mkdir -p sites
+python - ${required_q} ${quiet_q} <<'PY_APP_REGISTRY'
+from pathlib import Path
+import sys
+
+required = sys.argv[1] if len(sys.argv) > 1 else ""
+quiet = (sys.argv[2].lower() == "true") if len(sys.argv) > 2 else False
+apps_dir = Path("apps")
+apps_txt = Path("sites/apps.txt")
+apps_txt.parent.mkdir(parents=True, exist_ok=True)
+
+valid = []
+if apps_dir.exists():
+    for d in sorted([x for x in apps_dir.iterdir() if x.is_dir()], key=lambda x: x.name):
+        # Frappe apps normally have a Python package with the same name as the app folder.
+        # This avoids registering random incomplete folders.
+        if (d / d.name).is_dir() or (d / "pyproject.toml").exists() or (d / "setup.py").exists():
+            valid.append(d.name)
+valid_set = set(valid)
+
+raw = apps_txt.read_text() if apps_txt.exists() else ""
+original = raw
+
+# Tokenize and repair common concatenation damage such as "erpnextcrm".
+# The segmentation pass uses the discovered app folders, so it also supports future apps.
+names_by_len = sorted(valid, key=len, reverse=True)
+
+def split_concat(token: str):
+    if token in valid_set:
+        return [token]
+    out = []
+    i = 0
+    while i < len(token):
+        match = None
+        for name in names_by_len:
+            if token.startswith(name, i):
+                match = name
+                break
+        if not match:
+            return [token]
+        out.append(match)
+        i += len(match)
+    return out or [token]
+
+items = []
+for token in raw.replace("\r", "\n").replace(",", "\n").split():
+    for item in split_concat(token.strip()):
+        if item and item not in items:
+            items.append(item)
+
+# Keep only app names that have a matching local app folder. This prevents broken entries
+# like erpnextcrm from being imported by Frappe.
+items = [x for x in items if x in valid_set]
+
+# Ensure core apps are first when present.
+ordered = []
+for core in ("frappe", "erpnext"):
+    if core in valid_set and core not in ordered:
+        ordered.append(core)
+
+for item in items:
+    if item not in ordered:
+        ordered.append(item)
+
+# Ensure the app currently being installed is registered if its folder exists.
+if required and required in valid_set and required not in ordered:
+    ordered.append(required)
+
+# Include any other valid downloaded app folders after known/previous entries.
+# This repairs interrupted get-app states where the folder exists but apps.txt missed it.
+for item in valid:
+    if item not in ordered:
+        ordered.append(item)
+
+new = "\n".join(ordered) + ("\n" if ordered else "")
+if new != original:
+    if apps_txt.exists():
+        backup = apps_txt.with_name(f"apps.txt.bak.registry-repair")
+        backup.write_text(original)
+    apps_txt.write_text(new)
+    if not quiet:
+        print("Repaired sites/apps.txt:")
+        print(new, end="")
+else:
+    if not quiet:
+        print("sites/apps.txt already normalized")
+PY_APP_REGISTRY
+" || return 1
+
+  return 0
+}
+
+repair_app_registry() {
+  require_sudo
+  local bench_dir
+  bench_dir="$(require_site_environment)" || return 1
+  normalize_apps_txt "$bench_dir" "" "false" || fail "Could not repair sites/apps.txt."
+  ok "Bench app registry repair completed"
+  show_installed_apps
+}
+
 ensure_app_in_apps_txt() {
   local bench_dir="$1"
   local app_name="$2"
@@ -1851,20 +1970,9 @@ ensure_app_in_apps_txt() {
   bench_q="$(printf '%q' "$bench_dir")"
   app_q="$(printf '%q' "$app_name")"
 
-  log "Checking Bench app registry for ${app_name}"
+  normalize_apps_txt "$bench_dir" "$app_name" "false" || fail "Could not normalize sites/apps.txt before installing ${app_name}."
 
-  run_as_frappe "
-set -e
-cd ${bench_q}
-mkdir -p sites
-touch sites/apps.txt
-if grep -qxF ${app_q} sites/apps.txt; then
-  echo '${app_name} already present in sites/apps.txt'
-else
-  printf '%s\\n' ${app_q} >> sites/apps.txt
-  echo 'Added ${app_name} to sites/apps.txt'
-fi
-" || fail "Could not register ${app_name} in sites/apps.txt."
+  run_as_frappe "cd ${bench_q} && grep -qxF ${app_q} sites/apps.txt" || fail "Could not register ${app_name} in sites/apps.txt."
 
   ok "${app_name} is registered in sites/apps.txt"
 }
@@ -1876,6 +1984,8 @@ show_installed_apps() {
   bench_dir="$(require_site_environment)" || return 1
   bench_q="$(printf '%q' "$bench_dir")"
   site_q="$(printf '%q' "$SITE_NAME")"
+
+  normalize_apps_txt "$bench_dir" "" "true" || warn "Could not normalize sites/apps.txt before listing apps."
 
   echo
   echo "============================================================"
@@ -1971,6 +2081,10 @@ install_frappe_app() {
   fi
 
   print_app_profile "$display" "$app_name" "$repo" "$branch" "$notes"
+
+  # Repair any existing apps.txt corruption before backups or bench site commands.
+  # A prior interrupted app install can create concatenated entries like erpnextcrm.
+  normalize_apps_txt "$bench_dir" "" "true" || warn "Could not normalize sites/apps.txt before app install."
 
   if site_app_installed "$app_name"; then
     ok "${display} is already installed on ${SITE_NAME}"
@@ -2160,8 +2274,12 @@ create_site_backup() {
   require_sudo
 
   local include_files="${1:-false}"
-  local bench_dir backup_cmd
+  local bench_dir backup_cmd tmp_output rc
   bench_dir="$(require_site_environment)" || return 1
+
+  # Backup uses bench, so repair the app registry first. A corrupted apps.txt can make
+  # backup print a failure while still leaving partial files behind.
+  normalize_apps_txt "$bench_dir" "" "true" || warn "Could not normalize sites/apps.txt before backup."
 
   if [[ "$include_files" == "true" ]]; then
     log "Creating database + files backup for ${SITE_NAME}"
@@ -2171,7 +2289,19 @@ create_site_backup() {
     backup_cmd="bench --site '${SITE_NAME}' backup"
   fi
 
-  run_as_frappe "cd '${bench_dir}' && ${backup_cmd}"
+  tmp_output="$(mktemp /tmp/erpnext-dev-backup.XXXXXX.log)" || return 1
+  set +e
+  run_as_frappe "cd '${bench_dir}' && ${backup_cmd}" 2>&1 | tee "$tmp_output"
+  rc=${PIPESTATUS[0]}
+  set -e
+
+  if [[ "$rc" -ne 0 ]] || grep -Eqi 'Backup failed|Traceback|ModuleNotFoundError|Database or site_config.json may be corrupted' "$tmp_output"; then
+    warn "Backup did not complete cleanly. Partial backup files may exist, but they should not be trusted."
+    rm -f "$tmp_output"
+    return 1
+  fi
+
+  rm -f "$tmp_output"
   ok "Backup completed"
   show_latest_backups
 }
@@ -2783,6 +2913,7 @@ Advanced actions:
   install-helpdesk    Install Frappe Helpdesk
   install-insights    Install Frappe Insights
   install-custom-app  Install a custom trusted Frappe app interactively
+  repair-app-registry Repair/normalize Bench sites/apps.txt
   restore-db          Restore a database backup interactively
   restore-full        Restore database + files interactively
   migrate             Run site migration
