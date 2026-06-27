@@ -12,16 +12,24 @@ This project is designed for local developer VMs, test labs, and evaluation envi
 ## Current Version
 
 ```text
-v0.3.3
+v0.3.4
 ```
 
-This version fixes a post-install service/start false negative where the installer could report “Bench folder not found” after ERPNext had already installed successfully. It also improves bench path detection when the script is run by a non-frappe user and treats optional service/autostart/start failures as warnings instead of marking the install itself as failed.
+This version is a polish release after the successful fresh-VM test. It fixes health-report false warnings for files under `/home/frappe`, improves status labels, and reduces repeated browser instruction output during setup/start.
 
 ---
 
-## v0.3.3 Reliability Fix
+## v0.3.4 Health Report and UX Polish
 
-v0.3.3 improves reliability after setup by using one shared bench-path detection flow. This prevents false errors when the bench folder exists under:
+v0.3.4 improves the full health report and post-install UX:
+
+- Checks `/home/frappe/start-erpnext-dev.sh` using sudo-aware executable detection.
+- Checks `/home/frappe/erpnext-dev-credentials.txt` using sudo-aware file detection.
+- Checks `sites/common_site_config.json` using the resolved bench path.
+- Shows installed/running/enabled states as `OK` instead of informational status.
+- Reduces duplicated browser-access instruction screens after setup.
+
+The previous v0.3.3 reliability fix remains: the installer uses shared bench-path detection to prevent false errors when the bench folder exists under:
 
 ```text
 /home/frappe/frappe/frappe-bench
@@ -160,7 +168,7 @@ sudo apt update && sudo apt install -y curl ca-certificates && curl -fsSL "https
 
 ## Menu Layout
 
-v0.3.3 keeps the main menu simple:
+v0.3.4 keeps the main menu simple:
 
 ```text
 1) Recommended Setup
@@ -339,7 +347,7 @@ Incomplete               → run repair or perform a clean setup
 
 ## Autostart on VM Boot
 
-v0.3.3 can create a local development systemd service:
+v0.3.4 can create a local development systemd service:
 
 ```text
 erpnext-dev.service

@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.3.3"
+SCRIPT_VERSION="0.3.4"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -140,6 +140,18 @@ path_is_file() {
     $SUDO test -f "$path" 2>/dev/null
   else
     test -f "$path" 2>/dev/null
+  fi
+}
+
+path_is_executable() {
+  local path="$1"
+
+  [[ -x "$path" ]] && return 0
+
+  if [[ "${SUDO:-}" == "sudo" ]]; then
+    $SUDO test -x "$path" 2>/dev/null
+  else
+    test -x "$path" 2>/dev/null
   fi
 }
 
@@ -1201,9 +1213,30 @@ run_runtime_status() {
   echo "============================================================"
   echo "ERPNext Runtime Status"
   echo "============================================================"
-  status_line "Runtime" "INFO" "$(runtime_state)"
-  status_line "Service" "INFO" "$(service_state)"
-  status_line "Autostart" "INFO" "$(autostart_state)"
+  local runtime_status service_status autostart_status
+  runtime_status="$(runtime_state)"
+  service_status="$(service_state)"
+  autostart_status="$(autostart_state)"
+
+  if [[ "$runtime_status" == Running* ]]; then
+    status_line "Runtime" "OK" "$runtime_status"
+  else
+    status_line "Runtime" "WARN" "$runtime_status"
+  fi
+
+  if [[ "$service_status" == "Running" ]]; then
+    status_line "Service" "OK" "$service_status"
+  elif [[ "$service_status" == "Not configured" ]]; then
+    status_line "Service" "WARN" "$service_status"
+  else
+    status_line "Service" "INFO" "$service_status"
+  fi
+
+  if [[ "$autostart_status" == "Enabled" ]]; then
+    status_line "Autostart" "OK" "$autostart_status"
+  else
+    status_line "Autostart" "WARN" "$autostart_status"
+  fi
 
   local item port label
   local port_checks=(
@@ -1238,7 +1271,15 @@ run_installation_status() {
   echo "============================================================"
   echo "ERPNext Installation Status"
   echo "============================================================"
-  status_line "Install status" "INFO" "$(install_state)"
+  local install_status
+  install_status="$(install_state)"
+  if [[ "$install_status" == "Installed" ]]; then
+    status_line "Install status" "OK" "$install_status"
+  elif [[ "$install_status" == "Installed files found; site app not confirmed" ]]; then
+    status_line "Install status" "WARN" "$install_status"
+  else
+    status_line "Install status" "FAIL" "$install_status"
+  fi
 
   if id "$FRAPPE_USER" >/dev/null 2>&1; then
     status_line "frappe user" "OK" "$FRAPPE_USER exists"
@@ -1292,9 +1333,29 @@ run_service_summary() {
   echo "============================================================"
   echo "ERPNext Service / Autostart Status"
   echo "============================================================"
-  status_line "Service file" "INFO" "$(erpnext_service_path)"
-  status_line "Service" "INFO" "$(service_state)"
-  status_line "Autostart" "INFO" "$(autostart_state)"
+  local service_status autostart_status
+  service_status="$(service_state)"
+  autostart_status="$(autostart_state)"
+
+  if service_exists; then
+    status_line "Service file" "OK" "$(erpnext_service_path)"
+  else
+    status_line "Service file" "WARN" "not created: $(erpnext_service_path)"
+  fi
+
+  if [[ "$service_status" == "Running" ]]; then
+    status_line "Service" "OK" "$service_status"
+  elif [[ "$service_status" == "Not configured" ]]; then
+    status_line "Service" "WARN" "$service_status"
+  else
+    status_line "Service" "INFO" "$service_status"
+  fi
+
+  if [[ "$autostart_status" == "Enabled" ]]; then
+    status_line "Autostart" "OK" "$autostart_status"
+  else
+    status_line "Autostart" "WARN" "$autostart_status"
+  fi
   echo
   echo "Useful commands:"
   echo "  ./install-erpnext-dev.sh enable-autostart"
@@ -1432,14 +1493,15 @@ run_full_status() {
     status_line "Site app: erpnext" "WARN" "not confirmed on ${SITE_NAME}"
   fi
 
-  if [[ -f "${bench_dir}/sites/common_site_config.json" ]]; then
-    if grep -q '"default_site"[[:space:]]*:[[:space:]]*"'"${SITE_NAME}"'"' "${bench_dir}/sites/common_site_config.json"; then
+  local common_config="${bench_dir}/sites/common_site_config.json"
+  if path_is_file "$common_config"; then
+    if $SUDO grep -q '"default_site"[[:space:]]*:[[:space:]]*"'"${SITE_NAME}"'"' "$common_config" 2>/dev/null; then
       status_line "Default site" "OK" "${SITE_NAME}"
     else
       status_line "Default site" "WARN" "not set to ${SITE_NAME}"
     fi
   else
-    status_line "Common config" "WARN" "common_site_config.json missing"
+    status_line "Common config" "WARN" "common_site_config.json missing at ${common_config}"
   fi
 
   local port label item
@@ -1460,16 +1522,16 @@ run_full_status() {
     fi
   done
 
-  if [[ -x "${FRAPPE_HOME}/start-erpnext-dev.sh" ]]; then
+  if path_is_executable "${FRAPPE_HOME}/start-erpnext-dev.sh"; then
     status_line "Start helper" "OK" "${FRAPPE_HOME}/start-erpnext-dev.sh"
   else
-    status_line "Start helper" "WARN" "missing or not executable"
+    status_line "Start helper" "WARN" "missing or not executable at ${FRAPPE_HOME}/start-erpnext-dev.sh"
   fi
 
-  if [[ -f "${FRAPPE_HOME}/erpnext-dev-credentials.txt" ]]; then
+  if path_is_file "${FRAPPE_HOME}/erpnext-dev-credentials.txt"; then
     status_line "Credentials file" "OK" "${FRAPPE_HOME}/erpnext-dev-credentials.txt"
   else
-    status_line "Credentials file" "WARN" "missing"
+    status_line "Credentials file" "WARN" "missing at ${FRAPPE_HOME}/erpnext-dev-credentials.txt"
   fi
 
   status_line "VM IP" "INFO" "$(get_vm_ip)"
@@ -1545,7 +1607,6 @@ run_install() {
     warn "You can still start manually with: sudo -iu ${FRAPPE_USER}; cd $(active_bench_dir); bench start"
   fi
   print_summary
-  show_access_instructions
 
   local enable_boot start_now
 
