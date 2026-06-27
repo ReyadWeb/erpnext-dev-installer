@@ -1,0 +1,6 @@
+*.log
+.env
+erpnext-dev-credentials.txt
+credentials.txt
+secrets.txt
+.DS_Store
