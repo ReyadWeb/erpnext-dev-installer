@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.2.2"
+SCRIPT_VERSION="0.3.0"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -19,7 +19,9 @@ BENCH_PARENT="${BENCH_PARENT:-${FRAPPE_HOME}/frappe}"
 BENCH_NAME="${BENCH_NAME:-frappe-bench}"
 BENCH_DIR="${BENCH_PARENT}/${BENCH_NAME}"
 SITE_NAME="${SITE_NAME:-erp.test}"
-AUTO_START="${AUTO_START:-false}"
+AUTO_START="${AUTO_START:-prompt}"
+ENABLE_AUTOSTART="${ENABLE_AUTOSTART:-prompt}"
+ERPNEXT_SERVICE_NAME="${ERPNEXT_SERVICE_NAME:-erpnext-dev.service}"
 
 FRAPPE_BRANCH="${FRAPPE_BRANCH:-version-16}"
 ERPNEXT_BRANCH="${ERPNEXT_BRANCH:-version-16}"
@@ -77,8 +79,8 @@ status_line() {
 }
 
 
-start_erpnext() {
-  log "Starting ERPNext development server"
+start_erpnext_foreground() {
+  log "Starting ERPNext development server in foreground"
 
   if [[ ! -d "${BENCH_DIR}" ]]; then
     fail "Bench folder not found: ${BENCH_DIR}. Run install first."
@@ -107,6 +109,150 @@ start_erpnext() {
     cd \"${BENCH_DIR}\"
     bench start
   "
+}
+
+
+erpnext_service_path() {
+  echo "/etc/systemd/system/${ERPNEXT_SERVICE_NAME}"
+}
+
+service_exists() {
+  [[ -f "$(erpnext_service_path)" ]]
+}
+
+create_erpnext_service() {
+  require_sudo
+
+  if [[ ! -d "${BENCH_DIR}" ]]; then
+    fail "Bench folder not found: ${BENCH_DIR}. Run Recommended Setup first."
+  fi
+
+  log "Creating ERPNext development systemd service"
+
+  $SUDO tee "$(erpnext_service_path)" >/dev/null <<EOF_SERVICE
+[Unit]
+Description=ERPNext Frappe Bench Development Server (${SITE_NAME})
+After=network-online.target mariadb.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${FRAPPE_USER}
+Group=${FRAPPE_USER}
+WorkingDirectory=${BENCH_DIR}
+Environment=HOME=${FRAPPE_HOME}
+ExecStart=/bin/bash -lc 'export NVM_DIR="\$HOME/.nvm"; [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"; export PATH="\$HOME/.local/bin:\$PATH"; cd "${BENCH_DIR}" && bench start'
+Restart=on-failure
+RestartSec=10
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target
+EOF_SERVICE
+
+  $SUDO systemctl daemon-reload
+  ok "Service created: ${ERPNEXT_SERVICE_NAME}"
+}
+
+enable_autostart_service() {
+  require_sudo
+
+  if ! service_exists; then
+    create_erpnext_service
+  fi
+
+  log "Enabling ERPNext autostart on VM boot"
+  $SUDO systemctl enable "${ERPNEXT_SERVICE_NAME}"
+  ok "Autostart enabled"
+}
+
+disable_autostart_service() {
+  require_sudo
+
+  if service_exists; then
+    log "Disabling ERPNext autostart"
+    $SUDO systemctl disable "${ERPNEXT_SERVICE_NAME}" >/dev/null 2>&1 || true
+    ok "Autostart disabled"
+  else
+    warn "Service does not exist yet: ${ERPNEXT_SERVICE_NAME}"
+  fi
+}
+
+start_erpnext_service() {
+  require_sudo
+
+  if ! service_exists; then
+    create_erpnext_service
+  fi
+
+  log "Starting ERPNext service"
+  $SUDO systemctl start "${ERPNEXT_SERVICE_NAME}"
+  ok "ERPNext service started"
+  show_access_instructions
+}
+
+stop_erpnext_service() {
+  require_sudo
+
+  if service_exists; then
+    log "Stopping ERPNext service"
+    $SUDO systemctl stop "${ERPNEXT_SERVICE_NAME}" >/dev/null 2>&1 || true
+    ok "ERPNext service stopped"
+  else
+    warn "Service does not exist yet: ${ERPNEXT_SERVICE_NAME}"
+  fi
+
+  if id "$FRAPPE_USER" >/dev/null 2>&1; then
+    $SUDO pkill -u "$FRAPPE_USER" -f "bench start" >/dev/null 2>&1 || true
+    $SUDO pkill -u "$FRAPPE_USER" -f "frappe.utils.bench_helper" >/dev/null 2>&1 || true
+  fi
+}
+
+restart_erpnext_service() {
+  require_sudo
+
+  if ! service_exists; then
+    create_erpnext_service
+  fi
+
+  log "Restarting ERPNext service"
+  $SUDO systemctl restart "${ERPNEXT_SERVICE_NAME}"
+  ok "ERPNext service restarted"
+  show_access_instructions
+}
+
+show_erpnext_service_status() {
+  require_sudo
+
+  if service_exists; then
+    $SUDO systemctl status "${ERPNEXT_SERVICE_NAME}" --no-pager || true
+  else
+    warn "Service does not exist yet: ${ERPNEXT_SERVICE_NAME}"
+  fi
+}
+
+show_erpnext_service_logs() {
+  require_sudo
+
+  if service_exists; then
+    $SUDO journalctl -u "${ERPNEXT_SERVICE_NAME}" -n 160 --no-pager || true
+  else
+    warn "Service does not exist yet: ${ERPNEXT_SERVICE_NAME}"
+  fi
+}
+
+follow_erpnext_service_logs() {
+  require_sudo
+
+  if service_exists; then
+    $SUDO journalctl -u "${ERPNEXT_SERVICE_NAME}" -f
+  else
+    warn "Service does not exist yet: ${ERPNEXT_SERVICE_NAME}"
+  fi
+}
+
+start_erpnext() {
+  start_erpnext_service
 }
 
 
@@ -301,6 +447,10 @@ SQL
 
 stop_bench_processes() {
   log "Stopping existing Bench processes"
+
+  if service_exists && systemctl is-active --quiet "${ERPNEXT_SERVICE_NAME}"; then
+    $SUDO systemctl stop "${ERPNEXT_SERVICE_NAME}" >/dev/null 2>&1 || true
+  fi
 
   if id "$FRAPPE_USER" >/dev/null 2>&1; then
     $SUDO pkill -u "$FRAPPE_USER" -f "bench start" >/dev/null 2>&1 || true
@@ -807,12 +957,81 @@ site_app_installed() {
   run_as_frappe "cd '${BENCH_DIR}' && bench --site '${SITE_NAME}' list-apps" 2>/dev/null | awk '{print $1}' | grep -qx "$app"
 }
 
+install_state() {
+  if [[ -d "${BENCH_DIR}" && -d "${BENCH_DIR}/apps/frappe" && -d "${BENCH_DIR}/apps/erpnext" && -d "${BENCH_DIR}/sites/${SITE_NAME}" ]]; then
+    echo "Installed"
+  elif [[ -d "${BENCH_DIR}" ]]; then
+    echo "Incomplete"
+  else
+    echo "Not installed"
+  fi
+}
+
 run_status() {
+  require_sudo
+
+  local vm_ip state service_state autostart_state issue
+  vm_ip="$(get_vm_ip)"
+  state="$(install_state)"
+
+  if service_exists && systemctl is-active --quiet "${ERPNEXT_SERVICE_NAME}"; then
+    service_state="Running"
+  elif service_exists; then
+    service_state="Stopped"
+  else
+    service_state="Not configured"
+  fi
+
+  if service_exists && systemctl is-enabled --quiet "${ERPNEXT_SERVICE_NAME}" 2>/dev/null; then
+    autostart_state="Enabled"
+  elif service_exists; then
+    autostart_state="Disabled"
+  else
+    autostart_state="Not configured"
+  fi
+
+  echo
+  echo "============================================================"
+  echo "ERPNext Developer Status"
+  echo "============================================================"
+  printf "  %-22s %s\n" "Install status:" "$state"
+  printf "  %-22s %s\n" "ERPNext service:" "$service_state"
+  printf "  %-22s %s\n" "Autostart:" "$autostart_state"
+  printf "  %-22s %s\n" "Site:" "$SITE_NAME"
+  printf "  %-22s %s\n" "VM IP:" "$vm_ip"
+  printf "  %-22s http://%s:8000\n" "Direct URL:" "$vm_ip"
+  printf "  %-22s http://%s:8000\n" "Friendly URL:" "$SITE_NAME"
+  printf "  %-22s %s\n" "Credentials:" "${FRAPPE_HOME}/erpnext-dev-credentials.txt"
+
+  echo
+  case "$state" in
+    Installed)
+      if [[ "$service_state" == "Running" ]]; then
+        ok "ERPNext appears installed and running."
+      else
+        warn "ERPNext is installed but not running. Start it with: ./install-erpnext-dev.sh start"
+      fi
+      ;;
+    Incomplete)
+      warn "ERPNext environment looks incomplete. Recommended fix: ./install-erpnext-dev.sh repair or ./install-erpnext-dev.sh setup"
+      ;;
+    *)
+      warn "ERPNext is not installed. Recommended fix: ./install-erpnext-dev.sh setup"
+      ;;
+  esac
+
+  echo
+  echo "Friendly URL note: http://${SITE_NAME}:8000 only works after Bench/service is running and your HOST /etc/hosts maps ${SITE_NAME} to ${vm_ip}."
+  echo "For detailed diagnostics, run: ./install-erpnext-dev.sh doctor"
+  echo "============================================================"
+}
+
+run_full_status() {
   require_sudo
 
   echo
   echo "============================================================"
-  echo "ERPNext Developer Environment Status"
+  echo "ERPNext Developer Full Health Report"
   echo "============================================================"
 
   if [[ -f /etc/os-release ]]; then
@@ -843,6 +1062,22 @@ run_status() {
     status_line "Redis overcommit" "OK" "vm.overcommit_memory=1"
   else
     status_line "Redis overcommit" "WARN" "not set to 1"
+  fi
+
+  if service_exists; then
+    if systemctl is-enabled --quiet "${ERPNEXT_SERVICE_NAME}" 2>/dev/null; then
+      status_line "ERPNext autostart" "OK" "enabled"
+    else
+      status_line "ERPNext autostart" "WARN" "disabled"
+    fi
+
+    if systemctl is-active --quiet "${ERPNEXT_SERVICE_NAME}"; then
+      status_line "ERPNext service" "OK" "running"
+    else
+      status_line "ERPNext service" "INFO" "installed but stopped"
+    fi
+  else
+    status_line "ERPNext service" "WARN" "not configured"
   fi
 
   if id "$FRAPPE_USER" >/dev/null 2>&1; then
@@ -965,7 +1200,7 @@ run_repair() {
     warn "Bench/site not found. Repair cannot migrate/build yet. Use Install first."
   fi
 
-  run_status
+  run_full_status
 }
 
 run_install() {
@@ -992,18 +1227,37 @@ run_install() {
   fix_frappe_ownership
   install_frappe_stack_as_user
   write_credentials_file
+  create_erpnext_service
   print_summary
   show_access_instructions
 
-  if [[ "${AUTO_START}" == "true" ]]; then
-    start_erpnext
+  local enable_boot start_now
+
+  if [[ "${ENABLE_AUTOSTART}" == "true" || "$ASSUME_YES" -eq 1 ]]; then
+    enable_autostart_service
+  elif [[ "${ENABLE_AUTOSTART}" == "false" ]]; then
+    warn "Autostart was not enabled because ENABLE_AUTOSTART=false."
   elif [[ -t 0 ]]; then
     echo
-    read -r -p "Start ERPNext now? [Y/n]: " start_now
-    start_now="${start_now:-Y}"
+    read -r -p "Enable ERPNext autostart when this VM boots? [Y/n]: " enable_boot
+    enable_boot="${enable_boot:-Y}"
+    if [[ "$enable_boot" =~ ^[Yy]$ ]]; then
+      enable_autostart_service
+    fi
+  fi
 
+  if [[ "${AUTO_START}" == "true" || "$ASSUME_YES" -eq 1 ]]; then
+    start_erpnext_service
+  elif [[ "${AUTO_START}" == "false" ]]; then
+    echo
+    echo "You can start ERPNext later with:"
+    echo "  ./install-erpnext-dev.sh start"
+  elif [[ -t 0 ]]; then
+    echo
+    read -r -p "Start ERPNext now in the background service? [Y/n]: " start_now
+    start_now="${start_now:-Y}"
     if [[ "$start_now" =~ ^[Yy]$ ]]; then
-      start_erpnext
+      start_erpnext_service
     else
       echo
       echo "You can start ERPNext later with:"
@@ -1041,6 +1295,12 @@ full_purge() {
   [[ "$reply" == "DELETE" ]] || fail "Full purge cancelled."
 
   stop_bench_processes
+
+  if service_exists; then
+    $SUDO systemctl disable "${ERPNEXT_SERVICE_NAME}" >/dev/null 2>&1 || true
+    $SUDO rm -f "$(erpnext_service_path)"
+    $SUDO systemctl daemon-reload
+  fi
 
   if id "$FRAPPE_USER" >/dev/null 2>&1; then
     $SUDO deluser --remove-home "$FRAPPE_USER" || true
@@ -1080,41 +1340,137 @@ run_uninstall_menu() {
 
 run_start() {
   require_sudo
+  start_erpnext_service
+}
 
-  if [[ ! -d "$BENCH_DIR" ]]; then
-    fail "Bench folder not found: ${BENCH_DIR}. Run install first."
+run_stop() {
+  require_sudo
+  stop_erpnext_service
+}
+
+run_foreground_start() {
+  require_sudo
+
+  if service_exists && systemctl is-active --quiet "${ERPNEXT_SERVICE_NAME}"; then
+    warn "ERPNext service is already running in the background."
+    if ! confirm "Start a foreground bench session anyway?"; then
+      return 0
+    fi
   fi
 
-  echo "Starting ERPNext. Keep this terminal open."
-  run_as_frappe "cd '${BENCH_DIR}' && bench start"
+  start_erpnext_foreground
+}
+
+show_service_menu() {
+  while true; do
+    echo
+    echo "============================================================"
+    echo "Autostart / Service Manager"
+    echo "============================================================"
+    echo "1) Enable autostart on VM boot"
+    echo "2) Disable autostart"
+    echo "3) Start ERPNext service"
+    echo "4) Stop ERPNext service"
+    echo "5) Restart ERPNext service"
+    echo "6) Show service status"
+    echo "7) Show recent service logs"
+    echo "8) Follow service logs"
+    echo "9) Back"
+    echo
+    read -r -p "Choose an option: " service_choice
+
+    case "$service_choice" in
+      1) enable_autostart_service ;;
+      2) disable_autostart_service ;;
+      3) start_erpnext_service ;;
+      4) stop_erpnext_service ;;
+      5) restart_erpnext_service ;;
+      6) show_erpnext_service_status ;;
+      7) show_erpnext_service_logs ;;
+      8) follow_erpnext_service_logs ;;
+      9) return 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
+}
+
+show_advanced_menu() {
+  while true; do
+    echo
+    echo "============================================================"
+    echo "Advanced Options"
+    echo "============================================================"
+    echo "1) Install / Reinstall"
+    echo "2) Repair Environment"
+    echo "3) Uninstall / Reset"
+    echo "4) Autostart / Service Manager"
+    echo "5) Full Health Report"
+    echo "6) KVM Fixed IP Guide"
+    echo "7) Multi-Environment Guide"
+    echo "8) Start Bench in Foreground"
+    echo "9) Show Service Logs"
+    echo "10) Access Submenu"
+    echo "11) Back"
+    echo
+    read -r -p "Choose an option: " advanced_choice
+
+    case "$advanced_choice" in
+      1) run_install ;;
+      2) run_repair ;;
+      3) run_uninstall_menu ;;
+      4) show_service_menu ;;
+      5) run_full_status ;;
+      6) show_kvm_fixed_ip_guide ;;
+      7) show_multi_environment_guide ;;
+      8) run_foreground_start ;;
+      9) show_erpnext_service_logs ;;
+      10) show_access_menu ;;
+      11) return 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
 }
 
 show_help() {
   cat <<EOF_HELP
 ${APP_NAME} v${SCRIPT_VERSION}
 
-Start ERPNext:
+Recommended local developer workflow:
+  ./install-erpnext-dev.sh setup
   ./install-erpnext-dev.sh start
-
-Install and start automatically:
-  AUTO_START=true ./install-erpnext-dev.sh install
-
-Browser access:
-  Direct IP URL works while Bench is running: http://VM_IP:8000
-  Friendly URL works after HOST /etc/hosts setup: http://${SITE_NAME}:8000
+  ./install-erpnext-dev.sh access
 
 Usage:
   ./install-erpnext-dev.sh [action] [options]
 
-Actions:
-  install       Clean/archive existing bench and install ERPNext dev environment
-  repair        Run health check and apply safe fixes
-  status        Show environment status
-  start         Start ERPNext with bench start
-  uninstall     Show uninstall menu
-  access        Show access wizard, host /etc/hosts, KVM fixed IP, and multi-environment guide
+Basic actions:
+  setup         Recommended setup: install, create service, offer autostart/start
+  install       Alias for setup
+  start         Start ERPNext in the background systemd service
+  stop          Stop ERPNext service and development processes
+  status        Show simple developer status
+  access        Show browser/IP/hostname instructions and exit
   menu          Show interactive menu
   help          Show this help
+
+Advanced actions:
+  repair              Run safe environment repair
+  doctor              Show full health report
+  full-status         Show full health report
+  uninstall           Show uninstall/reset menu
+  advanced            Show advanced options menu
+  access-menu         Show access/networking submenu
+  foreground-start    Start Bench in the foreground terminal
+  enable-autostart    Enable ERPNext service on VM boot
+  disable-autostart   Disable ERPNext service on VM boot
+  service-start       Start ERPNext service
+  service-stop        Stop ERPNext service
+  service-restart     Restart ERPNext service
+  service-status      Show systemd service status
+  logs                Show recent ERPNext service logs
+  logs-follow         Follow ERPNext service logs
+  kvm-guide           Show KVM/libvirt fixed IP guide
+  multi-env-guide     Show multiple local environment guide
 
 Options:
   -y, --yes     Assume yes for install confirmations
@@ -1126,13 +1482,20 @@ Environment overrides:
   DB_ADMIN_PASSWORD='YourDbAdminPassword'
   FRAPPE_BRANCH=version-16
   ERPNEXT_BRANCH=version-16
+  AUTO_START=true|false|prompt
+  ENABLE_AUTOSTART=true|false|prompt
+
+Browser access:
+  Direct IP URL works while ERPNext is running: http://VM_IP:8000
+  Friendly URL works after HOST /etc/hosts setup: http://${SITE_NAME}:8000
 
 Examples:
   ./install-erpnext-dev.sh
-  ./install-erpnext-dev.sh install
-  ./install-erpnext-dev.sh repair
+  ./install-erpnext-dev.sh setup
   ./install-erpnext-dev.sh status
   ./install-erpnext-dev.sh start
+  ./install-erpnext-dev.sh access
+  ./install-erpnext-dev.sh doctor
 EOF_HELP
 }
 
@@ -1142,12 +1505,12 @@ show_menu() {
     echo "============================================================"
     echo "${APP_NAME} v${SCRIPT_VERSION}"
     echo "============================================================"
-    echo "1) Install / Reinstall ERPNext Development Environment"
-    echo "2) Repair / Health Check"
-    echo "3) Uninstall ERPNext Development Environment"
-    echo "4) Show Status"
-    echo "5) Start ERPNext"
-    echo "6) Access / Hostname / VM Networking Guide"
+    echo "1) Recommended Setup"
+    echo "2) Start ERPNext"
+    echo "3) Stop ERPNext"
+    echo "4) Status"
+    echo "5) Access Instructions"
+    echo "6) Advanced Options"
     echo "7) Help"
     echo "8) Exit"
     echo
@@ -1155,11 +1518,11 @@ show_menu() {
 
     case "$choice" in
       1) run_install ;;
-      2) run_repair ;;
-      3) run_uninstall_menu ;;
+      2) run_start ;;
+      3) run_stop ;;
       4) run_status ;;
-      5) run_start ;;
-      6) show_access_menu ;;
+      5) show_access_instructions ;;
+      6) show_advanced_menu ;;
       7) show_help ;;
       8) exit 0 ;;
       *) warn "Invalid option" ;;
@@ -1174,7 +1537,7 @@ parse_args() {
         ASSUME_YES=1
         shift
         ;;
-      install|repair|status|start|uninstall|access|menu|help|-h|--help)
+      setup|install|repair|status|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|multi-env-guide)
         ACTION="$1"
         shift
         ;;
@@ -1190,12 +1553,27 @@ main() {
 
   case "${ACTION:-menu}" in
     ""|menu) show_menu ;;
-    install) run_install ;;
+    setup|install) run_install ;;
     repair) run_repair ;;
     status) run_status ;;
+    doctor|full-status) run_full_status ;;
     start) run_start ;;
+    stop) run_stop ;;
     uninstall) run_uninstall_menu ;;
-    access) show_access_menu ;;
+    advanced) show_advanced_menu ;;
+    access) show_access_instructions ;;
+    access-menu) show_access_menu ;;
+    foreground-start) run_foreground_start ;;
+    enable-autostart) enable_autostart_service ;;
+    disable-autostart) disable_autostart_service ;;
+    service-start) start_erpnext_service ;;
+    service-stop) stop_erpnext_service ;;
+    service-restart) restart_erpnext_service ;;
+    service-status) show_erpnext_service_status ;;
+    logs) show_erpnext_service_logs ;;
+    logs-follow) follow_erpnext_service_logs ;;
+    kvm-guide) show_kvm_fixed_ip_guide ;;
+    multi-env-guide) show_multi_environment_guide ;;
     help|-h|--help) show_help ;;
     *) fail "Unknown action: ${ACTION}" ;;
   esac
