@@ -12,16 +12,16 @@ This project is designed for local developer VMs, test labs, and evaluation envi
 ## Current Version
 
 ```text
-v0.4.0
+v0.4.1
 ```
 
 This version adds a focused **Backup / Restore / Maintenance** workflow on top of the stable v0.3.4 local developer VM release. It keeps the main installer workflow simple while adding safer operational tools for backups, restore, migration, asset builds, cache clearing, and service restarts.
 
 ---
 
-## v0.4.0 Backup / Restore / Maintenance
+## v0.4.1 Backup / Restore / Maintenance
 
-v0.4.0 adds operational tools that are useful after the environment is installed:
+v0.4.1 adds operational tools that are useful after the environment is installed:
 
 - Create a database backup.
 - Create a database + files backup.
@@ -101,6 +101,24 @@ http://VM_IP:8000
 
 ---
 
+
+### v0.4.1 backup listing polish
+
+v0.4.1 fixes the backup listing display so public file backups and private file backups are categorized separately. It also adds backup counts and shows `none` when a category has no files yet.
+
+Correct backup grouping:
+
+```text
+Database backups
+  *-database.sql.gz
+
+Public file backups
+  *-files.tar
+
+Private file backups
+  *-private-files.tar
+```
+
 ## Target Environment
 
 Recommended environment:
@@ -174,7 +192,7 @@ sudo apt update && sudo apt install -y curl ca-certificates && curl -fsSL "https
 
 ## Menu Layout
 
-v0.4.0 keeps the main menu simple:
+v0.4.1 keeps the main menu simple:
 
 ```text
 1) Recommended Setup
@@ -431,7 +449,7 @@ Maintenance menu options:
 
 ## Autostart on VM Boot
 
-v0.4.0 can create a local development systemd service:
+v0.4.1 can create a local development systemd service:
 
 ```text
 erpnext-dev.service

@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.4.0"
+SCRIPT_VERSION="0.4.1"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1603,10 +1603,29 @@ create_site_backup() {
   show_latest_backups
 }
 
+print_backup_results() {
+  local title="$1"
+  local count_cmd="$2"
+  local list_cmd="$3"
+  local count output
+
+  count="$(run_as_frappe "${count_cmd}" 2>/dev/null | tr -d '[:space:]' || true)"
+  count="${count:-0}"
+
+  echo "${title} (${count}):"
+  output="$(run_as_frappe "${list_cmd}" 2>/dev/null || true)"
+  if [[ -n "$output" ]]; then
+    echo "$output"
+  else
+    echo "  none"
+  fi
+}
+
 list_site_backups() {
   require_sudo
 
   local bench_dir backup_rel backup_abs
+  local db_count_cmd db_list_cmd public_count_cmd public_list_cmd private_count_cmd private_list_cmd
   bench_dir="$(require_site_environment)" || return 1
   backup_rel="sites/${SITE_NAME}/private/backups"
   backup_abs="${bench_dir}/${backup_rel}"
@@ -1625,14 +1644,23 @@ list_site_backups() {
     return 0
   fi
 
-  echo "Database backups:"
-  run_as_frappe "cd '${bench_dir}' && find '${backup_rel}' -maxdepth 1 -type f \( -name '*.sql.gz' -o -name '*database*' \) -printf '  %TY-%Tm-%Td %TH:%TM  %f\\n' 2>/dev/null | sort -r | head -20" || true
+  db_count_cmd="cd '${bench_dir}' && find '${backup_rel}' -maxdepth 1 -type f \\( -name '*-database.sql.gz' -o -name '*.sql.gz' -o -name '*database*.sql.gz' \\) -print 2>/dev/null | wc -l"
+  db_list_cmd="cd '${bench_dir}' && find '${backup_rel}' -maxdepth 1 -type f \\( -name '*-database.sql.gz' -o -name '*.sql.gz' -o -name '*database*.sql.gz' \\) -printf '  %TY-%Tm-%Td %TH:%TM  %f\\n' 2>/dev/null | sort -r | head -20"
+
+  # Public and private file backups must be matched separately.
+  # Frappe names public backups like '*-files.tar' and private backups like '*-private-files.tar'.
+  # A broad '*files.tar' match incorrectly includes private backups, so explicitly exclude them here.
+  public_count_cmd="cd '${bench_dir}' && find '${backup_rel}' -maxdepth 1 -type f \\( -name '*-files.tar' -o -name '*-files.tar.gz' \\) ! -name '*-private-files.tar' ! -name '*-private-files.tar.gz' -print 2>/dev/null | wc -l"
+  public_list_cmd="cd '${bench_dir}' && find '${backup_rel}' -maxdepth 1 -type f \\( -name '*-files.tar' -o -name '*-files.tar.gz' \\) ! -name '*-private-files.tar' ! -name '*-private-files.tar.gz' -printf '  %TY-%Tm-%Td %TH:%TM  %f\\n' 2>/dev/null | sort -r | head -20"
+
+  private_count_cmd="cd '${bench_dir}' && find '${backup_rel}' -maxdepth 1 -type f \\( -name '*-private-files.tar' -o -name '*-private-files.tar.gz' \\) -print 2>/dev/null | wc -l"
+  private_list_cmd="cd '${bench_dir}' && find '${backup_rel}' -maxdepth 1 -type f \\( -name '*-private-files.tar' -o -name '*-private-files.tar.gz' \\) -printf '  %TY-%Tm-%Td %TH:%TM  %f\\n' 2>/dev/null | sort -r | head -20"
+
+  print_backup_results "Database backups" "$db_count_cmd" "$db_list_cmd"
   echo
-  echo "Public file backups:"
-  run_as_frappe "cd '${bench_dir}' && find '${backup_rel}' -maxdepth 1 -type f \( -name '*public*files*' -o -name '*files.tar' -o -name '*files.tar.gz' \) -printf '  %TY-%Tm-%Td %TH:%TM  %f\\n' 2>/dev/null | sort -r | head -20" || true
+  print_backup_results "Public file backups" "$public_count_cmd" "$public_list_cmd"
   echo
-  echo "Private file backups:"
-  run_as_frappe "cd '${bench_dir}' && find '${backup_rel}' -maxdepth 1 -type f \( -name '*private*files*' -o -name '*private-files*' \) -printf '  %TY-%Tm-%Td %TH:%TM  %f\\n' 2>/dev/null | sort -r | head -20" || true
+  print_backup_results "Private file backups" "$private_count_cmd" "$private_list_cmd"
   echo
   echo "Tip: For restore, you can paste either an absolute path or a filename from this folder."
   echo "============================================================"
