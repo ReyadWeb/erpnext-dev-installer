@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.8.0 Beta
+# ERPNext Developer Installer v0.8.1 Beta
 
 A menu-driven Bash installer for creating a local ERPNext / Frappe developer VM on Ubuntu 24.04 or Ubuntu 26.04.
 
@@ -6,7 +6,7 @@ This project is intended for local development, learning, evaluation, and repeat
 
 ## Status
 
-v0.8.0 builds on the verified v0.7.0 VM/networking foundation and adds the first local SSL / HTTPS reverse proxy implementation.
+v0.8.1 builds on the verified v0.7.0 VM/networking foundation and adds the local SSL / HTTPS reverse proxy implementation with improved SSL diagnostics and self-signed test certificate helper.
 
 Verified app stack from the v0.5.x/v0.6.x/v0.7.x test cycle:
 
@@ -36,7 +36,15 @@ Recommended flow:
 ./install-erpnext-dev.sh access
 ```
 
-## New in v0.8.0
+## New in v0.8.1
+
+- Improved `ssl-status` with Nginx service, ports, cert/key permissions, certificate details, and local HTTP tests.
+- Added `create-self-signed-local-cert` command for quick local SSL testing.
+- Expanded `local-ssl-guide` with self-signed and mkcert workflows.
+- Added clearer host-side curl tests and rollback instructions.
+- Preserved v0.8.0 reverse proxy behavior.
+
+## Added in v0.8.0
 
 - Added `ssl-status` command.
 - Added `local-ssl-guide` command.
@@ -76,7 +84,7 @@ echo "VM_IP erp.test" | sudo tee -a /etc/hosts
 
 ## Local SSL / HTTPS
 
-v0.8.0 adds a local HTTPS reverse proxy foundation. It does not remove or replace the existing development service.
+v0.8.1 adds a local HTTPS reverse proxy foundation. It does not remove or replace the existing development service.
 
 Architecture:
 
@@ -92,6 +100,7 @@ Commands:
 ```bash
 ./install-erpnext-dev.sh ssl-status
 ./install-erpnext-dev.sh local-ssl-guide
+./install-erpnext-dev.sh create-self-signed-local-cert
 ./install-erpnext-dev.sh configure-local-ssl
 ./install-erpnext-dev.sh disable-local-ssl
 ```
@@ -103,7 +112,17 @@ Expected certificate paths inside the VM:
 /etc/erpnext-dev-ssl/erp.test.key
 ```
 
-Recommended local certificate workflow:
+Quick local certificate workflow for testing:
+
+```bash
+./install-erpnext-dev.sh create-self-signed-local-cert
+./install-erpnext-dev.sh configure-local-ssl
+./install-erpnext-dev.sh ssl-status
+```
+
+This proves HTTPS works, but browsers will show a warning because the certificate is self-signed.
+
+Recommended trusted local certificate workflow:
 
 1. Use `mkcert` on the host machine.
 2. Trust the local CA on the host/browser machine.
@@ -124,6 +143,7 @@ The certificate must be trusted by the host browser machine. A certificate trust
 ./install-erpnext-dev.sh access
 ./install-erpnext-dev.sh network-status
 ./install-erpnext-dev.sh ssl-status
+./install-erpnext-dev.sh create-self-signed-local-cert
 ./install-erpnext-dev.sh list-apps
 ./install-erpnext-dev.sh app-status
 ```

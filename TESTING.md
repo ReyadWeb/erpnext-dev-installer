@@ -1,4 +1,4 @@
-# Testing Guide v0.8.0
+# Testing Guide v0.8.1
 
 ## Syntax and help
 
@@ -6,6 +6,11 @@
 bash -n install-erpnext-dev.sh
 ./install-erpnext-dev.sh help
 ```
+
+Expected:
+
+- Bash syntax passes.
+- Help output includes `ssl-status`, `local-ssl-guide`, `create-self-signed-local-cert`, `configure-local-ssl`, and `disable-local-ssl`.
 
 ## Existing environment regression
 
@@ -33,9 +38,34 @@ Expected before cert/key are installed:
 
 - SSL certificate/key warnings.
 - HTTPS port 443 may be not listening.
-- Guide prints mkcert and certificate copy instructions.
+- Guide prints self-signed and mkcert workflows.
 
-## Local SSL setup test
+## Quick self-signed local SSL test
+
+Inside the VM:
+
+```bash
+./install-erpnext-dev.sh create-self-signed-local-cert
+./install-erpnext-dev.sh configure-local-ssl
+./install-erpnext-dev.sh ssl-status
+```
+
+From the host:
+
+```bash
+curl -I http://erp.test
+curl -kI https://erp.test
+curl -I http://erp.test:8000
+```
+
+Expected:
+
+- `http://erp.test` redirects to `https://erp.test/`.
+- `https://erp.test` returns the ERPNext login page with `curl -k`.
+- `http://erp.test:8000` still returns the ERPNext login page directly from Bench.
+- Browser may warn because self-signed certs are not trusted by default.
+
+## Trusted mkcert local SSL test
 
 On the host machine, generate a local certificate with mkcert:
 
@@ -62,7 +92,9 @@ sudo chmod 600 /etc/erpnext-dev-ssl/erp.test.key
 From the host:
 
 ```bash
-curl -kI https://erp.test
+curl -I http://erp.test
+curl -I https://erp.test
+curl -I http://erp.test:8000
 ```
 
 Expected:
@@ -70,7 +102,7 @@ Expected:
 - Nginx config test passes.
 - Nginx service starts/reloads.
 - Port 443 listens.
-- `https://erp.test` opens in browser.
+- `https://erp.test` opens in browser without a warning if mkcert CA trust is installed correctly on that host browser.
 - `http://erp.test:8000` still works.
 
 ## Disable SSL test

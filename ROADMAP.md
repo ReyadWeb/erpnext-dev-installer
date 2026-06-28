@@ -1,8 +1,8 @@
 # ERPNext Developer Installer Roadmap
 
-## Current baseline: v0.8.0
+## Current baseline: v0.8.1
 
-v0.8.0 is a beta local developer VM installer with an optional local HTTPS reverse proxy foundation.
+v0.8.1 is a beta local developer VM installer with an optional local HTTPS reverse proxy foundation plus improved SSL diagnostics.
 
 Verified core capabilities:
 
@@ -17,15 +17,22 @@ Verified core capabilities:
 - VM/networking diagnostics
 - KVM/libvirt helper commands
 - Local SSL guide/status/configuration commands
+- Self-signed local certificate helper for fast testing
+- Improved SSL diagnostics for Nginx, ports, cert/key permissions, and local HTTP responses
 
 ## v0.8.x — Local SSL hardening
 
-Planned refinements:
+Completed in v0.8.1:
+
+- Added clearer `ssl-status` diagnostics.
+- Added optional self-signed certificate helper for testing only.
+- Added local HTTP/HTTPS/Bench response checks.
+- Expanded mkcert and rollback guidance.
+
+Remaining refinements:
 
 - Improve local SSL error handling.
-- Add clearer `ssl-status` diagnostics.
 - Add rollback verification after disabling local SSL.
-- Add optional self-signed certificate helper for testing only.
 - Add mkcert copy/trust troubleshooting.
 - Add Nginx log helper for SSL issues.
 - Confirm websocket/socket.io behavior through HTTPS.
