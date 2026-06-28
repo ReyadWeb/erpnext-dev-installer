@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.5.6"
+SCRIPT_VERSION="0.5.7"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1715,13 +1715,21 @@ app_profile_defaults() {
       LIB_APP_BRANCH="${HRMS_BRANCH:-version-16}"
       LIB_APP_NOTES="HR, payroll, attendance, leave, employee lifecycle, and HR operations app for Frappe/ERPNext."
       ;;
+    telephony)
+      LIB_APP_KEY="telephony"
+      LIB_APP_DISPLAY="Frappe Telephony"
+      LIB_APP_NAME="telephony"
+      LIB_APP_REPO="https://github.com/frappe/telephony"
+      LIB_APP_BRANCH="${TELEPHONY_BRANCH:-develop}"
+      LIB_APP_NOTES="Dependency app used by Frappe Helpdesk for telephony integrations. Installed automatically before Helpdesk when required."
+      ;;
     helpdesk)
       LIB_APP_KEY="helpdesk"
       LIB_APP_DISPLAY="Frappe Helpdesk"
       LIB_APP_NAME="helpdesk"
       LIB_APP_REPO="https://github.com/frappe/helpdesk"
       LIB_APP_BRANCH="${HELPDESK_BRANCH:-main}"
-      LIB_APP_NOTES="Ticketing and customer support app. Uses the main branch by default because current Helpdesk is Frappe v16-oriented."
+      LIB_APP_NOTES="Ticketing and customer support app. Requires the Frappe Telephony app; the installer handles that dependency automatically."
       ;;
     insights)
       LIB_APP_KEY="insights"
@@ -2065,6 +2073,70 @@ print_app_profile() {
   echo
 }
 
+
+install_app_dependency_telephony() {
+  local bench_dir="$1"
+  local dep_name="telephony"
+  local dep_display="Frappe Telephony"
+  local dep_repo="https://github.com/frappe/telephony"
+  local dep_branch="${TELEPHONY_BRANCH:-develop}"
+  local repo_q branch_q downloaded_branch
+
+  if site_app_installed "$dep_name"; then
+    ok "${dep_display} dependency is already installed on ${SITE_NAME}"
+    return 0
+  fi
+
+  echo
+  log "Frappe Helpdesk requires ${dep_display}. Installing dependency first."
+
+  if ! validate_branch_name "$dep_branch"; then
+    fail "Invalid TELEPHONY_BRANCH value: ${dep_branch}"
+  fi
+
+  if app_folder_exists "$bench_dir" "$dep_name"; then
+    downloaded_branch="$(get_app_current_branch "$bench_dir" "$dep_name" | tail -1 | tr -d '[:space:]')"
+    ok "Dependency already downloaded: apps/${dep_name}"
+    if [[ -n "$dep_branch" && -n "$downloaded_branch" && "$downloaded_branch" != "$dep_branch" ]]; then
+      warn "Downloaded ${dep_name} branch is '${downloaded_branch}', requested '${dep_branch}'."
+      warn "The script will not switch branches automatically. Use Git manually if needed."
+    fi
+  else
+    log "Verifying branch ${dep_branch} exists for ${dep_repo}"
+    if ! branch_available "$dep_repo" "$dep_branch"; then
+      fail "Branch '${dep_branch}' was not found or GitHub could not be reached for ${dep_repo}. Override TELEPHONY_BRANCH or install manually."
+    fi
+
+    repo_q="$(printf '%q' "$dep_repo")"
+    branch_q="$(printf '%q' "$dep_branch")"
+
+    log "Downloading ${dep_display}"
+    run_as_frappe "cd '${bench_dir}' && bench get-app ${repo_q} --branch ${branch_q}" || fail "Could not download ${dep_display}."
+  fi
+
+  prepare_downloaded_app_dependencies "$bench_dir" "$dep_name"
+  ensure_app_in_apps_txt "$bench_dir" "$dep_name"
+
+  if site_app_installed "$dep_name"; then
+    ok "${dep_display} dependency is already installed on ${SITE_NAME}"
+  else
+    log "Installing ${dep_display} dependency on ${SITE_NAME}"
+    run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' install-app '${dep_name}'" || fail "Could not install ${dep_display} dependency."
+    ok "${dep_display} dependency installed"
+  fi
+}
+
+install_app_dependencies() {
+  local bench_dir="$1"
+  local app_name="$2"
+
+  case "$app_name" in
+    helpdesk)
+      install_app_dependency_telephony "$bench_dir"
+      ;;
+  esac
+}
+
 install_frappe_app() {
   require_sudo
   check_internet
@@ -2107,6 +2179,7 @@ install_frappe_app() {
   fi
 
   ensure_app_library_node_tools
+  install_app_dependencies "$bench_dir" "$app_name"
 
   was_running=0
   if service_exists && systemctl is-active --quiet "${ERPNEXT_SERVICE_NAME}"; then
@@ -2213,9 +2286,10 @@ show_app_library_menu() {
     echo "2) Install Frappe CRM"
     echo "3) Install Frappe HR / HRMS"
     echo "4) Install Frappe Helpdesk"
-    echo "5) Install Frappe Insights"
-    echo "6) Install custom app from Git URL"
-    echo "7) Back"
+    echo "5) Install Frappe Telephony"
+    echo "6) Install Frappe Insights"
+    echo "7) Install custom app from Git URL"
+    echo "8) Back"
     echo
     echo "Notes:"
     echo "  - App installs can take several minutes."
@@ -2229,9 +2303,10 @@ show_app_library_menu() {
       2) install_app_profile crm; pause_after_screen "Press Enter to return to App Library..." ;;
       3) install_app_profile hrms; pause_after_screen "Press Enter to return to App Library..." ;;
       4) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Library..." ;;
-      5) install_app_profile insights; pause_after_screen "Press Enter to return to App Library..." ;;
-      6) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Library..." ;;
-      7) return 0 ;;
+      5) install_app_profile telephony; pause_after_screen "Press Enter to return to App Library..." ;;
+      6) install_app_profile insights; pause_after_screen "Press Enter to return to App Library..." ;;
+      7) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Library..." ;;
+      8) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -2917,6 +2992,7 @@ Advanced actions:
   install-crm         Install Frappe CRM
   install-hrms        Install Frappe HR / HRMS
   install-helpdesk    Install Frappe Helpdesk
+  install-telephony   Install Frappe Telephony dependency app
   install-insights    Install Frappe Insights
   install-custom-app  Install a custom trusted Frappe app interactively
   repair-app-registry Repair/normalize Bench sites/apps.txt
@@ -2957,6 +3033,7 @@ Environment overrides:
   CRM_BRANCH=main
   HRMS_BRANCH=version-16
   HELPDESK_BRANCH=main
+  TELEPHONY_BRANCH=develop
   INSIGHTS_BRANCH=main
   AUTO_START=true|false|prompt
   ENABLE_AUTOSTART=true|false|prompt
@@ -3020,7 +3097,7 @@ parse_args() {
         ASSUME_YES=1
         shift
         ;;
-      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|multi-env-guide|app-library|apps|list-apps|install-crm|install-hrms|install-helpdesk|install-insights|install-custom-app|repair-app-registry)
+      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|multi-env-guide|app-library|apps|list-apps|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -3056,6 +3133,7 @@ main() {
     install-crm) install_app_profile crm ;;
     install-hrms) install_app_profile hrms ;;
     install-helpdesk) install_app_profile helpdesk ;;
+    install-telephony) install_app_profile telephony ;;
     install-insights) install_app_profile insights ;;
     install-custom-app) install_custom_app_interactive ;;
     repair-app-registry) repair_app_registry ;;
