@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.6.0"
+SCRIPT_VERSION="0.7.0"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -995,6 +995,208 @@ show_host_hosts_command() {
   echo "============================================================"
 }
 
+
+get_primary_interface() {
+  ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i=="dev") {print $(i+1); exit}}'
+}
+
+get_default_gateway() {
+  ip route 2>/dev/null | awk '/^default/ {print $3; exit}'
+}
+
+get_primary_mac() {
+  local iface
+  iface="$(get_primary_interface || true)"
+
+  if [[ -n "${iface}" && -r "/sys/class/net/${iface}/address" ]]; then
+    cat "/sys/class/net/${iface}/address"
+    return 0
+  fi
+
+  ip -o link show 2>/dev/null | awk '$2 != "lo:" {for (i=1; i<=NF; i++) if ($i=="link/ether") {print $(i+1); exit}}'
+}
+
+show_network_status() {
+  local vm_ip iface mac gateway host_name detected_network
+  vm_ip="$(get_vm_ip)"
+  iface="$(get_primary_interface || true)"
+  mac="$(get_primary_mac || true)"
+  gateway="$(get_default_gateway || true)"
+  host_name="$(hostname 2>/dev/null || echo unknown)"
+
+  if [[ "${vm_ip}" == 192.168.122.* ]]; then
+    detected_network="likely KVM/libvirt default NAT"
+  elif [[ "${vm_ip}" == 10.* || "${vm_ip}" == 172.* || "${vm_ip}" == 192.168.* ]]; then
+    detected_network="private/LAN or custom NAT"
+  else
+    detected_network="public or routed address"
+  fi
+
+  echo
+  echo "============================================================"
+  echo "VM Network / Access Status"
+  echo "============================================================"
+  status_line "VM hostname" "INFO" "${host_name}"
+  status_line "Primary interface" "INFO" "${iface:-unknown}"
+  status_line "Primary MAC" "INFO" "${mac:-unknown}"
+  status_line "VM IP" "INFO" "${vm_ip:-unknown}"
+  status_line "Default gateway" "INFO" "${gateway:-unknown}"
+  status_line "Network type" "INFO" "${detected_network}"
+  status_line "Direct URL" "INFO" "http://${vm_ip}:8000"
+  status_line "Friendly URL" "INFO" "http://${SITE_NAME}:8000"
+
+  if port_listens 8000; then
+    status_line "Bench web" "OK" "port 8000 listening"
+  else
+    status_line "Bench web" "INFO" "port 8000 not listening"
+  fi
+
+  if [[ -n "${vm_ip}" && -n "${mac}" ]]; then
+    echo
+    echo "Host /etc/hosts command:"
+    echo "  sudo sed -i '/[[:space:]]${SITE_NAME//./\\.}\$/d' /etc/hosts"
+    echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
+    echo
+    echo "KVM host helper to find the matching VM by MAC:"
+    echo "  target_mac=\"${mac}\""
+    echo "  while IFS= read -r vm; do [ -n \"\$vm\" ] || continue; virsh domiflist \"\$vm\" | grep -qi \"\$target_mac\" && echo \"\$vm\"; done < <(virsh list --all --name)"
+  fi
+
+  echo
+  echo "Tip: if the friendly URL fails, use the Direct URL first, then update the HOST /etc/hosts entry."
+  echo "============================================================"
+}
+
+show_host_access_test_guide() {
+  local vm_ip escaped_site
+  vm_ip="$(get_vm_ip)"
+  escaped_site="${SITE_NAME//./\\.}"
+
+  echo
+  echo "============================================================"
+  echo "Host Access Test Guide"
+  echo "============================================================"
+  echo
+  echo "Run these on the HOST machine, not inside this VM:"
+  echo
+  echo "1) Confirm the host resolves the friendly name:"
+  echo "  getent hosts ${SITE_NAME}"
+  echo
+  echo "2) If it does not resolve to ${vm_ip}, update /etc/hosts:"
+  echo "  sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts"
+  echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
+  echo
+  echo "3) Test the direct URL:"
+  echo "  curl -I http://${vm_ip}:8000"
+  echo
+  echo "4) Test the friendly URL:"
+  echo "  curl -I http://${SITE_NAME}:8000"
+  echo
+  echo "5) Browser URLs:"
+  echo "  http://${vm_ip}:8000"
+  echo "  http://${SITE_NAME}:8000"
+  echo
+  echo "If curl fails but runtime-status is OK inside the VM, check firewall, NAT/bridge mode, or the host /etc/hosts mapping."
+  echo "============================================================"
+}
+
+show_kvm_vm_identification_guide() {
+  local vm_ip mac clean_name
+  vm_ip="$(get_vm_ip)"
+  mac="$(get_primary_mac || true)"
+  clean_name="${SITE_NAME//./-}"
+
+  echo
+  echo "============================================================"
+  echo "KVM / libvirt VM Identification + Fixed IP Helper"
+  echo "============================================================"
+  echo
+  echo "Detected inside this VM:"
+  echo "  IP:       ${vm_ip}"
+  echo "  MAC:      ${mac:-unknown}"
+  echo "  Hostname: $(hostname 2>/dev/null || echo unknown)"
+  echo
+  echo "Run on the KVM HOST to find which libvirt domain owns this MAC:"
+  echo
+  echo "  target_mac=\"${mac:-PASTE_VM_MAC}\""
+  echo "  while IFS= read -r vm; do"
+  echo "    [ -n \"\$vm\" ] || continue"
+  echo "    if virsh domiflist \"\$vm\" | grep -qi \"\$target_mac\"; then"
+  echo "      echo \"Matched VM: \$vm\""
+  echo "    fi"
+  echo "  done < <(virsh list --all --name)"
+  echo
+  echo "After identifying the VM name, reserve this IP on the default libvirt NAT network:"
+  echo
+  echo "  sudo virsh net-update default add ip-dhcp-host \"<host mac='${mac:-PASTE_VM_MAC}' name='${clean_name}' ip='${vm_ip}'/>\" --live --config"
+  echo
+  echo "Then reboot the VM and confirm:"
+  echo "  virsh shutdown \"YOUR_VM_NAME\""
+  echo "  virsh start \"YOUR_VM_NAME\""
+  echo "  virsh net-dhcp-leases default"
+  echo
+  echo "Important: libvirt domain names can contain spaces. Use the while-read loop above instead of: for vm in \$(virsh list ...)."
+  echo "============================================================"
+}
+
+show_ssl_roadmap_guide() {
+  cat <<EOF_SSL
+
+============================================================
+Future SSL / HTTPS Direction
+============================================================
+
+SSL is planned, but it should be added carefully because HTTPS changes
+access from direct Bench :8000 to a reverse-proxy model.
+
+Local developer SSL target:
+  https://${SITE_NAME}
+
+Planned local architecture:
+  Browser HTTPS :443
+    -> Nginx reverse proxy inside the VM
+      -> Bench web on 127.0.0.1:8000
+      -> Socket.io on 127.0.0.1:9000
+
+Planned local SSL commands:
+  ./install-erpnext-dev.sh ssl-status
+  ./install-erpnext-dev.sh local-ssl-guide
+  ./install-erpnext-dev.sh configure-local-ssl
+  ./install-erpnext-dev.sh disable-local-ssl
+
+Recommended local certificate direction:
+  - Use mkcert or a local CA workflow.
+  - Trust the local CA on the HOST browser machine.
+  - Keep Redis and internal services private.
+
+Production SSL should be a separate production track, not mixed into the
+current developer bench-start workflow.
+
+Future production SSL options:
+  1) Let's Encrypt HTTP-01 for public DNS pointing to the server.
+  2) Let's Encrypt DNS-01 with Cloudflare for Cloudflare-managed DNS.
+  3) Cloudflare Origin CA for Cloudflare-proxied deployments.
+
+Future production architecture should use:
+  - Nginx
+  - Supervisor or production systemd units
+  - Firewall rules
+  - Domain/DNS validation
+  - SSL renewal checks
+  - Backups and restore testing
+  - Monitoring and update strategy
+
+Recommended roadmap:
+  v0.7.x  VM/networking and hostname foundation
+  v0.8.x  Local HTTPS reverse proxy planning/implementation
+  v0.9.x  Production planning branch
+  v1.x    Stable developer installer
+  prod    Separate production installer track
+
+============================================================
+EOF_SSL
+}
+
 show_kvm_fixed_ip_guide() {
   local vm_ip clean_name escaped_site
   vm_ip="$(get_vm_ip)"
@@ -1099,18 +1301,26 @@ show_access_menu() {
     echo "============================================================"
     echo "1) Show current VM browser access instructions"
     echo "2) Show host /etc/hosts command only"
-    echo "3) Show KVM/libvirt fixed IP guide"
-    echo "4) Show multi-environment naming guide"
-    echo "5) Back"
+    echo "3) Show VM network/access status"
+    echo "4) Show host access test guide"
+    echo "5) Show KVM VM identification + fixed IP helper"
+    echo "6) Show KVM/libvirt fixed IP guide"
+    echo "7) Show multi-environment naming guide"
+    echo "8) Show SSL/HTTPS roadmap"
+    echo "9) Back"
     echo
     read -r -p "Choose an option: " access_choice
 
     case "$access_choice" in
       1) show_access_instructions ;;
       2) show_host_hosts_command ;;
-      3) show_kvm_fixed_ip_guide ;;
-      4) show_multi_environment_guide ;;
-      5) return 0 ;;
+      3) show_network_status ;;
+      4) show_host_access_test_guide ;;
+      5) show_kvm_vm_identification_guide ;;
+      6) show_kvm_fixed_ip_guide ;;
+      7) show_multi_environment_guide ;;
+      8) show_ssl_roadmap_guide ;;
+      9) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -3025,12 +3235,14 @@ show_advanced_menu() {
     echo "6) App Library"
     echo "7) Optional App Status"
     echo "8) Full Health Report"
-    echo "9) KVM Fixed IP Guide"
-    echo "10) Multi-Environment Guide"
-    echo "11) Start Bench in Foreground"
-    echo "12) Show Service Logs"
-    echo "13) Access Submenu"
-    echo "14) Back"
+    echo "9) VM Network Status"
+    echo "10) KVM Fixed IP Guide"
+    echo "11) Multi-Environment Guide"
+    echo "12) SSL/HTTPS Roadmap"
+    echo "13) Start Bench in Foreground"
+    echo "14) Show Service Logs"
+    echo "15) Access Submenu"
+    echo "16) Back"
     echo
     read -r -p "Choose an option: " advanced_choice
 
@@ -3043,12 +3255,14 @@ show_advanced_menu() {
       6) show_app_library_menu ;;
       7) run_app_status ;;
       8) run_full_status ;;
-      9) show_kvm_fixed_ip_guide ;;
-      10) show_multi_environment_guide ;;
-      11) run_foreground_start ;;
-      12) show_erpnext_service_logs ;;
-      13) show_access_menu ;;
-      14) return 0 ;;
+      9) show_network_status ;;
+      10) show_kvm_fixed_ip_guide ;;
+      11) show_multi_environment_guide ;;
+      12) show_ssl_roadmap_guide ;;
+      13) run_foreground_start ;;
+      14) show_erpnext_service_logs ;;
+      15) show_access_menu ;;
+      16) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -3077,6 +3291,8 @@ Basic actions:
   install-status       Show installation/site status
   service-summary      Show service/autostart summary
   access        Show browser/IP/hostname instructions and exit
+  network-status Show VM IP/MAC/interface and access diagnostics
+  hosts-command Show HOST /etc/hosts command only
   backup        Create database backup
   backup-files  Create database + files backup
   list-backups  List site backups
@@ -3120,6 +3336,9 @@ Advanced actions:
   logs                Show recent ERPNext service logs
   logs-follow         Follow ERPNext service logs
   kvm-guide           Show KVM/libvirt fixed IP guide
+  kvm-identify        Show KVM VM identification helper using the VM MAC
+  host-test           Show host-side access test commands
+  ssl-roadmap         Show future SSL/HTTPS implementation roadmap
   multi-env-guide     Show multiple local environment guide
 
 Options:
@@ -3154,6 +3373,7 @@ Examples:
   ./install-erpnext-dev.sh app-library
   ./install-erpnext-dev.sh install-crm
   ./install-erpnext-dev.sh app-status
+  ./install-erpnext-dev.sh network-status
   ./install-erpnext-dev.sh doctor
 EOF_HELP
 }
@@ -3200,7 +3420,7 @@ parse_args() {
         ASSUME_YES=1
         shift
         ;;
-      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -3262,6 +3482,11 @@ main() {
     logs) show_erpnext_service_logs ;;
     logs-follow) follow_erpnext_service_logs ;;
     kvm-guide) show_kvm_fixed_ip_guide ;;
+    kvm-identify) show_kvm_vm_identification_guide ;;
+    network-status) show_network_status ;;
+    hosts-command) show_host_hosts_command ;;
+    host-test) show_host_access_test_guide ;;
+    ssl-roadmap) show_ssl_roadmap_guide ;;
     multi-env-guide) show_multi_environment_guide ;;
     help|-h|--help) show_help ;;
     *) fail "Unknown action: ${ACTION}" ;;

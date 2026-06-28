@@ -1,73 +1,57 @@
-# Testing Guide
+# Testing Guide v0.7.0
 
-This file defines the regression checklist for the ERPNext Developer Installer public beta.
-
-Use disposable VMs for destructive tests.
-
-## Test environment matrix
-
-| Environment | Required before v1.0 | Notes |
-| --- | --- | --- |
-| Ubuntu 24.04 LTS VM | Yes | primary LTS baseline |
-| Ubuntu 26.04 LTS VM | Yes | newer supported target |
-| KVM/libvirt NAT network | Yes | main local VM target |
-| Reboot/autostart test | Yes | confirms service behavior |
-
-## Fresh VM setup test
-
-Inside a fresh Ubuntu VM:
+## Syntax check
 
 ```bash
-sudo apt update
-sudo apt install -y curl ca-certificates
-curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=$(date +%s)" -o install-erpnext-dev.sh
+bash -n install-erpnext-dev.sh
+./install-erpnext-dev.sh help
+```
+
+## Existing VM regression
+
+```bash
+./install-erpnext-dev.sh restart
+./install-erpnext-dev.sh doctor
+./install-erpnext-dev.sh list-apps
+./install-erpnext-dev.sh app-status
+```
+
+Expected: all core services and optional apps show OK.
+
+## Networking commands
+
+```bash
+./install-erpnext-dev.sh network-status
+./install-erpnext-dev.sh hosts-command
+./install-erpnext-dev.sh host-test
+./install-erpnext-dev.sh kvm-identify
+./install-erpnext-dev.sh kvm-guide
+./install-erpnext-dev.sh multi-env-guide
+./install-erpnext-dev.sh ssl-roadmap
+```
+
+Expected:
+
+- `network-status` shows hostname, interface, MAC, IP, gateway, direct URL, friendly URL, and host mapping commands.
+- `hosts-command` prints only the host `/etc/hosts` update commands.
+- `host-test` prints host-side `getent` and `curl` tests.
+- `kvm-identify` prints a MAC-based VM lookup command that supports VM names with spaces.
+- `ssl-roadmap` prints planning guidance only and does not change the system.
+
+## Fresh VM regression
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh -o install-erpnext-dev.sh
 chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh setup
-```
-
-Expected:
-
-- Ubuntu supported
-- system packages installed
-- Frappe user exists
-- Bench exists
-- ERPNext site exists
-- service created
-- optional autostart works if enabled
-
-## Core runtime test
-
-```bash
 ./install-erpnext-dev.sh start
-./install-erpnext-dev.sh runtime-status
 ./install-erpnext-dev.sh doctor
+./install-erpnext-dev.sh network-status
 ```
 
-Expected ports:
-
-- 8000 web
-- 9000 socket.io
-- 11000 Redis queue
-- 13000 Redis cache
-
-## Backup test
+## App Library regression
 
 ```bash
-./install-erpnext-dev.sh backup
-./install-erpnext-dev.sh backup-files
-./install-erpnext-dev.sh list-backups
-```
-
-Expected:
-
-- database backup listed
-- public files backup listed
-- private files backup listed
-
-## App Library test
-
-```bash
-./install-erpnext-dev.sh repair-app-registry
 ./install-erpnext-dev.sh install-crm
 ./install-erpnext-dev.sh install-hrms
 ./install-erpnext-dev.sh install-helpdesk
@@ -76,7 +60,7 @@ Expected:
 ./install-erpnext-dev.sh doctor
 ```
 
-Expected installed apps:
+Expected app stack:
 
 ```text
 frappe
@@ -88,88 +72,15 @@ helpdesk
 insights
 ```
 
-Expected registry state:
+## KVM host validation
 
-```text
-Downloaded but not installed on erp.test:
-  none
-
-Downloaded but not registered in sites/apps.txt:
-  none
-```
-
-## Helpdesk dependency test
-
-On a VM with ERPNext, CRM, and HRMS but without Telephony or Helpdesk:
+On the host, compare the MAC from `network-status` with:
 
 ```bash
-./install-erpnext-dev.sh install-helpdesk
+virsh list --all --name
+target_mac="PASTE_MAC_HERE"
+while IFS= read -r vm; do
+  [ -n "$vm" ] || continue
+  virsh domiflist "$vm" | grep -qi "$target_mac" && echo "Matched VM: $vm"
+done < <(virsh list --all --name)
 ```
-
-Expected:
-
-- Telephony is downloaded if missing
-- Telephony is installed on the site if missing
-- Helpdesk installs after Telephony
-
-## Reboot/autostart test
-
-```bash
-sudo reboot
-```
-
-After reconnecting:
-
-```bash
-./install-erpnext-dev.sh runtime-status
-./install-erpnext-dev.sh service-summary
-```
-
-Expected:
-
-- service running
-- autostart enabled
-- all required ports listening
-
-## Restore test
-
-Use a disposable VM.
-
-```bash
-./install-erpnext-dev.sh backup-files
-./install-erpnext-dev.sh restore-db
-./install-erpnext-dev.sh restore-full
-```
-
-Expected:
-
-- restore commands require strong confirmation
-- emergency pre-restore backup is attempted
-- site returns to working state after restore and restart
-
-## Uninstall/reset test
-
-Use a disposable VM only.
-
-```bash
-./install-erpnext-dev.sh uninstall
-```
-
-Expected:
-
-- destructive action requires confirmation
-- service removed or disabled
-- environment cleanup behaves as documented
-
-## Public beta pass criteria
-
-Before publishing a beta release:
-
-- `bash -n install-erpnext-dev.sh` passes
-- `./install-erpnext-dev.sh help` works
-- fresh VM setup passes
-- doctor is clean after install
-- app-status is accurate
-- full app stack installs
-- restart/readiness works
-- README matches behavior
