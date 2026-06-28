@@ -1,41 +1,47 @@
-# Roadmap
+# Roadmap — ERPNext Developer Installer
 
 ## Completed beta milestones
 
-- v0.5.x: App Library validation and app registry repair.
-- v0.6.0: Public beta documentation.
-- v0.7.0: VM/networking diagnostics and KVM helpers.
-- v0.8.0: Local HTTPS reverse proxy foundation.
-- v0.8.1: SSL diagnostics and self-signed cert workflow.
-- v0.8.2: Trusted local SSL / mkcert guidance.
-- v0.8.3: Final local SSL hardening, cert replacement helper, rollback verification.
+- v0.5.x: App Library, backups, service/autostart, repair tooling
+- v0.6.0: Public beta documentation baseline
+- v0.7.0: VM/networking diagnostics and SSL roadmap
+- v0.8.0: Local HTTPS reverse proxy foundation
+- v0.8.1: SSL diagnostics and self-signed workflow
+- v0.8.2: Trusted local SSL polish
+- v0.8.3: Local SSL replacement/rollback workflow
+- v0.8.4: Host/VM safety guard for SSL actions
 
-## Next: v0.9.0 production planning release
+## v0.8.4 focus
 
-Goal: design the production track without destabilizing the developer installer.
+- Add `environment-check` / `where-am-i`
+- Block VM-only SSL commands when run on the host by mistake
+- Clarify which steps belong on the host vs inside the VM
+- Keep direct Bench access unchanged
+- Keep local HTTPS unchanged
 
-Planned work:
+## Next: v0.9.0 production planning
 
-- Add production planning documentation.
-- Add `production-roadmap` command.
-- Add `production-preflight-guide` command.
-- Define separate `install-erpnext-prod.sh` architecture.
-- Compare Let's Encrypt HTTP-01, DNS-01 with Cloudflare, and Cloudflare Origin CA.
-- Document required production services: Nginx, production workers, firewall, backups, monitoring, updates, and restore testing.
+v0.9.0 should be a planning/design release, not a production automation release yet.
 
-## Future production track
+Production planning topics:
 
-Production should be separate from this dev installer. Expected areas:
+- Separate `install-erpnext-prod.sh` direction
+- Production preflight checklist
+- Domain/DNS verification
+- Let’s Encrypt HTTP-01 planning
+- Let’s Encrypt DNS-01 with Cloudflare planning
+- Cloudflare Origin CA planning
+- Firewall model
+- Backup/restore strategy
+- Update strategy
+- Monitoring and recovery
 
-- Real domain / DNS validation.
-- Nginx production config.
-- Supervisor or production-grade systemd workers.
-- Let's Encrypt or Cloudflare Origin SSL.
-- Firewall hardening.
-- Automated backups and tested restore.
-- Update and maintenance strategy.
-- Monitoring and logs.
+## v1.0.0 criteria
 
-## v1.0 target
-
-Stable developer installer after clean fresh-VM regression testing, backup/restore validation, app library validation, local HTTPS validation, and documentation review.
+- Fresh VM setup passes
+- Reinstall/idempotency passes
+- App Library passes
+- Backup and restore pass
+- Local HTTPS passes
+- VM/networking diagnostics pass
+- Documentation is complete

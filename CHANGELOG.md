@@ -1,34 +1,26 @@
-# Changelog
+# Changelog — v0.8.4
 
-## v0.8.3
+## Added
 
-Final local SSL hardening release.
+- Added `environment-check` command.
+- Added `where-am-i` alias.
+- Added VM-only safety guard for local SSL actions.
+- Added clearer host-vs-VM command guidance.
+- Added `install-local-ssl-cert` and `replace-local-ssl-cert` command support in the consolidated script.
+- Added `browser-trust-guide` and `verify-ssl-rollback` support in the consolidated script.
 
-### Added
+## Changed
 
-- `install-local-ssl-cert` command.
-- `replace-local-ssl-cert` alias.
-- `browser-trust-guide` command.
-- `verify-ssl-rollback` command.
-- Safe cert/key installation from `/tmp` or `LOCAL_SSL_CERT_SOURCE` / `LOCAL_SSL_KEY_SOURCE`.
-- Automatic backup of existing local SSL cert/key before replacement.
-- Nginx reload after certificate replacement when the local SSL site is enabled.
-- Clear host-side trusted certificate checks.
+- Local SSL commands now refuse to run when the ERPNext VM context is not detected.
+- SSL guide now makes host-side mkcert steps and VM-side install/configure steps clearer.
+- Advanced and Access menus include environment-check and SSL workflow actions.
 
-### Improved
+## Fixed
 
-- Corrected SSL entries in the Advanced menu.
-- Expanded Access menu SSL options.
-- Improved mkcert workflow to use the installer cert import helper.
-- Added trust guidance to `ssl-status`.
-- Improved rollback guidance and verification.
+- Prevents confusing host-side `ssl-status` output when the script is accidentally run on Linux Mint host.
+- Prevents accidental host-side Nginx/certificate changes from VM-only SSL commands.
+- Corrected Advanced menu SSL numbering.
 
-### Preserved
+## Notes
 
-- Existing `http://erp.test:8000` direct Bench access.
-- Existing Nginx reverse proxy behavior.
-- Existing full app stack support.
-
-## v0.8.2
-
-Trusted local SSL polish with mkcert guide, richer certificate diagnostics, expiry checks, and rollback guide.
+This is still a developer VM installer, not a production installer.
