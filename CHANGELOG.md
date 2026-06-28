@@ -1,26 +1,33 @@
-# Changelog — v0.8.4
+# CHANGELOG v0.8.5
 
 ## Added
 
-- Added `environment-check` command.
-- Added `where-am-i` alias.
-- Added VM-only safety guard for local SSL actions.
-- Added clearer host-vs-VM command guidance.
-- Added `install-local-ssl-cert` and `replace-local-ssl-cert` command support in the consolidated script.
-- Added `browser-trust-guide` and `verify-ssl-rollback` support in the consolidated script.
+- Custom local site/domain selection during setup.
+- `SITE_NAME=custom.test ./install-erpnext-dev.sh setup` workflow documented and improved.
+- Interactive setup prompt:
+  - `Local ERPNext site name [erp.test]:`
+- Persistent local config file:
+  - `/home/frappe/erpnext-dev-config.env`
+- New command:
+  - `site-config`
+- New command:
+  - `site-name-guide`
+- Site name validation:
+  - rejects URLs
+  - rejects ports
+  - rejects spaces/slashes
+  - rejects `.local`
+  - recommends `.test`
+- Future commands reuse saved `SITE_NAME` when no environment override is provided.
 
 ## Changed
 
-- Local SSL commands now refuse to run when the ERPNext VM context is not detected.
-- SSL guide now makes host-side mkcert steps and VM-side install/configure steps clearer.
-- Advanced and Access menus include environment-check and SSL workflow actions.
+- Setup now makes multiple local ERPNext VM environments easier to manage.
+- Access, SSL, `/etc/hosts`, and config output now reflect the selected site name.
+- `environment-check` now reports site source and config file.
+- `environment-check` avoids confusing missing-bench output when the VM context is otherwise detected.
 
 ## Fixed
 
-- Prevents confusing host-side `ssl-status` output when the script is accidentally run on Linux Mint host.
-- Prevents accidental host-side Nginx/certificate changes from VM-only SSL commands.
-- Corrected Advanced menu SSL numbering.
-
-## Notes
-
-This is still a developer VM installer, not a production installer.
+- Clarified that `erp.test` is only the default, not a hardcoded requirement.
+- Improved multi-environment guidance to use `setup` consistently.

@@ -1,14 +1,8 @@
-# ERPNext Developer Installer v0.8.4
+# ERPNext Developer Installer v0.8.5
 
-Beta-quality local developer installer for ERPNext/Frappe on an Ubuntu VM.
+Local ERPNext / Frappe developer VM installer for Ubuntu 24.04 / 26.04.
 
-## Status
-
-v0.8.4 is a safety and SSL workflow hardening release. It keeps the v0.8.x local HTTPS reverse proxy direction and adds stronger protection against running VM-only SSL commands on the Linux Mint host by mistake.
-
-## Key workflows
-
-### Developer VM setup
+## Quick start
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh -o install-erpnext-dev.sh
@@ -16,76 +10,123 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh setup
 ```
 
-### Basic operation
+During interactive setup, the installer asks for a local site name. Press Enter to use the default:
+
+```text
+erp.test
+```
+
+## Custom local site name
+
+Use a unique `.test` hostname for each ERPNext VM.
+
+Good examples:
+
+```text
+erp.test
+erp107.test
+school.test
+client-a.test
+```
+
+Avoid `.local` because Linux uses `.local` for mDNS/Avahi.
+
+You can provide the site name non-interactively:
 
 ```bash
-./install-erpnext-dev.sh start
-./install-erpnext-dev.sh status
-./install-erpnext-dev.sh access
+SITE_NAME=erp107.test ./install-erpnext-dev.sh setup
+```
+
+The selected site name is saved to:
+
+```text
+/home/frappe/erpnext-dev-config.env
+```
+
+Future commands reuse the saved name automatically.
+
+## Host /etc/hosts setup
+
+After setup, run this inside the VM:
+
+```bash
+./install-erpnext-dev.sh hosts-command
+```
+
+Then run the printed command on your Linux host. It will look like:
+
+```bash
+sudo sed -i '/[[:space:]]erp107\.test$/d' /etc/hosts
+echo "192.168.122.107 erp107.test" | sudo tee -a /etc/hosts
+```
+
+Then test from the host:
+
+```bash
+curl -I http://erp107.test:8000
+```
+
+## Useful commands
+
+```bash
+./install-erpnext-dev.sh environment-check
+./install-erpnext-dev.sh site-config
 ./install-erpnext-dev.sh doctor
+./install-erpnext-dev.sh runtime-status
+./install-erpnext-dev.sh service-summary
+./install-erpnext-dev.sh list-apps
+./install-erpnext-dev.sh app-library
 ```
 
-### Optional app library
+## Optional app library
 
-Verified app stack in testing:
-
-| App | Status |
-| --- | --- |
-| ERPNext | Verified |
-| Frappe CRM | Verified |
-| Frappe HR / HRMS | Verified |
-| Frappe Telephony | Verified as Helpdesk dependency |
-| Frappe Helpdesk | Verified |
-| Frappe Insights | Verified |
-
-### Local HTTPS
-
-Local HTTPS is optional and uses Nginx inside the VM:
-
-```text
-Browser HTTPS :443
-  -> Nginx inside VM
-    -> Bench web 127.0.0.1:8000
-    -> Socket.io 127.0.0.1:9000
-```
-
-The direct developer fallback remains available:
-
-```text
-http://erp.test:8000
-http://VM_IP:8000
-```
-
-## Host vs VM safety rule
-
-Run these commands on the **Linux Mint host**:
+Supported app profiles:
 
 ```bash
-mkcert -install
-mkcert -cert-file erp.test.crt -key-file erp.test.key erp.test VM_IP
-scp erp.test.crt test@VM_IP:/tmp/erp.test.crt
-scp erp.test.key test@VM_IP:/tmp/erp.test.key
-curl -I http://erp.test
-curl -kI https://erp.test
+./install-erpnext-dev.sh install-crm
+./install-erpnext-dev.sh install-hrms
+./install-erpnext-dev.sh install-helpdesk
+./install-erpnext-dev.sh install-insights
 ```
 
-Run these commands **inside the ERPNext VM**:
+Helpdesk installs Telephony as a dependency.
+
+## Local HTTPS
+
+For quick self-signed local HTTPS inside the VM:
 
 ```bash
-./install-erpnext-dev.sh ssl-status
-./install-erpnext-dev.sh install-local-ssl-cert
+./install-erpnext-dev.sh create-self-signed-local-cert
 ./install-erpnext-dev.sh configure-local-ssl
 ./install-erpnext-dev.sh verify-local-ssl
 ```
 
-If unsure, run:
+Expected URLs:
+
+```text
+http://SITE_NAME:8000   direct Bench access
+https://SITE_NAME       Nginx local HTTPS reverse proxy
+```
+
+For browser-trusted HTTPS, use:
+
+```bash
+./install-erpnext-dev.sh mkcert-guide
+./install-erpnext-dev.sh browser-trust-guide
+```
+
+## Host/VM safety
+
+v0.8.4+ includes a guard that blocks VM-only SSL actions when they are accidentally run on the Linux host instead of inside the ERPNext VM.
+
+Check where you are:
 
 ```bash
 ./install-erpnext-dev.sh environment-check
 ```
 
-v0.8.4 blocks VM-only SSL actions when the ERPNext VM context is not detected, preventing accidental changes to the host.
+## Development status
 
-## Important limitation
+v0.8.5 is a beta development-VM release. It is not a production installer.
 
-This is a local developer VM installer. It is not a production installer yet. Production should be handled by a separate production track with domain/DNS, Nginx/Supervisor production mode, firewall, backups, monitoring, and SSL renewal.
+Production should be a separate future track, likely `install-erpnext-prod.sh`.

@@ -1,58 +1,101 @@
-# Testing — v0.8.4
+# TESTING v0.8.5
 
-## Syntax
+## Fresh VM custom-site test
+
+Inside a fresh VM:
 
 ```bash
-bash -n install-erpnext-dev.sh
-./install-erpnext-dev.sh help
+curl -fsSL https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh -o install-erpnext-dev.sh
+chmod +x install-erpnext-dev.sh
+SITE_NAME=erp107.test ./install-erpnext-dev.sh setup
 ```
 
-## Host-side safety test
-
-Run on the Linux Mint host:
+After install:
 
 ```bash
+./install-erpnext-dev.sh site-config
 ./install-erpnext-dev.sh environment-check
-./install-erpnext-dev.sh ssl-status
-./install-erpnext-dev.sh configure-local-ssl
-./install-erpnext-dev.sh install-local-ssl-cert
+./install-erpnext-dev.sh doctor
+./install-erpnext-dev.sh runtime-status
+./install-erpnext-dev.sh service-summary
 ```
 
 Expected:
 
-- `environment-check` shows ERPNext VM context is not detected.
-- VM-only SSL commands are blocked before sudo work.
-- Output explains that the command must run inside the ERPNext VM.
+```text
+Current site: erp107.test
+Site app: frappe OK
+Site app: erpnext OK
+Bench web: OK port 8000 listening
+Socket.io: OK port 9000 listening
+Autostart: OK Enabled
+```
 
-## VM-side SSL test
+## Host access test
 
-Run inside the ERPNext VM:
+On the Linux host, use the `/etc/hosts` command printed by:
 
 ```bash
-./install-erpnext-dev.sh environment-check
-./install-erpnext-dev.sh ssl-status
-./install-erpnext-dev.sh verify-local-ssl
+./install-erpnext-dev.sh hosts-command
+```
+
+Then test:
+
+```bash
+getent hosts erp107.test
+curl -I http://erp107.test:8000
+```
+
+Expected:
+
+```text
+HTTP/1.1 200 OK
+```
+
+## Saved config test
+
+Inside the VM, run without `SITE_NAME=`:
+
+```bash
+./install-erpnext-dev.sh site-config
 ./install-erpnext-dev.sh doctor
 ```
 
-Expected:
+Expected: commands still use `erp107.test` from `/home/frappe/erpnext-dev-config.env`.
 
-- ERPNext VM context detected.
-- Nginx/cert/ports are reported correctly.
-- Doctor remains green.
+## Validation rejection tests
 
-## Host HTTPS tests
-
-Run on the host:
+These should fail before install:
 
 ```bash
-curl -I http://erp.test
-curl -kI https://erp.test
-curl -I http://erp.test:8000
+SITE_NAME=https://erp.test ./install-erpnext-dev.sh setup
+SITE_NAME=erp.test:8000 ./install-erpnext-dev.sh setup
+SITE_NAME='erp test' ./install-erpnext-dev.sh setup
+SITE_NAME=erp.local ./install-erpnext-dev.sh setup
+```
+
+## SSL test with custom site name
+
+Inside the VM:
+
+```bash
+./install-erpnext-dev.sh create-self-signed-local-cert
+./install-erpnext-dev.sh configure-local-ssl
+./install-erpnext-dev.sh verify-local-ssl
+```
+
+On the Linux host:
+
+```bash
+curl -I http://erp107.test
+curl -kI https://erp107.test
+curl -I http://erp107.test:8000
 ```
 
 Expected:
 
-- `http://erp.test` redirects to HTTPS.
-- `https://erp.test` returns 200 with `-k` for self-signed certs.
-- `http://erp.test:8000` remains direct Bench fallback.
+```text
+http://erp107.test        -> 301 redirect to https://erp107.test/
+https://erp107.test       -> 200 OK through Nginx
+http://erp107.test:8000   -> 200 OK direct Bench fallback
+```

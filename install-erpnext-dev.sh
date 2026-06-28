@@ -11,19 +11,25 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.8.4"
+SCRIPT_VERSION="0.8.5"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
 BENCH_PARENT="${BENCH_PARENT:-${FRAPPE_HOME}/frappe}"
 BENCH_NAME="${BENCH_NAME:-frappe-bench}"
 BENCH_DIR="${BENCH_PARENT}/${BENCH_NAME}"
+SITE_NAME_ENV_PROVIDED=0
+if [[ -n "${SITE_NAME+x}" ]]; then
+  SITE_NAME_ENV_PROVIDED=1
+fi
 SITE_NAME="${SITE_NAME:-erp.test}"
+SITE_NAME_SOURCE="default"
 AUTO_START="${AUTO_START:-prompt}"
 ENABLE_AUTOSTART="${ENABLE_AUTOSTART:-prompt}"
 ERPNEXT_SERVICE_NAME="${ERPNEXT_SERVICE_NAME:-erpnext-dev.service}"
 READY_TIMEOUT="${READY_TIMEOUT:-90}"
 READY_INTERVAL="${READY_INTERVAL:-5}"
+CONFIG_FILE="${CONFIG_FILE:-${FRAPPE_HOME}/erpnext-dev-config.env}"
 
 SSL_CERT_DIR="${SSL_CERT_DIR:-/etc/erpnext-dev-ssl}"
 SSL_NGINX_CONF_DIR="${SSL_NGINX_CONF_DIR:-/etc/nginx}"
@@ -83,6 +89,218 @@ status_line() {
     *) printf "  %-28s %-7s %s\n" "$label" "$state" "$message" ;;
   esac
 }
+
+validate_site_name_value() {
+  local name="$1"
+
+  if [[ -z "$name" ]]; then
+    err "Site name cannot be empty."
+    return 1
+  fi
+
+  if [[ "$name" =~ ^https?:// ]]; then
+    err "Use only the hostname, not a URL. Example: erp.test"
+    return 1
+  fi
+
+  if [[ "$name" == *":"* || "$name" == *"/"* || "$name" =~ [[:space:]] ]]; then
+    err "Site name must not contain spaces, slashes, or ports. Example: erp107.test"
+    return 1
+  fi
+
+  if [[ "$name" == *.local ]]; then
+    err "Avoid .local because it conflicts with mDNS/Avahi on Linux. Use .test instead."
+    return 1
+  fi
+
+  if ! [[ "$name" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$ ]]; then
+    err "Invalid site name: ${name}"
+    err "Use a hostname like erp.test, erp107.test, school.test, or client-a.test"
+    return 1
+  fi
+
+  return 0
+}
+
+maybe_warn_site_name() {
+  local name="$1"
+  if [[ "$name" != *.test ]]; then
+    warn "For local development, .test is recommended. Current site name: ${name}"
+  fi
+}
+
+read_saved_site_name() {
+  local file="$CONFIG_FILE"
+  local value=""
+
+  [[ -r "$file" ]] || return 1
+  value="$(grep -E '^SITE_NAME=' "$file" 2>/dev/null | tail -n 1 | sed -E 's/^SITE_NAME=//; s/^"//; s/"$//; s/^'\''//; s/'\''$//' || true)"
+  [[ -n "$value" ]] || return 1
+  printf '%s\n' "$value"
+}
+
+load_saved_config_if_available() {
+  local saved=""
+
+  if [[ "$SITE_NAME_ENV_PROVIDED" -eq 1 ]]; then
+    SITE_NAME_SOURCE="environment"
+    validate_site_name_value "$SITE_NAME" || exit 1
+    maybe_warn_site_name "$SITE_NAME"
+    return 0
+  fi
+
+  if saved="$(read_saved_site_name 2>/dev/null)" && [[ -n "$saved" ]]; then
+    if validate_site_name_value "$saved" >/dev/null 2>&1; then
+      SITE_NAME="$saved"
+      SITE_NAME_SOURCE="saved config"
+      return 0
+    else
+      warn "Saved SITE_NAME in ${CONFIG_FILE} is invalid. Falling back to ${SITE_NAME}."
+    fi
+  fi
+
+  SITE_NAME_SOURCE="default"
+  validate_site_name_value "$SITE_NAME" || exit 1
+}
+
+prompt_for_site_name_if_needed() {
+  local reply normalized
+
+  if [[ "$SITE_NAME_ENV_PROVIDED" -eq 1 ]]; then
+    validate_site_name_value "$SITE_NAME" || fail "Invalid SITE_NAME override."
+    maybe_warn_site_name "$SITE_NAME"
+    return 0
+  fi
+
+  if [[ "$SITE_NAME_SOURCE" == "saved config" ]]; then
+    ok "Using saved local site name: ${SITE_NAME}"
+    return 0
+  fi
+
+  if [[ -t 0 && "$ASSUME_YES" -ne 1 ]]; then
+    echo
+    echo "============================================================"
+    echo "Local Site Name"
+    echo "============================================================"
+    echo "Choose the friendly local hostname for this ERPNext VM."
+    echo
+    echo "Recommended examples:"
+    echo "  erp.test"
+    echo "  erp107.test"
+    echo "  school.test"
+    echo "  client-a.test"
+    echo
+    echo "Avoid .local because Linux uses it for mDNS/Avahi."
+    echo "Do not include http://, https://, or :8000."
+    echo
+    read -r -p "Local ERPNext site name [${SITE_NAME}]: " reply
+    reply="${reply:-$SITE_NAME}"
+    normalized="${reply,,}"
+    validate_site_name_value "$normalized" || fail "Invalid local site name."
+    SITE_NAME="$normalized"
+    SITE_NAME_SOURCE="setup prompt"
+    maybe_warn_site_name "$SITE_NAME"
+  else
+    validate_site_name_value "$SITE_NAME" || fail "Invalid local site name."
+  fi
+}
+
+write_dev_config_file() {
+  require_sudo
+
+  log "Writing ERPNext developer config"
+
+  $SUDO mkdir -p "$FRAPPE_HOME"
+  $SUDO tee "$CONFIG_FILE" >/dev/null <<EOF_DEV_CONFIG
+# ERPNext Developer Installer local configuration
+# This file lets future script commands reuse the selected site name.
+SITE_NAME=${SITE_NAME}
+FRAPPE_USER=${FRAPPE_USER}
+BENCH_PARENT=${BENCH_PARENT}
+BENCH_NAME=${BENCH_NAME}
+BENCH_DIR=${BENCH_DIR}
+EOF_DEV_CONFIG
+
+  if id "$FRAPPE_USER" >/dev/null 2>&1; then
+    $SUDO chown "$FRAPPE_USER:$FRAPPE_USER" "$CONFIG_FILE" || true
+  fi
+  $SUDO chmod 644 "$CONFIG_FILE" || true
+
+  ok "Config saved to ${CONFIG_FILE}"
+}
+
+show_site_config() {
+  local saved="missing" vm_ip
+  vm_ip="$(get_vm_ip 2>/dev/null || echo unknown)"
+  if [[ -r "$CONFIG_FILE" ]]; then
+    saved="present"
+  fi
+
+  echo
+  echo "============================================================"
+  echo "ERPNext Local Site / Domain Config"
+  echo "============================================================"
+  status_line "Current site" "INFO" "$SITE_NAME"
+  status_line "Site source" "INFO" "$SITE_NAME_SOURCE"
+  status_line "Config file" "INFO" "${CONFIG_FILE} (${saved})"
+  status_line "Expected bench" "INFO" "$BENCH_DIR"
+  status_line "VM IP" "INFO" "$vm_ip"
+  echo
+  echo "Friendly HTTP URL:"
+  echo "  http://${SITE_NAME}:8000"
+  echo
+  echo "Local HTTPS URL, after local SSL is configured:"
+  echo "  https://${SITE_NAME}"
+  echo
+  echo "Host /etc/hosts command:"
+  echo "  sudo sed -i '/[[:space:]]${SITE_NAME//./\\.}\$/d' /etc/hosts"
+  echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
+  echo
+  echo "To choose a custom site during a fresh setup:"
+  echo "  SITE_NAME=erp107.test ./install-erpnext-dev.sh setup"
+  echo
+  echo "Or run setup interactively and answer the site-name prompt."
+  echo "============================================================"
+}
+
+show_site_name_guide() {
+  echo
+  echo "============================================================"
+  echo "Custom Local Site Name Guide"
+  echo "============================================================"
+  echo
+  echo "Use a unique .test hostname for each ERPNext VM."
+  echo
+  echo "Examples:"
+  echo "  erp.test"
+  echo "  erp107.test"
+  echo "  school.test"
+  echo "  client-a.test"
+  echo
+  echo "Fresh install with a custom name:"
+  echo "  SITE_NAME=erp107.test ./install-erpnext-dev.sh setup"
+  echo
+  echo "During interactive setup, you can also type the site name when prompted."
+  echo
+  echo "After setup, map the name on the HOST machine:"
+  echo "  echo \"VM_IP erp107.test\" | sudo tee -a /etc/hosts"
+  echo
+  echo "Rules:"
+  echo "  - Do not include http:// or https://"
+  echo "  - Do not include :8000"
+  echo "  - Do not use spaces or slashes"
+  echo "  - Avoid .local because it conflicts with mDNS/Avahi"
+  echo "  - Prefer .test for local development"
+  echo
+  echo "The selected site name is saved in:"
+  echo "  ${CONFIG_FILE}"
+  echo
+  echo "Future commands reuse the saved name automatically."
+  echo "============================================================"
+}
+
+load_saved_config_if_available
+
 
 
 start_erpnext_foreground() {
@@ -318,7 +536,12 @@ show_environment_check() {
   status_line "Current directory" "INFO" "$cwd"
   status_line "Detected IP" "INFO" "$vm_ip"
   status_line "Expected site" "INFO" "$SITE_NAME"
+  status_line "Site source" "INFO" "$SITE_NAME_SOURCE"
+  status_line "Config file" "INFO" "$CONFIG_FILE"
   status_line "Expected bench" "INFO" "$BENCH_DIR"
+  if [[ "$detected_bench" == "missing" ]] && { service_exists || path_is_file "${FRAPPE_HOME}/erpnext-dev-credentials.txt" || path_is_executable "${FRAPPE_HOME}/start-erpnext-dev.sh"; }; then
+    detected_bench="${BENCH_DIR} (expected; run doctor for sudo-confirmed status)"
+  fi
   status_line "Detected bench" "INFO" "$detected_bench"
 
   if erpnext_vm_context_detected; then
@@ -2269,9 +2492,9 @@ Recommended examples:
 
 Install examples inside each VM:
 
-  SITE_NAME=erp1.test ./install-erpnext-dev.sh install
-  SITE_NAME=school.test ./install-erpnext-dev.sh install
-  SITE_NAME=client-a.test ./install-erpnext-dev.sh install
+  SITE_NAME=erp1.test ./install-erpnext-dev.sh setup
+  SITE_NAME=school.test ./install-erpnext-dev.sh setup
+  SITE_NAME=client-a.test ./install-erpnext-dev.sh setup
 
 Host /etc/hosts examples on your Linux Mint host:
 
@@ -4043,6 +4266,7 @@ run_install() {
   check_os
   check_internet
   check_resources
+  prompt_for_site_name_if_needed
 
   if path_is_dir "$BENCH_PARENT"; then
     warn "Existing environment detected at: $BENCH_PARENT"
@@ -4058,6 +4282,7 @@ run_install() {
   install_system_packages
   configure_sysctl_for_redis
   create_frappe_user
+  write_dev_config_file
   create_mariadb_admin_user
   fix_frappe_ownership
   install_frappe_stack_as_user
@@ -4343,6 +4568,8 @@ Basic actions:
   install-local-ssl-cert Install/replace local SSL cert/key inside the VM
   create-self-signed-local-cert Create quick self-signed cert for local SSL testing
   environment-check Show whether this is the host or ERPNext VM context
+  site-config   Show current local site/domain configuration
+  site-name-guide Show how to choose custom .test names for multiple VMs
   backup        Create database backup
   backup-files  Create database + files backup
   list-backups  List site backups
@@ -4397,6 +4624,8 @@ Advanced actions:
   install-local-ssl-cert Install/replace local SSL cert/key inside the VM
   create-self-signed-local-cert Create quick local SSL test certificate
   environment-check   Show host vs ERPNext VM command context
+  site-config         Show current local site/domain configuration
+  site-name-guide     Show custom .test hostname guide
   configure-local-ssl Configure Nginx local HTTPS reverse proxy
   disable-local-ssl   Disable local HTTPS reverse proxy site
   multi-env-guide     Show multiple local environment guide
@@ -4405,7 +4634,7 @@ Options:
   -y, --yes     Assume yes for install confirmations
 
 Environment overrides:
-  SITE_NAME=erp.test
+  SITE_NAME=erp.test               # default local site name; use SITE_NAME=erp107.test for another VM
   FRAPPE_USER=frappe
   ADMIN_PASSWORD='YourPassword'
   DB_ADMIN_PASSWORD='YourDbAdminPassword'
@@ -4440,6 +4669,7 @@ Examples:
   ./install-erpnext-dev.sh browser-trust-guide
   ./install-erpnext-dev.sh verify-local-ssl
   ./install-erpnext-dev.sh environment-check
+  ./install-erpnext-dev.sh site-config
   ./install-erpnext-dev.sh doctor
 EOF_HELP
 }
@@ -4486,7 +4716,7 @@ parse_args() {
         ASSUME_YES=1
         shift
         ;;
-      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -4565,6 +4795,8 @@ main() {
     configure-local-ssl) configure_local_ssl ;;
     disable-local-ssl) disable_local_ssl ;;
     environment-check|where-am-i) show_environment_check ;;
+    site-config) show_site_config ;;
+    site-name-guide|custom-site-guide) show_site_name_guide ;;
     multi-env-guide) show_multi_environment_guide ;;
     help|-h|--help) show_help ;;
     *) fail "Unknown action: ${ACTION}" ;;
