@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.8.16"
+SCRIPT_VERSION="0.8.17"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -101,7 +101,7 @@ acquire_installer_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|repair-site-config|expand-root-storage|app-library|apps|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+    ""|menu|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|repair-site-config|expand-root-storage|app-library|apps|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
       return 0
       ;;
     *)
@@ -2111,6 +2111,152 @@ show_access_instructions() {
 
 
 
+
+verify_access() {
+  require_sudo
+
+  local vm_ip escaped_site direct_head friendly_head ip_head https_head
+  vm_ip="$(get_vm_ip)"
+  escaped_site="${SITE_NAME//./\\.}"
+
+  echo
+  echo "============================================================"
+  echo "Access Verification"
+  echo "============================================================"
+
+  if port_listens 8000; then
+    status_line "Bench web" "OK" "127.0.0.1:8000 listening"
+  else
+    status_line "Bench web" "WARN" "127.0.0.1:8000 not listening"
+  fi
+
+  if port_listens 9000; then
+    status_line "Socket.io" "OK" "127.0.0.1:9000 listening"
+  else
+    status_line "Socket.io" "INFO" "127.0.0.1:9000 not listening"
+  fi
+
+  direct_head="$(curl_head_status "http://127.0.0.1:8000/" "" "" "" || true)"
+  friendly_head="$(curl_head_status "http://${SITE_NAME}:8000/" "$SITE_NAME" 8000 "127.0.0.1" || true)"
+  ip_head="$(curl_head_status "http://${vm_ip}:8000/" "" "" "" || true)"
+
+  if [[ "$direct_head" == HTTP/* ]]; then
+    status_line "Local direct HTTP" "OK" "$direct_head"
+  else
+    status_line "Local direct HTTP" "WARN" "no response from http://127.0.0.1:8000"
+  fi
+
+  if [[ "$friendly_head" == HTTP/* ]]; then
+    status_line "Local site HTTP" "OK" "$friendly_head"
+  else
+    status_line "Local site HTTP" "WARN" "no response using ${SITE_NAME} host header"
+  fi
+
+  if [[ "$ip_head" == HTTP/* ]]; then
+    status_line "VM IP HTTP" "OK" "$ip_head"
+  else
+    status_line "VM IP HTTP" "INFO" "host-side test may still work if networking is correct"
+  fi
+
+  if port_listens 443; then
+    https_head="$(curl_head_status "https://${SITE_NAME}/" "$SITE_NAME" 443 "127.0.0.1" || true)"
+    [[ "$https_head" == HTTP/* ]] && status_line "Local HTTPS" "OK" "$https_head" || status_line "Local HTTPS" "WARN" "port 443 listens, but HTTPS did not respond cleanly"
+  else
+    status_line "Local HTTPS" "INFO" "not configured yet"
+  fi
+
+  echo
+  echo "Open from the HOST after /etc/hosts is set:"
+  echo "  http://${vm_ip}:8000"
+  echo "  http://${SITE_NAME}:8000"
+  echo
+  echo "HOST /etc/hosts command:"
+  echo "  sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts"
+  echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
+  echo
+  echo "HOST tests:"
+  echo "  curl -I http://${vm_ip}:8000"
+  echo "  curl -I http://${SITE_NAME}:8000"
+  echo "============================================================"
+}
+
+show_next_step() {
+  require_sudo
+
+  local vm_ip installed runtime auto data can_expand
+  vm_ip="$(get_vm_ip)"
+  installed="$(install_state 2>/dev/null || echo "Not installed")"
+  runtime="$(runtime_state 2>/dev/null || echo "Stopped")"
+  auto="$(autostart_state 2>/dev/null || echo "Not configured")"
+  data="$(storage_eval 2>/dev/null || true)"
+  can_expand="$(printf '%s\n' "$data" | awk -F= '$1=="CAN_EXPAND" {print $2; exit}')"
+
+  echo
+  echo "============================================================"
+  echo "Next Step"
+  echo "============================================================"
+
+  if [[ "${can_expand:-no}" == "yes" ]]; then
+    echo "Recommended next step: expand root storage."
+    echo "  ./install-erpnext-dev.sh expand-root-storage"
+    echo "============================================================"
+    return 0
+  fi
+
+  case "$installed" in
+    "Not installed")
+      echo "Recommended next step: run guided setup."
+      echo "  ./install-erpnext-dev.sh guided-setup"
+      ;;
+    "Incomplete")
+      echo "Recommended next step: repair or reinstall the environment."
+      echo "  ./install-erpnext-dev.sh repair"
+      ;;
+    *)
+      if [[ "$runtime" != Running* ]]; then
+        echo "Recommended next step: start ERPNext."
+        echo "  ./install-erpnext-dev.sh start"
+      else
+        echo "ERPNext is running. Verify browser access next."
+        echo "  ./install-erpnext-dev.sh verify-access"
+        echo
+        echo "Open:"
+        echo "  http://${vm_ip}:8000"
+        echo "  http://${SITE_NAME}:8000"
+        echo
+        if [[ "$auto" != "Enabled" ]]; then
+          echo "Optional: enable autostart."
+          echo "  ./install-erpnext-dev.sh enable-autostart"
+        else
+          echo "After access works, optional next step:"
+          echo "  ./install-erpnext-dev.sh local-ssl-guide"
+        fi
+      fi
+      ;;
+  esac
+
+  echo "============================================================"
+}
+
+run_guided_setup() {
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "Guided ERPNext Setup"
+  echo "============================================================"
+  echo "Flow: storage -> site name -> install -> service -> access."
+  echo "Keep this terminal open until setup finishes."
+  echo "============================================================"
+
+  run_install
+
+  echo
+  echo "Guided setup finished. Verifying local access state..."
+  verify_access
+  show_next_step
+}
+
 show_host_hosts_command() {
   local vm_ip escaped_site
   vm_ip="$(get_vm_ip)"
@@ -3434,27 +3580,28 @@ show_access_menu() {
     echo "2) Show host /etc/hosts command only"
     echo "3) Show VM network/access status"
     echo "4) Show host access test guide"
-    echo "5) Show KVM VM identification + fixed IP helper"
-    echo "6) Show KVM/libvirt fixed IP guide"
-    echo "7) Show multi-environment naming guide"
-    echo "8) Show SSL/HTTPS roadmap"
-    echo "9) Show local SSL status"
-    echo "10) Show local SSL guide"
-    echo "11) Show trusted mkcert SSL guide"
-    echo "12) Show browser trust check guide"
-    echo "13) Verify local SSL"
-    echo "14) Install/replace local SSL cert"
-    echo "15) Create self-signed local cert"
-    echo "16) Configure local SSL reverse proxy"
-    echo "17) Disable local SSL reverse proxy"
-    echo "18) Verify SSL rollback"
-    echo "19) Show SSL rollback guide"
-    echo "20) Domain config"
-    echo "21) Production readiness preview"
-    echo "22) Production domain guide"
-    echo "23) Production SSL guide"
-    echo "24) Environment / location check"
-    echo "25) Back"
+    echo "5) Verify ERPNext HTTP access"
+    echo "6) Show KVM VM identification + fixed IP helper"
+    echo "7) Show KVM/libvirt fixed IP guide"
+    echo "8) Show multi-environment naming guide"
+    echo "9) Show SSL/HTTPS roadmap"
+    echo "10) Show local SSL status"
+    echo "11) Show local SSL guide"
+    echo "12) Show trusted mkcert SSL guide"
+    echo "13) Show browser trust check guide"
+    echo "14) Verify local SSL"
+    echo "15) Install/replace local SSL cert"
+    echo "16) Create self-signed local cert"
+    echo "17) Configure local SSL reverse proxy"
+    echo "18) Disable local SSL reverse proxy"
+    echo "19) Verify SSL rollback"
+    echo "20) Show SSL rollback guide"
+    echo "21) Domain config"
+    echo "22) Production readiness preview"
+    echo "23) Production domain guide"
+    echo "24) Production SSL guide"
+    echo "25) Environment / location check"
+    echo "26) Back"
     echo
     read -r -p "Choose an option: " access_choice
 
@@ -3463,27 +3610,28 @@ show_access_menu() {
       2) show_host_hosts_command ;;
       3) show_network_status ;;
       4) show_host_access_test_guide ;;
-      5) show_kvm_vm_identification_guide ;;
-      6) show_kvm_fixed_ip_guide ;;
-      7) show_multi_environment_guide ;;
-      8) show_ssl_roadmap_guide ;;
-      9) show_ssl_status ;;
-      10) show_local_ssl_guide ;;
-      11) show_mkcert_local_ssl_guide ;;
-      12) show_browser_trust_check_guide ;;
-      13) verify_local_ssl ;;
-      14) install_local_ssl_cert ;;
-      15) create_self_signed_local_cert ;;
-      16) configure_local_ssl ;;
-      17) disable_local_ssl ;;
-      18) verify_ssl_rollback ;;
-      19) show_ssl_rollback_guide ;;
-      20) show_domain_config ;;
-      21) show_production_readiness ;;
-      22) show_production_domain_guide ;;
-      23) show_production_ssl_guide ;;
-      24) show_environment_check ;;
-      25) return 0 ;;
+      5) verify_access ;;
+      6) show_kvm_vm_identification_guide ;;
+      7) show_kvm_fixed_ip_guide ;;
+      8) show_multi_environment_guide ;;
+      9) show_ssl_roadmap_guide ;;
+      10) show_ssl_status ;;
+      11) show_local_ssl_guide ;;
+      12) show_mkcert_local_ssl_guide ;;
+      13) show_browser_trust_check_guide ;;
+      14) verify_local_ssl ;;
+      15) install_local_ssl_cert ;;
+      16) create_self_signed_local_cert ;;
+      17) configure_local_ssl ;;
+      18) disable_local_ssl ;;
+      19) verify_ssl_rollback ;;
+      20) show_ssl_rollback_guide ;;
+      21) show_domain_config ;;
+      22) show_production_readiness ;;
+      23) show_production_domain_guide ;;
+      24) show_production_ssl_guide ;;
+      25) show_environment_check ;;
+      26) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -3555,14 +3703,14 @@ print_summary() {
   echo "  bench start"
   echo
   echo "Browser access:"
-  echo "  Direct IP URL, works while Bench is running:"
-  echo "    http://${vm_ip}:8000"
+  echo "  Direct IP:    http://${vm_ip}:8000"
+  echo "  Friendly URL: http://${SITE_NAME}:8000"
   echo
-  echo "  Friendly URL, works after HOST /etc/hosts setup:"
-  echo "    http://${SITE_NAME}:8000"
+  echo "Run this on the HOST for the friendly URL:"
+  echo "  echo "${vm_ip} ${SITE_NAME}" | sudo tee -a /etc/hosts"
   echo
-  echo "On your HOST machine, add/update this /etc/hosts entry:"
-  echo "  ${vm_ip} ${SITE_NAME}"
+  echo "Verify access after setup:"
+  echo "  ./install-erpnext-dev.sh verify-access"
   echo
   echo "Credentials file:"
   echo "  ${FRAPPE_HOME}/erpnext-dev-credentials.txt"
@@ -5573,7 +5721,9 @@ show_advanced_menu() {
     echo "31) Start Bench in Foreground"
     echo "32) Show Service Logs"
     echo "33) Access Submenu"
-    echo "34) Back"
+    echo "34) Next Step"
+    echo "35) Verify ERPNext HTTP Access"
+    echo "36) Back"
     echo
     read -r -p "Choose an option: " advanced_choice
 
@@ -5611,7 +5761,9 @@ show_advanced_menu() {
       31) run_foreground_start ;;
       32) show_erpnext_service_logs ;;
       33) show_access_menu ;;
-      34) return 0 ;;
+      34) show_next_step ;;
+      35) verify_access ;;
+      36) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -5622,16 +5774,19 @@ show_help() {
 ${APP_NAME} v${SCRIPT_VERSION}
 
 Recommended local developer workflow:
-  ./install-erpnext-dev.sh setup
-  ./install-erpnext-dev.sh start
-  ./install-erpnext-dev.sh access
+  ./install-erpnext-dev.sh guided-setup
+  ./install-erpnext-dev.sh verify-access
+  ./install-erpnext-dev.sh next-step
 
 Usage:
   ./install-erpnext-dev.sh [action] [options]
 
 Basic actions:
+  guided-setup Recommended guided workflow from storage to access verification
   setup         Recommended setup: install, create service, offer autostart/start
   install       Alias for setup
+  next-step     Show the next recommended action for this VM
+  verify-access Verify local ERPNext HTTP access and print host tests
   start         Start ERPNext in the background systemd service
   stop          Stop ERPNext service and development processes
   status        Show quick developer status and exit
@@ -5686,6 +5841,9 @@ Advanced actions:
   uninstall           Show uninstall/reset menu
   advanced            Show advanced options menu
   access-menu         Show access/networking submenu
+  verify-access       Verify ERPNext HTTP access and show host tests
+  next-step           Show the next recommended action
+  guided-setup        Run the guided setup workflow
   foreground-start    Start Bench in the foreground terminal
   enable-autostart    Enable ERPNext service on VM boot
   disable-autostart   Disable ERPNext service on VM boot
@@ -5748,10 +5906,13 @@ Browser access:
 
 Examples:
   ./install-erpnext-dev.sh
+  ./install-erpnext-dev.sh guided-setup
   ./install-erpnext-dev.sh setup
   ./install-erpnext-dev.sh status
   ./install-erpnext-dev.sh start
   ./install-erpnext-dev.sh access
+  ./install-erpnext-dev.sh verify-access
+  ./install-erpnext-dev.sh next-step
   ./install-erpnext-dev.sh backup
   ./install-erpnext-dev.sh app-library
   ./install-erpnext-dev.sh install-crm
@@ -5777,30 +5938,34 @@ show_menu() {
     echo "============================================================"
     echo "${APP_NAME} v${SCRIPT_VERSION}"
     echo "============================================================"
-    echo "1) Recommended Setup"
+    echo "1) Guided Setup (Recommended)"
     echo "2) Start ERPNext"
     echo "3) Stop ERPNext"
     echo "4) Status"
     echo "5) Access Instructions"
-    echo "6) Backup / Maintenance"
-    echo "7) App Library"
-    echo "8) Advanced Options"
-    echo "9) Help"
-    echo "10) Exit"
+    echo "6) Verify Access"
+    echo "7) Next Step"
+    echo "8) Backup / Maintenance"
+    echo "9) App Library"
+    echo "10) Advanced Options"
+    echo "11) Help"
+    echo "12) Exit"
     echo
     read -r -p "Choose an option: " choice
 
     case "$choice" in
-      1) run_install ;;
+      1) run_guided_setup ;;
       2) run_start ;;
       3) run_stop ;;
       4) show_status_menu ;;
       5) show_access_instructions ;;
-      6) run_backup_maintenance_menu ;;
-      7) show_app_library_menu ;;
-      8) show_advanced_menu ;;
-      9) show_help ;;
-      10) exit 0 ;;
+      6) verify_access ;;
+      7) show_next_step ;;
+      8) run_backup_maintenance_menu ;;
+      9) show_app_library_menu ;;
+      10) show_advanced_menu ;;
+      11) show_help ;;
+      12) exit 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -5813,7 +5978,7 @@ parse_args() {
         ASSUME_YES=1
         shift
         ;;
-      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -5833,6 +5998,7 @@ main() {
 
   case "${ACTION:-menu}" in
     ""|menu) show_menu ;;
+    guided-setup) run_guided_setup ;;
     setup|install) run_install ;;
     repair) run_repair ;;
     status) run_status ;;
@@ -5846,6 +6012,8 @@ main() {
     uninstall) run_uninstall_menu ;;
     advanced) show_advanced_menu ;;
     access) show_access_instructions ;;
+    verify-access) verify_access ;;
+    next-step) show_next_step ;;
     access-menu) show_access_menu ;;
     backup-menu) run_backup_maintenance_menu ;;
     app-library|apps) show_app_library_menu ;;

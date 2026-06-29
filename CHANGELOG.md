@@ -1,35 +1,33 @@
 # Changelog
 
-## v0.8.16 - Security, reliability, and release hygiene
+## v0.8.17
 
-### Security
+Guided setup and access verification patch.
 
-- Installer logs are now created with private `600` permissions.
-- Generated ERPNext Administrator passwords are no longer printed in the terminal summary.
-- The terminal summary points users to the protected credentials file instead.
+### Added
 
-### Reliability
+- `guided-setup` command for a clearer new-user workflow.
+- `next-step` command to show the next recommended action based on current VM state.
+- `verify-access` command to verify local ERPNext HTTP access from inside the VM and print host-side tests.
+- Access submenu entry for ERPNext HTTP verification.
+- Main menu entries for Guided Setup, Verify Access, and Next Step.
 
-- Added an installer lock file to prevent overlapping setup/repair/service operations from changing the same VM at the same time.
-- Added a compact post-install validation summary for storage, service state, autostart, and credentials file presence.
+### Improved
 
-### Release hygiene
+- Post-install summary now points users to `verify-access` after setup.
+- Help output now recommends `guided-setup -> verify-access -> next-step`.
+- Guided setup separates ERPNext installation from later SSL and optional app work.
 
-- Updated stale documentation references from older versions.
-- Clean release ZIP should exclude `.git` and only include the distributable files.
+### Notes
 
-## v0.8.15 - Storage expansion setup fix
+- v0.8.17 does not change the proven storage expansion flow from v0.8.15/v0.8.16.
+- v0.8.17 keeps the private log and safer credential handling from v0.8.16.
 
-- Fixed setup order so storage expansion is offered before the main disk-space resource warning.
-- Fixed LVM expansion decision logic so existing VG free space and larger backing disks trigger expansion.
-- Confirmed on a fresh Ubuntu LVM VM that root storage can expand before ERPNext install.
+## v0.8.16
 
-## v0.8.14 - Proven generic LVM root expansion flow
+Security and reliability cleanup.
 
-- Added generic storage expansion workflow based on the proven Ubuntu LVM resize sequence:
-  - `sgdisk -e <disk> || true`
-  - `partprobe <disk> || true`
-  - `growpart <disk> <partition-number>`
-  - `pvresize <physical-volume-partition>`
-  - `lvextend -r -l +100%FREE <root-logical-volume>`
-- Added `storage-debug` diagnostics.
+- Private installer logs with `600` permissions.
+- Generated Administrator password no longer printed into terminal logs.
+- Installer lock file to reduce overlapping task risk.
+- Clean release ZIP without `.git`.

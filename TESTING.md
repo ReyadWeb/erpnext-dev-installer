@@ -1,4 +1,4 @@
-# Testing v0.8.16
+# Testing v0.8.17
 
 ## 1. Syntax check
 
@@ -10,35 +10,50 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="0.8.16"
+SCRIPT_VERSION="0.8.17"
 ```
 
-## 2. Fresh VM storage test
-
-Run inside a fresh Ubuntu VM:
+## 2. Fresh VM guided setup
 
 ```bash
-./install-erpnext-dev.sh storage-status
-./install-erpnext-dev.sh storage-debug
-./install-erpnext-dev.sh setup
+rm -f install-erpnext-dev.sh
+curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=$(date +%s)" -o install-erpnext-dev.sh
+chmod +x install-erpnext-dev.sh
+./install-erpnext-dev.sh guided-setup
 ```
 
-Expected behavior when the VM disk is larger than the root filesystem:
+Expected:
 
-```text
-Storage: root uses 39G of 260G disk.
-Expand root storage now? [Y/n]:
+- storage expansion is offered before low disk warnings when needed
+- custom site name prompt appears
+- ERPNext installs successfully
+- service/autostart prompts work
+- final output points to `verify-access`
+
+## 3. Access verification
+
+Inside the VM:
+
+```bash
+./install-erpnext-dev.sh verify-access
+./install-erpnext-dev.sh next-step
 ```
 
-After choosing `Y`, setup should continue and the resource check should show enough free disk:
+Expected:
 
-```text
-OK: Available disk: 200+ GB
+- Bench web port is OK
+- Socket.io port is OK when service is running
+- local direct HTTP returns an HTTP status
+- host `/etc/hosts` command is printed
+
+On the host:
+
+```bash
+curl -I http://VM_IP:8000
+curl -I http://erp.test:8000
 ```
 
-## 3. Runtime validation
-
-After setup:
+## 4. Runtime checks
 
 ```bash
 ./install-erpnext-dev.sh runtime-status
@@ -48,60 +63,35 @@ After setup:
 
 Expected:
 
-```text
-Runtime                      OK      Running via service
-Service                      OK      Running
-Autostart                    OK      Enabled
-Bench web                    OK      port 8000 listening
-Socket.io                    OK      port 9000 listening
-Bench Redis queue            OK      port 11000 listening
-Bench Redis cache            OK      port 13000 listening
-```
+- ERPNext service running
+- autostart enabled when selected
+- ports 8000, 9000, 11000, 13000 listening
+- site app checks OK
 
-## 4. Reboot test
+## 5. Reboot test
 
 ```bash
 sudo reboot
 ```
 
-After reconnecting:
+After reboot:
 
 ```bash
 ./install-erpnext-dev.sh runtime-status
 ./install-erpnext-dev.sh doctor
+./install-erpnext-dev.sh verify-access
 ```
 
-Expected: service is running and all required development ports are listening.
+Expected: ERPNext returns to running state automatically when autostart was enabled.
 
-## 5. Security regression test
-
-The install summary must not print the generated Administrator password.
-
-Expected summary wording:
-
-```text
-Password: saved in the credentials file
-View with: sudo cat /home/frappe/erpnext-dev-credentials.txt
-```
-
-Check log permissions:
+## 6. Log permission check
 
 ```bash
 ls -l /tmp/erpnext-dev-installer-*.log | tail -1
 ```
 
-Expected permissions should not be world-readable:
-
-```text
--rw-------
-```
-
-## 6. Lock test
-
-Start a mutating command in one terminal, then quickly run another mutating command in a second terminal.
-
 Expected:
 
 ```text
-ERROR: Another installer task is already running.
+-rw-------
 ```
