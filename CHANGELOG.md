@@ -1,4 +1,13 @@
-# Changelog v0.8.10
+
+## v0.8.11 - LVM storage detector fallback fix
+
+- Improved generic LVM root detection for common Ubuntu layouts.
+- Added lsblk PKNAME fallback for `/dev/mapper/<vg>--<lv>` root devices.
+- Keeps storage expansion generic: no hardcoded `/dev/vda3` or Ubuntu LV names.
+- `expand-root-storage` now reports unsupported layouts as WARN instead of incorrectly saying no expansion is needed.
+- Setup can now ask the user to expand root storage when a larger VM disk is detected.
+
+# Changelog v0.8.11
 
 ## Fixed
 

@@ -1,4 +1,4 @@
-# Testing v0.8.10
+# Testing v0.8.11
 
 ## Version check
 
@@ -77,7 +77,7 @@ curl -I http://YOUR-SITE.test:8000
 ```
 
 
-## v0.8.10 LVM regression test
+## v0.8.11 LVM regression test
 
 On a fresh/cloned Ubuntu VM, run:
 
@@ -102,3 +102,17 @@ Then test:
 df -h /
 ./install-erpnext-dev.sh verify-storage
 ```
+
+### v0.8.11 LVM storage test
+
+On a fresh Ubuntu VM with a larger virtual disk than root filesystem:
+
+```bash
+./install-erpnext-dev.sh storage-status
+./install-erpnext-dev.sh expand-root-storage
+./install-erpnext-dev.sh storage-status
+df -h /
+```
+
+Expected: layout should be `lvm`, expansion should be recommended, and `/` should grow after confirmation.
+

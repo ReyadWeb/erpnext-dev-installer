@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.8.10
+# ERPNext Developer Installer v0.8.11
 
 Local ERPNext/Frappe developer VM installer for Ubuntu 24.04/26.04.
 
@@ -20,7 +20,7 @@ Local site name [erp.test]:
 
 Press Enter for `erp.test`, or enter a custom local name such as `erp08.test`.
 
-## v0.8.10 highlights
+## v0.8.11 highlights
 
 - Generic root storage detection and expansion.
 - Improved Ubuntu LVM root detection for `/dev/mapper/*`, `/dev/<vg>/<lv>`, and `/dev/dm-*` aliases.

@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.8.10"
+SCRIPT_VERSION="0.8.11"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1121,18 +1121,21 @@ storage_parent_disk() {
 storage_detect_layout() {
   local root_source root_source_real root_fstype root_type
   local lv_path vg_name pv_lines pv_count pv_dev disk_dev part_num
-  local cand_lv cand_vg cand_devices cand_real
+  local cand_lv cand_vg cand_real pkname
 
   root_source="$(findmnt -n -o SOURCE / 2>/dev/null | head -n 1 || true)"
   root_fstype="$(findmnt -n -o FSTYPE / 2>/dev/null | head -n 1 || true)"
   root_source_real="$(readlink -f "$root_source" 2>/dev/null || printf '%s\n' "$root_source")"
-  root_type="$(lsblk -no TYPE "$root_source_real" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
+  root_type="$(lsblk -no TYPE "$root_source" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
+  if [[ -z "$root_type" && -n "$root_source_real" ]]; then
+    root_type="$(lsblk -no TYPE "$root_source_real" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
+  fi
 
   [[ -n "$root_source" ]] || return 1
 
-  # LVM root detection must handle /dev/mapper/<vg>--<lv>, /dev/<vg>/<lv>, and /dev/dm-*.
-  # Some versions of lvs do not resolve all aliases when queried directly, so we also scan all LVs
-  # and compare their canonical readlink target to the root mount device.
+  # LVM root detection.
+  # Generic Ubuntu installs often mount / from /dev/mapper/<vg>--<lv>, while lvs reports
+  # /dev/<vg>/<lv>. We therefore resolve aliases and also use lsblk PKNAME as a fallback.
   if command -v lvs >/dev/null 2>&1 && command -v pvs >/dev/null 2>&1; then
     lv_path="$(lvs --noheadings -o lv_path "$root_source" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
     if [[ -z "$lv_path" && "$root_source_real" != "$root_source" ]]; then
@@ -1140,9 +1143,7 @@ storage_detect_layout() {
     fi
 
     if [[ -z "$lv_path" ]]; then
-      while IFS='|' read -r cand_lv cand_vg cand_devices; do
-        cand_lv="$(printf '%s' "$cand_lv" | xargs)"
-        cand_vg="$(printf '%s' "$cand_vg" | xargs)"
+      while read -r cand_lv cand_vg _; do
         [[ -n "$cand_lv" ]] || continue
         cand_real="$(readlink -f "$cand_lv" 2>/dev/null || printf '%s\n' "$cand_lv")"
         if [[ "$cand_lv" == "$root_source" || "$cand_lv" == "$root_source_real" || "$cand_real" == "$root_source_real" ]]; then
@@ -1150,22 +1151,38 @@ storage_detect_layout() {
           vg_name="$cand_vg"
           break
         fi
-      done < <(lvs --noheadings --separator '|' -o lv_path,vg_name,devices 2>/dev/null || true)
+      done < <(lvs --noheadings -o lv_path,vg_name 2>/dev/null || true)
+    fi
+
+    # If lsblk says the root source is an LVM device but lvs alias resolution failed,
+    # still continue with root_source as the LV target. lvextend accepts mapper paths.
+    if [[ -z "$lv_path" && "$root_type" == "lvm" ]]; then
+      lv_path="$root_source"
     fi
 
     if [[ -n "$lv_path" ]]; then
       vg_name="${vg_name:-$(lvs --noheadings -o vg_name "$lv_path" 2>/dev/null | awk 'NF {print $1; exit}' || true)}"
 
-      # Prefer the actual PV devices used by this LV. Fallback to all PVs in the VG.
       pv_lines="$(lvs --noheadings -o devices "$lv_path" 2>/dev/null \
-        | tr ', ' '\n\n' \
-        | sed -E 's/\([0-9]+\)//g' \
+        | sed -E 's/,/\n/g; s/[[:space:]]+/\n/g; s/\([0-9]+\)//g' \
         | awk '/^\/dev\// {print}' \
         | sort -u || true)"
 
+      # Strong fallback: for common dm/LVM roots, lsblk can report the parent partition
+      # directly, for example /dev/mapper/ubuntu--vg-ubuntu--lv -> PKNAME vda3.
+      if [[ -z "$pv_lines" ]]; then
+        pkname="$(lsblk -no PKNAME "$root_source" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
+        if [[ -z "$pkname" && -n "$root_source_real" ]]; then
+          pkname="$(lsblk -no PKNAME "$root_source_real" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
+        fi
+        if [[ -n "$pkname" && -b "/dev/$pkname" ]]; then
+          pv_lines="/dev/$pkname"
+        fi
+      fi
+
       if [[ -z "$pv_lines" && -n "$vg_name" ]]; then
-        pv_lines="$(pvs --noheadings --separator '|' -o pv_name,vg_name 2>/dev/null \
-          | awk -F'|' -v vg="$vg_name" '{gsub(/^[ \t]+|[ \t]+$/, "", $1); gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($2 == vg) print $1}' \
+        pv_lines="$(pvs --noheadings -o pv_name,vg_name 2>/dev/null \
+          | awk -v vg="$vg_name" '{if ($2 == vg) print $1}' \
           | sort -u || true)"
       fi
 
@@ -1340,8 +1357,14 @@ expand_root_storage() {
   echo "============================================================"
 
   if [[ "${can_expand:-no}" != "yes" ]]; then
-    status_line "Storage" "OK" "no expansion needed"
-    [[ -n "${reason:-}" ]] && echo "${reason}"
+    if [[ "${layout:-unknown}" == "unknown" ]]; then
+      status_line "Storage" "WARN" "not automatic"
+      [[ -n "${reason:-}" ]] && echo "Reason: ${reason}"
+      echo "No changes made."
+    else
+      status_line "Storage" "OK" "no expansion needed"
+      [[ -n "${reason:-}" ]] && echo "${reason}"
+    fi
     echo "============================================================"
     return 0
   fi
