@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.8.14"
+SCRIPT_VERSION="0.8.15"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1331,7 +1331,9 @@ PY_STORAGE_DETECT
 }
 
 storage_eval() {
-  local data layout root_fs disk_dev part_dev lv_path vg_free_bytes disk_bytes part_bytes root_bytes can_expand reason
+  local data
+  local layout="" root_source="" root_fs="" disk_dev="" part_dev="" pv_dev="" lv_path="" vg_name="" reason=""
+  local root_bytes="0" disk_bytes="0" part_bytes="0" vg_free_bytes="0" can_expand="no"
 
   data="$(storage_detect_layout 2>/dev/null || true)"
   [[ -n "$data" ]] || {
@@ -1339,47 +1341,68 @@ storage_eval() {
     return 0
   }
 
-  # shellcheck disable=SC2163
   while IFS='=' read -r k v; do
     case "$k" in
       LAYOUT) layout="$v" ;;
+      ROOT_SOURCE) root_source="$v" ;;
       ROOT_FS) root_fs="$v" ;;
       DISK_DEV) disk_dev="$v" ;;
       PART_DEV) part_dev="$v" ;;
+      PV_DEV) pv_dev="$v" ;;
       LV_PATH) lv_path="$v" ;;
+      VG_NAME) vg_name="$v" ;;
       REASON) reason="$v" ;;
     esac
   done <<< "$data"
 
   root_bytes="$(df -B1 / 2>/dev/null | awk 'NR==2 {print $2+0}' || echo 0)"
-  disk_bytes="0"
-  part_bytes="0"
-  vg_free_bytes="0"
-  can_expand="no"
 
-  if [[ -n "${disk_dev:-}" && -b "$disk_dev" ]]; then
-    disk_bytes="$(blockdev --getsize64 "$disk_dev" 2>/dev/null || echo 0)"
-  fi
-  if [[ -n "${part_dev:-}" && -b "$part_dev" ]]; then
-    part_bytes="$(blockdev --getsize64 "$part_dev" 2>/dev/null || echo 0)"
-  fi
-  if [[ "${layout:-}" == "lvm" && -n "${lv_path:-}" ]] && command -v vgs >/dev/null 2>&1; then
-    vg_free_bytes="$(vgs --noheadings --units b --nosuffix -o vg_free "$(lvs --noheadings -o vg_name "$lv_path" 2>/dev/null | awk 'NF {print $1; exit}')" 2>/dev/null | awk '{printf "%.0f", $1+0}' || echo 0)"
+  if [[ -n "$disk_dev" ]]; then
+    disk_bytes="$(lsblk -bndo SIZE "$disk_dev" 2>/dev/null | awk 'NR==1 {print $1+0}' || echo 0)"
   fi
 
-  # Recommend expansion if the backing disk is at least 4 GiB larger than the root partition,
-  # or if LVM already has at least 1 GiB free extents that can be assigned to root.
-  if [[ "$disk_bytes" =~ ^[0-9]+$ && "$part_bytes" =~ ^[0-9]+$ ]] && (( disk_bytes > part_bytes + 4294967296 )); then
-    can_expand="yes"
-  elif [[ "$vg_free_bytes" =~ ^[0-9]+$ ]] && (( vg_free_bytes > 1073741824 )); then
-    can_expand="yes"
-  elif [[ -z "${reason:-}" ]]; then
-    reason="root storage already appears to use the available disk"
+  if [[ -n "$part_dev" ]]; then
+    part_bytes="$(lsblk -bndo SIZE "$part_dev" 2>/dev/null | awk 'NR==1 {print $1+0}' || echo 0)"
+  fi
+
+  if [[ "$layout" == "lvm" ]]; then
+    if [[ -z "$vg_name" && -n "$lv_path" ]]; then
+      vg_name="$(lvs --noheadings -o vg_name "$lv_path" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
+    fi
+
+    if [[ -n "$vg_name" ]]; then
+      vg_free_bytes="$(vgs --noheadings --units b --nosuffix -o vg_free "$vg_name" 2>/dev/null | awk 'NF {printf "%.0f", $1+0; exit}' || echo 0)"
+    fi
+  fi
+
+  # LVM expansion is recommended if:
+  # 1) VG already has free extents, OR
+  # 2) the physical disk is larger than the LVM partition/PV.
+  if [[ "$layout" == "lvm" ]]; then
+    if [[ "$vg_free_bytes" =~ ^[0-9]+$ ]] && (( vg_free_bytes > 1073741824 )); then
+      can_expand="yes"
+      reason="LVM has free space available"
+    elif [[ "$disk_bytes" =~ ^[0-9]+$ && "$part_bytes" =~ ^[0-9]+$ ]] && (( disk_bytes > part_bytes + 1073741824 )); then
+      can_expand="yes"
+      reason="VM disk is larger than the LVM partition"
+    else
+      reason="root storage already appears to use available LVM/disk space"
+    fi
+  elif [[ "$layout" == "partition" ]]; then
+    if [[ "$disk_bytes" =~ ^[0-9]+$ && "$part_bytes" =~ ^[0-9]+$ ]] && (( disk_bytes > part_bytes + 1073741824 )); then
+      can_expand="yes"
+      reason="VM disk is larger than the root partition"
+    else
+      reason="root partition already appears to use available disk space"
+    fi
+  else
+    can_expand="no"
+    reason="${reason:-storage layout is not supported for automatic expansion}"
   fi
 
   printf '%s\n' "$data"
   printf 'ROOT_BYTES=%s\nDISK_BYTES=%s\nPART_BYTES=%s\nVG_FREE_BYTES=%s\nCAN_EXPAND=%s\nREASON=%s\n' \
-    "$root_bytes" "$disk_bytes" "$part_bytes" "$vg_free_bytes" "$can_expand" "${reason:-}"
+    "$root_bytes" "$disk_bytes" "$part_bytes" "$vg_free_bytes" "$can_expand" "$reason"
 }
 
 show_storage_status() {
@@ -1502,10 +1525,14 @@ expand_root_storage() {
   status_line "Layout" "INFO" "$layout"
 
   if [[ "${EXPAND_ROOT_CONFIRMED:-0}" != "1" && "$ASSUME_YES" -ne 1 ]]; then
-    if ! confirm "Expand root storage now?"; then
-      warn "Storage expansion skipped."
-      echo "============================================================"
-      return 0
+    if [[ -t 0 ]]; then
+      read -r -p "Expand root storage now? [Y/n]: " reply
+      reply="${reply:-Y}"
+      if ! [[ "$reply" =~ ^[Yy]$ ]]; then
+        warn "Storage expansion skipped."
+        echo "============================================================"
+        return 0
+      fi
     fi
   fi
 
@@ -5234,8 +5261,8 @@ run_install() {
   require_sudo
   check_os
   check_internet
-  check_resources
   maybe_offer_root_storage_expansion
+  check_resources
   prompt_for_site_name_if_needed
 
   if path_is_dir "$BENCH_PARENT"; then

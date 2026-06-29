@@ -1,5 +1,5 @@
 
-## v0.8.14 - LVM storage detector fallback fix
+## v0.8.15 - LVM storage detector fallback and order fix
 
 - Improved generic LVM root detection for common Ubuntu layouts.
 - Added lsblk PKNAME fallback for `/dev/mapper/<vg>--<lv>` root devices.
