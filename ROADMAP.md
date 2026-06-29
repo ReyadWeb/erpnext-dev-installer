@@ -1,6 +1,6 @@
-# Roadmap v0.8.12
+# Roadmap v0.8.13
 
-## Completed in v0.8.12
+## Completed in v0.8.13
 
 - Generic root storage detection.
 - Generic root storage expansion for common Ubuntu VM layouts.

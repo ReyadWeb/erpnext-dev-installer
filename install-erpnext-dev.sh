@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.8.12"
+SCRIPT_VERSION="0.8.13"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1118,6 +1118,28 @@ storage_parent_disk() {
   printf '/dev/%s\n' "$parent"
 }
 
+
+
+storage_infer_disk_from_partition() {
+  local part_dev="$1"
+  local disk_dev=""
+
+  # Common Linux partition names:
+  # /dev/vda3, /dev/sda3, /dev/xvda3, /dev/nvme0n1p3, /dev/mmcblk0p3
+  if [[ "$part_dev" =~ ^(/dev/(nvme[0-9]+n[0-9]+|mmcblk[0-9]+))p([0-9]+)$ ]]; then
+    disk_dev="${BASH_REMATCH[1]}"
+  elif [[ "$part_dev" =~ ^(/dev/[a-zA-Z]+[a-zA-Z0-9]*)([0-9]+)$ ]]; then
+    disk_dev="${BASH_REMATCH[1]}"
+  fi
+
+  if [[ -n "$disk_dev" && -b "$disk_dev" ]]; then
+    printf '%s\n' "$disk_dev"
+    return 0
+  fi
+
+  return 1
+}
+
 storage_root_lsblk_value() {
   local key line
   key="$1"
@@ -1128,116 +1150,92 @@ storage_root_lsblk_value() {
 
 storage_detect_layout() {
   local root_source root_source_real root_fstype root_type
-  local root_lsblk_type root_pkname root_pkdev
   local lv_path vg_name pv_lines pv_count pv_dev disk_dev part_num
-  local cand_lv cand_vg cand_real pkname
+  local cand_lv cand_vg cand_real source_real pv_real pv_type root_pkname root_pkdev
 
   root_source="$(findmnt -n -o SOURCE / 2>/dev/null | head -n 1 || true)"
   root_fstype="$(findmnt -n -o FSTYPE / 2>/dev/null | head -n 1 || true)"
   [[ -n "$root_source" ]] || return 1
 
   root_source_real="$(readlink -f "$root_source" 2>/dev/null || printf '%s\n' "$root_source")"
+  source_real="$root_source_real"
   root_type="$(lsblk -no TYPE "$root_source" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
-  if [[ -z "$root_type" && -n "$root_source_real" ]]; then
-    root_type="$(lsblk -no TYPE "$root_source_real" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
-  fi
+  [[ -n "$root_type" ]] || root_type="$(lsblk -no TYPE "$root_source_real" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
 
-  # Strong global fallback. For LVM roots, targeted lsblk calls against /dev/mapper/*
-  # can return empty PKNAME on some systems, while the full lsblk tree still shows
-  # the root mount's parent partition, for example: ubuntu--vg-ubuntu--lv ... / vda3.
-  root_lsblk_type="$(storage_root_lsblk_value TYPE 2>/dev/null || true)"
-  root_pkname="$(storage_root_lsblk_value PKNAME 2>/dev/null || true)"
-  [[ -n "$root_type" ]] || root_type="$root_lsblk_type"
+  # Full-tree fallback: this is reliable for common Ubuntu LVM where root is a mapper
+  # device but the lsblk tree still shows the root LV parent as the PV partition.
+  root_pkname="$(lsblk -P -o NAME,TYPE,PKNAME,MOUNTPOINTS 2>/dev/null | awk 'index($0, "MOUNTPOINTS=\"/\"") {print; exit}' | sed -n 's/.*PKNAME="\([^"]*\)".*/\1/p')"
   if [[ -n "$root_pkname" && -b "/dev/$root_pkname" ]]; then
     root_pkdev="/dev/$root_pkname"
   fi
 
-  # LVM root detection.
   if [[ "$root_type" == "lvm" || "$root_source" == /dev/mapper/* || "$root_source_real" == /dev/dm-* ]]; then
     if ! command -v lvs >/dev/null 2>&1 || ! command -v pvs >/dev/null 2>&1; then
       printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "LVM tools are not available"
       return 0
     fi
 
-    lv_path="$(lvs --noheadings -o lv_path "$root_source" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
-    if [[ -z "$lv_path" && "$root_source_real" != "$root_source" ]]; then
-      lv_path="$(lvs --noheadings -o lv_path "$root_source_real" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
-    fi
+    # Resolve the mounted LV by comparing real device paths.
+    while IFS='|' read -r cand_lv cand_vg; do
+      cand_lv="$(printf '%s' "$cand_lv" | awk '{$1=$1; print}')"
+      cand_vg="$(printf '%s' "$cand_vg" | awk '{$1=$1; print}')"
+      [[ -n "$cand_lv" ]] || continue
+      cand_real="$(readlink -f "$cand_lv" 2>/dev/null || printf '%s\n' "$cand_lv")"
+      if [[ "$cand_lv" == "$root_source" || "$cand_lv" == "$root_source_real" || "$cand_real" == "$source_real" ]]; then
+        lv_path="$cand_lv"
+        vg_name="$cand_vg"
+        break
+      fi
+    done < <(lvs --noheadings --separator '|' -o lv_path,vg_name 2>/dev/null || true)
 
-    if [[ -z "$lv_path" ]]; then
-      while read -r cand_lv cand_vg _; do
-        [[ -n "$cand_lv" ]] || continue
-        cand_real="$(readlink -f "$cand_lv" 2>/dev/null || printf '%s\n' "$cand_lv")"
-        if [[ "$cand_lv" == "$root_source" || "$cand_lv" == "$root_source_real" || "$cand_real" == "$root_source_real" ]]; then
-          lv_path="$cand_lv"
-          vg_name="$cand_vg"
-          break
-        fi
-      done < <(lvs --noheadings -o lv_path,vg_name 2>/dev/null || true)
-    fi
-
-    # Last safe fallback: lvextend accepts mapper paths on normal LVM systems.
     [[ -n "$lv_path" ]] || lv_path="$root_source"
+    [[ -n "$vg_name" ]] || vg_name="$(lvs --noheadings -o vg_name "$lv_path" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
 
-    vg_name="${vg_name:-$(lvs --noheadings -o vg_name "$lv_path" 2>/dev/null | awk 'NF {print $1; exit}' || true)}"
-
-    # Most reliable first: use the root mount's parent partition from the lsblk tree.
     if [[ -n "${root_pkdev:-}" ]]; then
       pv_lines="$root_pkdev"
-    else
-      pv_lines="$(lvs --noheadings -o devices "$lv_path" 2>/dev/null \
-        | sed -E 's/,/\n/g; s/[[:space:]]+/\n/g; s/\([0-9]+\)//g' \
-        | awk '/^\/dev\// {print}' \
-        | sort -u || true)"
-    fi
-
-    # Secondary fallback: targeted PKNAME query.
-    if [[ -z "$pv_lines" ]]; then
-      pkname="$(lsblk -no PKNAME "$root_source" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
-      if [[ -z "$pkname" && -n "$root_source_real" ]]; then
-        pkname="$(lsblk -no PKNAME "$root_source_real" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
-      fi
-      if [[ -n "$pkname" && -b "/dev/$pkname" ]]; then
-        pv_lines="/dev/$pkname"
-      fi
-    fi
-
-    # Tertiary fallback: if the VG has exactly one PV, use it.
-    if [[ -z "$pv_lines" && -n "$vg_name" ]]; then
-      pv_lines="$(pvs --noheadings -o pv_name,vg_name 2>/dev/null \
-        | awk -v vg="$vg_name" '{if ($2 == vg) print $1}' \
-        | sort -u || true)"
+    elif [[ -n "$vg_name" ]]; then
+      pv_lines="$(pvs --noheadings --separator '|' -o pv_name,vg_name 2>/dev/null \
+        | awk -F'|' -v vg="$vg_name" '{gsub(/^[ \t]+|[ \t]+$/, "", $1); gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($2 == vg) print $1}' \
+        | sed -E 's/\([0-9]+\)//g' | sort -u || true)"
     fi
 
     pv_count="$(printf '%s\n' "$pv_lines" | awk 'NF {c++} END {print c+0}')"
 
     if [[ "$pv_count" -eq 1 ]]; then
-      pv_dev="$(printf '%s\n' "$pv_lines" | awk 'NF {print $1; exit}')"
-      if [[ "$(lsblk -no TYPE "$pv_dev" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)" == "part" ]]; then
-        disk_dev="$(storage_parent_disk "$pv_dev" 2>/dev/null || true)"
-        part_num="$(storage_part_number "$pv_dev" 2>/dev/null || true)"
-        if [[ -n "$disk_dev" && -n "$part_num" ]]; then
-          printf 'LAYOUT=lvm\nROOT_SOURCE=%s\nROOT_FS=%s\nLV_PATH=%s\nVG_NAME=%s\nPV_DEV=%s\nPART_DEV=%s\nDISK_DEV=%s\nPART_NUM=%s\n' \
-            "$root_source" "$root_fstype" "$lv_path" "$vg_name" "$pv_dev" "$pv_dev" "$disk_dev" "$part_num"
-          return 0
-        fi
+      pv_dev="$(printf '%s\n' "$pv_lines" | awk 'NF {print $1; exit}' | sed -E 's/\([0-9]+\)//g')"
+      pv_dev="$(readlink -f "$pv_dev" 2>/dev/null || printf '%s\n' "$pv_dev")"
+
+      pv_type="$(lsblk -no TYPE "$pv_dev" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
+      disk_dev="$(storage_parent_disk "$pv_dev" 2>/dev/null || true)"
+      part_num="$(lsblk -no PARTN "$pv_dev" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
+      [[ -n "$part_num" ]] || part_num="$(storage_part_number "$pv_dev" 2>/dev/null || true)"
+      [[ -n "$disk_dev" ]] || disk_dev="$(storage_infer_disk_from_partition "$pv_dev" 2>/dev/null || true)"
+
+      if [[ -n "$disk_dev" && -n "$part_num" && -b "$disk_dev" && -b "$pv_dev" ]]; then
+        printf 'LAYOUT=lvm\nROOT_SOURCE=%s\nROOT_FS=%s\nLV_PATH=%s\nVG_NAME=%s\nPV_DEV=%s\nPART_DEV=%s\nDISK_DEV=%s\nPART_NUM=%s\nPV_TYPE=%s\n' \
+          "$root_source" "$root_fstype" "$lv_path" "$vg_name" "$pv_dev" "$pv_dev" "$disk_dev" "$part_num" "${pv_type:-unknown}"
+        return 0
       fi
 
-      printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "LVM PV is not a growable partition"
+      # Return LVM even without a growable partition. lvextend can still use existing VG free extents.
+      printf 'LAYOUT=lvm\nROOT_SOURCE=%s\nROOT_FS=%s\nLV_PATH=%s\nVG_NAME=%s\nPV_DEV=%s\nREASON=%s\n' \
+        "$root_source" "$root_fstype" "$lv_path" "$vg_name" "$pv_dev" "LVM PV could not be tied to a disk partition; only existing VG free space can be used automatically"
       return 0
     fi
 
     if [[ "$pv_count" -gt 1 ]]; then
-      printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "LVM has multiple PVs; automatic expansion skipped"
+      printf 'LAYOUT=lvm\nROOT_SOURCE=%s\nROOT_FS=%s\nLV_PATH=%s\nVG_NAME=%s\nREASON=%s\n' "$root_source" "$root_fstype" "$lv_path" "$vg_name" "LVM has multiple PVs; only existing VG free space can be used automatically"
     else
-      printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "could not trace LVM root to a physical partition"
+      printf 'LAYOUT=lvm\nROOT_SOURCE=%s\nROOT_FS=%s\nLV_PATH=%s\nVG_NAME=%s\nREASON=%s\n' "$root_source" "$root_fstype" "$lv_path" "$vg_name" "could not trace LVM root to a physical partition; only existing VG free space can be used automatically"
     fi
     return 0
   fi
 
   if [[ "$root_type" == "part" ]]; then
     disk_dev="$(storage_parent_disk "$root_source_real" 2>/dev/null || true)"
-    part_num="$(storage_part_number "$root_source_real" 2>/dev/null || true)"
+    part_num="$(lsblk -no PARTN "$root_source_real" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
+    [[ -n "$part_num" ]] || part_num="$(storage_part_number "$root_source_real" 2>/dev/null || true)"
+    [[ -n "$disk_dev" ]] || disk_dev="$(storage_infer_disk_from_partition "$root_source_real" 2>/dev/null || true)"
     if [[ -n "$disk_dev" && -n "$part_num" ]]; then
       printf 'LAYOUT=partition\nROOT_SOURCE=%s\nROOT_FS=%s\nPART_DEV=%s\nDISK_DEV=%s\nPART_NUM=%s\n' \
         "$root_source_real" "$root_fstype" "$root_source_real" "$disk_dev" "$part_num"
@@ -1302,7 +1300,7 @@ storage_eval() {
 }
 
 show_storage_status() {
-  local data layout root_source root_fs disk_dev part_dev lv_path root_bytes disk_bytes can_expand reason
+  local data layout root_source root_fs disk_dev part_dev lv_path root_bytes disk_bytes vg_free_bytes can_expand reason
 
   data="$(storage_eval)"
   while IFS='=' read -r k v; do
@@ -1315,6 +1313,7 @@ show_storage_status() {
       LV_PATH) lv_path="$v" ;;
       ROOT_BYTES) root_bytes="$v" ;;
       DISK_BYTES) disk_bytes="$v" ;;
+      VG_FREE_BYTES) vg_free_bytes="$v" ;;
       CAN_EXPAND) can_expand="$v" ;;
       REASON) reason="$v" ;;
     esac
@@ -1329,6 +1328,9 @@ show_storage_status() {
   [[ -n "${disk_dev:-}" ]] && status_line "Backing disk" "INFO" "${disk_dev} ($(bytes_to_gib "${disk_bytes:-0}"))"
   [[ -n "${part_dev:-}" ]] && status_line "Root partition/PV" "INFO" "${part_dev}"
   [[ -n "${lv_path:-}" ]] && status_line "Root LV" "INFO" "${lv_path}"
+  if [[ "${layout:-}" == "lvm" && "${vg_free_bytes:-0}" =~ ^[0-9]+$ && "${vg_free_bytes:-0}" -gt 0 ]]; then
+    status_line "VG free" "INFO" "$(bytes_to_gib "${vg_free_bytes:-0}")"
+  fi
   status_line "Root size" "INFO" "$(bytes_to_gib "${root_bytes:-0}")"
 
   if [[ "${can_expand:-no}" == "yes" ]]; then
@@ -1360,7 +1362,7 @@ ensure_storage_tools() {
 expand_root_storage() {
   require_sudo
 
-  local data layout root_fs lv_path pv_dev part_dev disk_dev part_num can_expand reason
+  local data layout root_fs lv_path pv_dev part_dev disk_dev part_num vg_free_bytes can_expand reason
 
   data="$(storage_eval)"
   while IFS='=' read -r k v; do
@@ -1372,6 +1374,7 @@ expand_root_storage() {
       PART_DEV) part_dev="$v" ;;
       DISK_DEV) disk_dev="$v" ;;
       PART_NUM) part_num="$v" ;;
+      VG_FREE_BYTES) vg_free_bytes="$v" ;;
       CAN_EXPAND) can_expand="$v" ;;
       REASON) reason="$v" ;;
     esac
@@ -1403,15 +1406,16 @@ expand_root_storage() {
     return 0
   fi
 
-  if [[ -z "${disk_dev:-}" || -z "${part_num:-}" || -z "${part_dev:-}" ]]; then
+  if [[ "$layout" != "lvm" && ( -z "${disk_dev:-}" || -z "${part_num:-}" || -z "${part_dev:-}" ) ]]; then
     status_line "Storage" "WARN" "could not identify disk/partition safely"
     echo "No changes made."
     echo "============================================================"
     return 0
   fi
 
-  status_line "Target disk" "INFO" "$disk_dev"
-  status_line "Target partition" "INFO" "$part_dev"
+  [[ -n "${disk_dev:-}" ]] && status_line "Target disk" "INFO" "$disk_dev"
+  [[ -n "${part_dev:-}" ]] && status_line "Target partition" "INFO" "$part_dev"
+  [[ -n "${lv_path:-}" ]] && status_line "Target LV" "INFO" "$lv_path"
   status_line "Layout" "INFO" "$layout"
 
   if [[ "${EXPAND_ROOT_CONFIRMED:-0}" != "1" && "$ASSUME_YES" -ne 1 ]]; then
@@ -1424,27 +1428,41 @@ expand_root_storage() {
 
   ensure_storage_tools
 
-  log "Growing partition ${part_dev}"
-  if command -v sgdisk >/dev/null 2>&1; then
-    $SUDO sgdisk -e "$disk_dev" >/dev/null 2>&1 || true
-  fi
-  $SUDO partprobe "$disk_dev" >/dev/null 2>&1 || true
-
-  if ! $SUDO growpart "$disk_dev" "$part_num"; then
-    warn "growpart did not report a clean change. Continuing with filesystem/LVM resize if possible."
-  fi
-  $SUDO partprobe "$disk_dev" >/dev/null 2>&1 || true
-
   if [[ "$layout" == "lvm" ]]; then
     if ! command -v pvresize >/dev/null 2>&1 || ! command -v lvextend >/dev/null 2>&1; then
       log "Installing LVM tools"
       $SUDO apt-get install -y lvm2
     fi
-    log "Growing LVM physical volume"
-    $SUDO pvresize "${pv_dev:-$part_dev}"
+
+    if [[ -n "${disk_dev:-}" && -n "${part_num:-}" && -n "${part_dev:-}" ]]; then
+      log "Growing partition ${part_dev}"
+      if command -v sgdisk >/dev/null 2>&1; then
+        $SUDO sgdisk -e "$disk_dev" >/dev/null 2>&1 || true
+      fi
+      $SUDO partprobe "$disk_dev" >/dev/null 2>&1 || true
+      if ! $SUDO growpart "$disk_dev" "$part_num"; then
+        warn "growpart did not report a clean change. Continuing with LVM resize if possible."
+      fi
+      $SUDO partprobe "$disk_dev" >/dev/null 2>&1 || true
+      log "Growing LVM physical volume"
+      $SUDO pvresize "${pv_dev:-$part_dev}"
+    else
+      warn "Could not safely grow the LVM physical partition. Using existing VG free space only."
+    fi
+
     log "Extending root logical volume"
     $SUDO lvextend -r -l +100%FREE "$lv_path"
   else
+    log "Growing partition ${part_dev}"
+    if command -v sgdisk >/dev/null 2>&1; then
+      $SUDO sgdisk -e "$disk_dev" >/dev/null 2>&1 || true
+    fi
+    $SUDO partprobe "$disk_dev" >/dev/null 2>&1 || true
+
+    if ! $SUDO growpart "$disk_dev" "$part_num"; then
+      warn "growpart did not report a clean change. Continuing with filesystem resize if possible."
+    fi
+    $SUDO partprobe "$disk_dev" >/dev/null 2>&1 || true
     case "$root_fs" in
       ext2|ext3|ext4)
         log "Growing ${root_fs} filesystem"
@@ -1480,7 +1498,7 @@ verify_storage() {
 }
 
 maybe_offer_root_storage_expansion() {
-  local data can_expand root_bytes disk_bytes layout reply
+  local data can_expand root_bytes disk_bytes vg_free_bytes layout reply
 
   data="$(storage_eval)"
   while IFS='=' read -r k v; do
@@ -1488,6 +1506,7 @@ maybe_offer_root_storage_expansion() {
       CAN_EXPAND) can_expand="$v" ;;
       ROOT_BYTES) root_bytes="$v" ;;
       DISK_BYTES) disk_bytes="$v" ;;
+      VG_FREE_BYTES) vg_free_bytes="$v" ;;
       LAYOUT) layout="$v" ;;
     esac
   done <<< "$data"
@@ -1497,7 +1516,13 @@ maybe_offer_root_storage_expansion() {
   fi
 
   echo
-  echo "Storage: root uses $(bytes_to_gib "${root_bytes:-0}") of $(bytes_to_gib "${disk_bytes:-0}") disk."
+  if [[ "${disk_bytes:-0}" =~ ^[0-9]+$ && "${disk_bytes:-0}" -gt 0 ]]; then
+    echo "Storage: root uses $(bytes_to_gib "${root_bytes:-0}") of $(bytes_to_gib "${disk_bytes:-0}") disk."
+  elif [[ "${layout:-}" == "lvm" && "${vg_free_bytes:-0}" =~ ^[0-9]+$ && "${vg_free_bytes:-0}" -gt 0 ]]; then
+    echo "Storage: root can use $(bytes_to_gib "${vg_free_bytes:-0}") free LVM space."
+  else
+    echo "Storage expansion is available."
+  fi
 
   if [[ "${AUTO_EXPAND_ROOT:-prompt}" == "false" ]]; then
     warn "Root storage expansion skipped by AUTO_EXPAND_ROOT=false."
