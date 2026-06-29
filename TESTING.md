@@ -1,4 +1,4 @@
-# Testing v0.8.11
+# Testing v0.8.12
 
 ## Version check
 
@@ -77,7 +77,7 @@ curl -I http://YOUR-SITE.test:8000
 ```
 
 
-## v0.8.11 LVM regression test
+## v0.8.12 LVM regression test
 
 On a fresh/cloned Ubuntu VM, run:
 
@@ -103,7 +103,7 @@ df -h /
 ./install-erpnext-dev.sh verify-storage
 ```
 
-### v0.8.11 LVM storage test
+### v0.8.12 LVM storage test
 
 On a fresh Ubuntu VM with a larger virtual disk than root filesystem:
 

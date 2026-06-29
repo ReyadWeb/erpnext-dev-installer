@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.8.11"
+SCRIPT_VERSION="0.8.12"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1118,25 +1118,47 @@ storage_parent_disk() {
   printf '/dev/%s\n' "$parent"
 }
 
+storage_root_lsblk_value() {
+  local key line
+  key="$1"
+  line="$(lsblk -P -o NAME,TYPE,PKNAME,MOUNTPOINTS 2>/dev/null | awk 'index($0, "MOUNTPOINTS=\"/\"") {print; exit}')"
+  [[ -n "$line" ]] || return 1
+  printf '%s\n' "$line" | sed -n "s/.*${key}=\"\([^\"]*\)\".*/\1/p"
+}
+
 storage_detect_layout() {
   local root_source root_source_real root_fstype root_type
+  local root_lsblk_type root_pkname root_pkdev
   local lv_path vg_name pv_lines pv_count pv_dev disk_dev part_num
   local cand_lv cand_vg cand_real pkname
 
   root_source="$(findmnt -n -o SOURCE / 2>/dev/null | head -n 1 || true)"
   root_fstype="$(findmnt -n -o FSTYPE / 2>/dev/null | head -n 1 || true)"
+  [[ -n "$root_source" ]] || return 1
+
   root_source_real="$(readlink -f "$root_source" 2>/dev/null || printf '%s\n' "$root_source")"
   root_type="$(lsblk -no TYPE "$root_source" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
   if [[ -z "$root_type" && -n "$root_source_real" ]]; then
     root_type="$(lsblk -no TYPE "$root_source_real" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
   fi
 
-  [[ -n "$root_source" ]] || return 1
+  # Strong global fallback. For LVM roots, targeted lsblk calls against /dev/mapper/*
+  # can return empty PKNAME on some systems, while the full lsblk tree still shows
+  # the root mount's parent partition, for example: ubuntu--vg-ubuntu--lv ... / vda3.
+  root_lsblk_type="$(storage_root_lsblk_value TYPE 2>/dev/null || true)"
+  root_pkname="$(storage_root_lsblk_value PKNAME 2>/dev/null || true)"
+  [[ -n "$root_type" ]] || root_type="$root_lsblk_type"
+  if [[ -n "$root_pkname" && -b "/dev/$root_pkname" ]]; then
+    root_pkdev="/dev/$root_pkname"
+  fi
 
   # LVM root detection.
-  # Generic Ubuntu installs often mount / from /dev/mapper/<vg>--<lv>, while lvs reports
-  # /dev/<vg>/<lv>. We therefore resolve aliases and also use lsblk PKNAME as a fallback.
-  if command -v lvs >/dev/null 2>&1 && command -v pvs >/dev/null 2>&1; then
+  if [[ "$root_type" == "lvm" || "$root_source" == /dev/mapper/* || "$root_source_real" == /dev/dm-* ]]; then
+    if ! command -v lvs >/dev/null 2>&1 || ! command -v pvs >/dev/null 2>&1; then
+      printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "LVM tools are not available"
+      return 0
+    fi
+
     lv_path="$(lvs --noheadings -o lv_path "$root_source" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
     if [[ -z "$lv_path" && "$root_source_real" != "$root_source" ]]; then
       lv_path="$(lvs --noheadings -o lv_path "$root_source_real" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
@@ -1154,59 +1176,63 @@ storage_detect_layout() {
       done < <(lvs --noheadings -o lv_path,vg_name 2>/dev/null || true)
     fi
 
-    # If lsblk says the root source is an LVM device but lvs alias resolution failed,
-    # still continue with root_source as the LV target. lvextend accepts mapper paths.
-    if [[ -z "$lv_path" && "$root_type" == "lvm" ]]; then
-      lv_path="$root_source"
-    fi
+    # Last safe fallback: lvextend accepts mapper paths on normal LVM systems.
+    [[ -n "$lv_path" ]] || lv_path="$root_source"
 
-    if [[ -n "$lv_path" ]]; then
-      vg_name="${vg_name:-$(lvs --noheadings -o vg_name "$lv_path" 2>/dev/null | awk 'NF {print $1; exit}' || true)}"
+    vg_name="${vg_name:-$(lvs --noheadings -o vg_name "$lv_path" 2>/dev/null | awk 'NF {print $1; exit}' || true)}"
 
+    # Most reliable first: use the root mount's parent partition from the lsblk tree.
+    if [[ -n "${root_pkdev:-}" ]]; then
+      pv_lines="$root_pkdev"
+    else
       pv_lines="$(lvs --noheadings -o devices "$lv_path" 2>/dev/null \
         | sed -E 's/,/\n/g; s/[[:space:]]+/\n/g; s/\([0-9]+\)//g' \
         | awk '/^\/dev\// {print}' \
         | sort -u || true)"
+    fi
 
-      # Strong fallback: for common dm/LVM roots, lsblk can report the parent partition
-      # directly, for example /dev/mapper/ubuntu--vg-ubuntu--lv -> PKNAME vda3.
-      if [[ -z "$pv_lines" ]]; then
-        pkname="$(lsblk -no PKNAME "$root_source" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
-        if [[ -z "$pkname" && -n "$root_source_real" ]]; then
-          pkname="$(lsblk -no PKNAME "$root_source_real" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
-        fi
-        if [[ -n "$pkname" && -b "/dev/$pkname" ]]; then
-          pv_lines="/dev/$pkname"
+    # Secondary fallback: targeted PKNAME query.
+    if [[ -z "$pv_lines" ]]; then
+      pkname="$(lsblk -no PKNAME "$root_source" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
+      if [[ -z "$pkname" && -n "$root_source_real" ]]; then
+        pkname="$(lsblk -no PKNAME "$root_source_real" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
+      fi
+      if [[ -n "$pkname" && -b "/dev/$pkname" ]]; then
+        pv_lines="/dev/$pkname"
+      fi
+    fi
+
+    # Tertiary fallback: if the VG has exactly one PV, use it.
+    if [[ -z "$pv_lines" && -n "$vg_name" ]]; then
+      pv_lines="$(pvs --noheadings -o pv_name,vg_name 2>/dev/null \
+        | awk -v vg="$vg_name" '{if ($2 == vg) print $1}' \
+        | sort -u || true)"
+    fi
+
+    pv_count="$(printf '%s\n' "$pv_lines" | awk 'NF {c++} END {print c+0}')"
+
+    if [[ "$pv_count" -eq 1 ]]; then
+      pv_dev="$(printf '%s\n' "$pv_lines" | awk 'NF {print $1; exit}')"
+      if [[ "$(lsblk -no TYPE "$pv_dev" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)" == "part" ]]; then
+        disk_dev="$(storage_parent_disk "$pv_dev" 2>/dev/null || true)"
+        part_num="$(storage_part_number "$pv_dev" 2>/dev/null || true)"
+        if [[ -n "$disk_dev" && -n "$part_num" ]]; then
+          printf 'LAYOUT=lvm\nROOT_SOURCE=%s\nROOT_FS=%s\nLV_PATH=%s\nVG_NAME=%s\nPV_DEV=%s\nPART_DEV=%s\nDISK_DEV=%s\nPART_NUM=%s\n' \
+            "$root_source" "$root_fstype" "$lv_path" "$vg_name" "$pv_dev" "$pv_dev" "$disk_dev" "$part_num"
+          return 0
         fi
       fi
 
-      if [[ -z "$pv_lines" && -n "$vg_name" ]]; then
-        pv_lines="$(pvs --noheadings -o pv_name,vg_name 2>/dev/null \
-          | awk -v vg="$vg_name" '{if ($2 == vg) print $1}' \
-          | sort -u || true)"
-      fi
-
-      pv_count="$(printf '%s\n' "$pv_lines" | awk 'NF {c++} END {print c+0}')"
-
-      if [[ "$pv_count" -eq 1 ]]; then
-        pv_dev="$(printf '%s\n' "$pv_lines" | awk 'NF {print $1; exit}')"
-        if [[ "$(lsblk -no TYPE "$pv_dev" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)" == "part" ]]; then
-          disk_dev="$(storage_parent_disk "$pv_dev" 2>/dev/null || true)"
-          part_num="$(storage_part_number "$pv_dev" 2>/dev/null || true)"
-          if [[ -n "$disk_dev" && -n "$part_num" ]]; then
-            printf 'LAYOUT=lvm\nROOT_SOURCE=%s\nROOT_FS=%s\nLV_PATH=%s\nVG_NAME=%s\nPV_DEV=%s\nPART_DEV=%s\nDISK_DEV=%s\nPART_NUM=%s\n' \
-              "$root_source" "$root_fstype" "$lv_path" "$vg_name" "$pv_dev" "$pv_dev" "$disk_dev" "$part_num"
-            return 0
-          fi
-        fi
-
-        printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "LVM PV is not a growable partition"
-        return 0
-      fi
-
-      printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "LVM has zero or multiple PVs"
+      printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "LVM PV is not a growable partition"
       return 0
     fi
+
+    if [[ "$pv_count" -gt 1 ]]; then
+      printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "LVM has multiple PVs; automatic expansion skipped"
+    else
+      printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "could not trace LVM root to a physical partition"
+    fi
+    return 0
   fi
 
   if [[ "$root_type" == "part" ]]; then
