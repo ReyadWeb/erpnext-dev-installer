@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.8.8"
+SCRIPT_VERSION="0.8.9"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1076,6 +1076,367 @@ check_resources() {
     ok "Available disk: ${disk_gb} GB"
   fi
 }
+
+# ============================================================
+# Generic root storage detection / expansion
+# ============================================================
+
+bytes_to_gib() {
+  local bytes="${1:-0}"
+  python3 - "$bytes" <<'PY_GIB'
+import sys
+try:
+    b = int(float(sys.argv[1]))
+except Exception:
+    b = 0
+print(f"{round(b / (1024 ** 3))}G")
+PY_GIB
+}
+
+storage_part_number() {
+  local part_name
+  part_name="$(basename "$1")"
+
+  if [[ "$part_name" =~ p([0-9]+)$ ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+
+  if [[ "$part_name" =~ ([0-9]+)$ ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+
+  return 1
+}
+
+storage_parent_disk() {
+  local part_dev="$1"
+  local parent=""
+  parent="$(lsblk -no PKNAME "$part_dev" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
+  [[ -n "$parent" ]] || return 1
+  printf '/dev/%s\n' "$parent"
+}
+
+storage_detect_layout() {
+  local root_source root_source_real root_fstype root_type lv_path vg_name pv_lines pv_count pv_dev disk_dev part_num
+
+  root_source="$(findmnt -n -o SOURCE / 2>/dev/null | head -n 1 || true)"
+  root_fstype="$(findmnt -n -o FSTYPE / 2>/dev/null | head -n 1 || true)"
+  root_source_real="$(readlink -f "$root_source" 2>/dev/null || printf '%s\n' "$root_source")"
+  root_type="$(lsblk -no TYPE "$root_source_real" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
+
+  [[ -n "$root_source" ]] || return 1
+
+  if command -v lvs >/dev/null 2>&1; then
+    lv_path="$(lvs --noheadings -o lv_path "$root_source" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
+    if [[ -z "$lv_path" && "$root_source_real" != "$root_source" ]]; then
+      lv_path="$(lvs --noheadings -o lv_path "$root_source_real" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
+    fi
+
+    if [[ -n "$lv_path" ]]; then
+      vg_name="$(lvs --noheadings -o vg_name "$lv_path" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
+      pv_lines="$(pvs --noheadings --separator '|' -o pv_name,vg_name 2>/dev/null | awk -F'|' -v vg="$vg_name" '{gsub(/^[ \t]+|[ \t]+$/, "", $1); gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($2 == vg) print $1}' || true)"
+      pv_count="$(printf '%s\n' "$pv_lines" | awk 'NF {c++} END {print c+0}')"
+
+      if [[ "$pv_count" -eq 1 ]]; then
+        pv_dev="$(printf '%s\n' "$pv_lines" | awk 'NF {print $1; exit}')"
+        if [[ "$(lsblk -no TYPE "$pv_dev" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)" == "part" ]]; then
+          disk_dev="$(storage_parent_disk "$pv_dev" 2>/dev/null || true)"
+          part_num="$(storage_part_number "$pv_dev" 2>/dev/null || true)"
+          if [[ -n "$disk_dev" && -n "$part_num" ]]; then
+            printf 'LAYOUT=lvm\nROOT_SOURCE=%s\nROOT_FS=%s\nLV_PATH=%s\nVG_NAME=%s\nPV_DEV=%s\nPART_DEV=%s\nDISK_DEV=%s\nPART_NUM=%s\n' \
+              "$root_source" "$root_fstype" "$lv_path" "$vg_name" "$pv_dev" "$pv_dev" "$disk_dev" "$part_num"
+            return 0
+          fi
+        fi
+
+        printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "LVM PV is not a growable partition"
+        return 0
+      fi
+
+      printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "LVM has zero or multiple PVs"
+      return 0
+    fi
+  fi
+
+  if [[ "$root_type" == "part" ]]; then
+    disk_dev="$(storage_parent_disk "$root_source_real" 2>/dev/null || true)"
+    part_num="$(storage_part_number "$root_source_real" 2>/dev/null || true)"
+    if [[ -n "$disk_dev" && -n "$part_num" ]]; then
+      printf 'LAYOUT=partition\nROOT_SOURCE=%s\nROOT_FS=%s\nPART_DEV=%s\nDISK_DEV=%s\nPART_NUM=%s\n' \
+        "$root_source_real" "$root_fstype" "$root_source_real" "$disk_dev" "$part_num"
+      return 0
+    fi
+  fi
+
+  printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "root device is not a supported partition or LVM layout"
+  return 0
+}
+
+storage_eval() {
+  local data layout root_fs disk_dev part_dev lv_path vg_free_bytes disk_bytes part_bytes root_bytes can_expand reason
+
+  data="$(storage_detect_layout 2>/dev/null || true)"
+  [[ -n "$data" ]] || {
+    printf 'LAYOUT=unknown\nCAN_EXPAND=no\nREASON=storage layout could not be detected\n'
+    return 0
+  }
+
+  # shellcheck disable=SC2163
+  while IFS='=' read -r k v; do
+    case "$k" in
+      LAYOUT) layout="$v" ;;
+      ROOT_FS) root_fs="$v" ;;
+      DISK_DEV) disk_dev="$v" ;;
+      PART_DEV) part_dev="$v" ;;
+      LV_PATH) lv_path="$v" ;;
+      REASON) reason="$v" ;;
+    esac
+  done <<< "$data"
+
+  root_bytes="$(df -B1 / 2>/dev/null | awk 'NR==2 {print $2+0}' || echo 0)"
+  disk_bytes="0"
+  part_bytes="0"
+  vg_free_bytes="0"
+  can_expand="no"
+
+  if [[ -n "${disk_dev:-}" && -b "$disk_dev" ]]; then
+    disk_bytes="$(blockdev --getsize64 "$disk_dev" 2>/dev/null || echo 0)"
+  fi
+  if [[ -n "${part_dev:-}" && -b "$part_dev" ]]; then
+    part_bytes="$(blockdev --getsize64 "$part_dev" 2>/dev/null || echo 0)"
+  fi
+  if [[ "${layout:-}" == "lvm" && -n "${lv_path:-}" ]] && command -v vgs >/dev/null 2>&1; then
+    vg_free_bytes="$(vgs --noheadings --units b --nosuffix -o vg_free "$(lvs --noheadings -o vg_name "$lv_path" 2>/dev/null | awk 'NF {print $1; exit}')" 2>/dev/null | awk '{printf "%.0f", $1+0}' || echo 0)"
+  fi
+
+  # Recommend expansion if the backing disk is at least 4 GiB larger than the root partition,
+  # or if LVM already has at least 1 GiB free extents that can be assigned to root.
+  if [[ "$disk_bytes" =~ ^[0-9]+$ && "$part_bytes" =~ ^[0-9]+$ ]] && (( disk_bytes > part_bytes + 4294967296 )); then
+    can_expand="yes"
+  elif [[ "$vg_free_bytes" =~ ^[0-9]+$ ]] && (( vg_free_bytes > 1073741824 )); then
+    can_expand="yes"
+  elif [[ -z "${reason:-}" ]]; then
+    reason="root storage already appears to use the available disk"
+  fi
+
+  printf '%s\n' "$data"
+  printf 'ROOT_BYTES=%s\nDISK_BYTES=%s\nPART_BYTES=%s\nVG_FREE_BYTES=%s\nCAN_EXPAND=%s\nREASON=%s\n' \
+    "$root_bytes" "$disk_bytes" "$part_bytes" "$vg_free_bytes" "$can_expand" "${reason:-}"
+}
+
+show_storage_status() {
+  local data layout root_source root_fs disk_dev part_dev root_bytes disk_bytes can_expand reason
+
+  data="$(storage_eval)"
+  while IFS='=' read -r k v; do
+    case "$k" in
+      LAYOUT) layout="$v" ;;
+      ROOT_SOURCE) root_source="$v" ;;
+      ROOT_FS) root_fs="$v" ;;
+      DISK_DEV) disk_dev="$v" ;;
+      PART_DEV) part_dev="$v" ;;
+      ROOT_BYTES) root_bytes="$v" ;;
+      DISK_BYTES) disk_bytes="$v" ;;
+      CAN_EXPAND) can_expand="$v" ;;
+      REASON) reason="$v" ;;
+    esac
+  done <<< "$data"
+
+  echo
+  echo "============================================================"
+  echo "Root Storage Status"
+  echo "============================================================"
+  status_line "Layout" "INFO" "${layout:-unknown}"
+  status_line "Root filesystem" "INFO" "${root_source:-unknown} (${root_fs:-unknown})"
+  [[ -n "${disk_dev:-}" ]] && status_line "Backing disk" "INFO" "${disk_dev} ($(bytes_to_gib "${disk_bytes:-0}"))"
+  [[ -n "${part_dev:-}" ]] && status_line "Root partition/PV" "INFO" "${part_dev}"
+  status_line "Root size" "INFO" "$(bytes_to_gib "${root_bytes:-0}")"
+
+  if [[ "${can_expand:-no}" == "yes" ]]; then
+    status_line "Expansion" "WARN" "recommended"
+    echo
+    echo "Run: ./install-erpnext-dev.sh expand-root-storage"
+  elif [[ "${layout:-unknown}" == "unknown" ]]; then
+    status_line "Expansion" "WARN" "not automatic"
+    [[ -n "${reason:-}" ]] && echo "Reason: ${reason}"
+  else
+    status_line "Expansion" "OK" "not needed"
+  fi
+  echo "============================================================"
+}
+
+ensure_storage_tools() {
+  local packages=()
+
+  command -v growpart >/dev/null 2>&1 || packages+=(cloud-guest-utils)
+  command -v sgdisk >/dev/null 2>&1 || packages+=(gdisk)
+
+  if [[ "${#packages[@]}" -gt 0 ]]; then
+    log "Installing storage resize tools"
+    $SUDO apt-get update
+    $SUDO apt-get install -y "${packages[@]}"
+  fi
+}
+
+expand_root_storage() {
+  require_sudo
+
+  local data layout root_fs lv_path pv_dev part_dev disk_dev part_num can_expand reason
+
+  data="$(storage_eval)"
+  while IFS='=' read -r k v; do
+    case "$k" in
+      LAYOUT) layout="$v" ;;
+      ROOT_FS) root_fs="$v" ;;
+      LV_PATH) lv_path="$v" ;;
+      PV_DEV) pv_dev="$v" ;;
+      PART_DEV) part_dev="$v" ;;
+      DISK_DEV) disk_dev="$v" ;;
+      PART_NUM) part_num="$v" ;;
+      CAN_EXPAND) can_expand="$v" ;;
+      REASON) reason="$v" ;;
+    esac
+  done <<< "$data"
+
+  echo
+  echo "============================================================"
+  echo "Expand Root Storage"
+  echo "============================================================"
+
+  if [[ "${can_expand:-no}" != "yes" ]]; then
+    status_line "Storage" "OK" "no expansion needed"
+    [[ -n "${reason:-}" ]] && echo "${reason}"
+    echo "============================================================"
+    return 0
+  fi
+
+  if [[ "${layout:-unknown}" != "lvm" && "${layout:-unknown}" != "partition" ]]; then
+    status_line "Storage" "WARN" "layout not supported"
+    [[ -n "${reason:-}" ]] && echo "Reason: ${reason}"
+    echo "No changes made."
+    echo "============================================================"
+    return 0
+  fi
+
+  if [[ -z "${disk_dev:-}" || -z "${part_num:-}" || -z "${part_dev:-}" ]]; then
+    status_line "Storage" "WARN" "could not identify disk/partition safely"
+    echo "No changes made."
+    echo "============================================================"
+    return 0
+  fi
+
+  status_line "Target disk" "INFO" "$disk_dev"
+  status_line "Target partition" "INFO" "$part_dev"
+  status_line "Layout" "INFO" "$layout"
+
+  if [[ "${EXPAND_ROOT_CONFIRMED:-0}" != "1" && "$ASSUME_YES" -ne 1 ]]; then
+    if ! confirm "Expand root storage now?"; then
+      warn "Storage expansion skipped."
+      echo "============================================================"
+      return 0
+    fi
+  fi
+
+  ensure_storage_tools
+
+  log "Growing partition ${part_dev}"
+  if command -v sgdisk >/dev/null 2>&1; then
+    $SUDO sgdisk -e "$disk_dev" >/dev/null 2>&1 || true
+  fi
+  $SUDO partprobe "$disk_dev" >/dev/null 2>&1 || true
+
+  if ! $SUDO growpart "$disk_dev" "$part_num"; then
+    warn "growpart did not report a clean change. Continuing with filesystem/LVM resize if possible."
+  fi
+  $SUDO partprobe "$disk_dev" >/dev/null 2>&1 || true
+
+  if [[ "$layout" == "lvm" ]]; then
+    if ! command -v pvresize >/dev/null 2>&1 || ! command -v lvextend >/dev/null 2>&1; then
+      log "Installing LVM tools"
+      $SUDO apt-get install -y lvm2
+    fi
+    log "Growing LVM physical volume"
+    $SUDO pvresize "${pv_dev:-$part_dev}"
+    log "Extending root logical volume"
+    $SUDO lvextend -r -l +100%FREE "$lv_path"
+  else
+    case "$root_fs" in
+      ext2|ext3|ext4)
+        log "Growing ${root_fs} filesystem"
+        $SUDO resize2fs "$part_dev"
+        ;;
+      xfs)
+        log "Growing XFS filesystem"
+        $SUDO xfs_growfs /
+        ;;
+      *)
+        warn "Filesystem ${root_fs:-unknown} is not supported for automatic resize."
+        warn "Partition was grown if possible, but filesystem was not changed."
+        ;;
+    esac
+  fi
+
+  ok "Root storage expansion completed"
+  show_storage_status
+}
+
+verify_storage() {
+  local free_gb
+  free_gb="$(df -BG / | awk 'NR==2 {gsub("G", "", $4); print $4}' 2>/dev/null || echo 0)"
+
+  show_storage_status
+
+  if [[ "$free_gb" -lt 30 ]]; then
+    warn "Root free space is ${free_gb}G. ERPNext can install, but 60G+ is recommended."
+    return 1
+  fi
+
+  ok "Root free space: ${free_gb}G"
+}
+
+maybe_offer_root_storage_expansion() {
+  local data can_expand root_bytes disk_bytes layout reply
+
+  data="$(storage_eval)"
+  while IFS='=' read -r k v; do
+    case "$k" in
+      CAN_EXPAND) can_expand="$v" ;;
+      ROOT_BYTES) root_bytes="$v" ;;
+      DISK_BYTES) disk_bytes="$v" ;;
+      LAYOUT) layout="$v" ;;
+    esac
+  done <<< "$data"
+
+  if [[ "${can_expand:-no}" != "yes" ]]; then
+    return 0
+  fi
+
+  echo
+  echo "Storage: root uses $(bytes_to_gib "${root_bytes:-0}") of $(bytes_to_gib "${disk_bytes:-0}") disk."
+
+  if [[ "${AUTO_EXPAND_ROOT:-prompt}" == "false" ]]; then
+    warn "Root storage expansion skipped by AUTO_EXPAND_ROOT=false."
+    return 0
+  fi
+
+  if [[ "${AUTO_EXPAND_ROOT:-prompt}" == "true" || "$ASSUME_YES" -eq 1 ]]; then
+    EXPAND_ROOT_CONFIRMED=1 expand_root_storage
+    return 0
+  fi
+
+  if [[ -t 0 ]]; then
+    read -r -p "Expand root storage now? [Y/n]: " reply
+    reply="${reply:-Y}"
+    if [[ "$reply" =~ ^[Yy]$ ]]; then
+      EXPAND_ROOT_CONFIRMED=1 expand_root_storage
+    else
+      warn "Storage expansion skipped."
+    fi
+  fi
+}
+
 
 apt_package_available() {
   local package="$1"
@@ -4658,6 +5019,7 @@ run_install() {
   check_os
   check_internet
   check_resources
+  maybe_offer_root_storage_expansion
   prompt_for_site_name_if_needed
 
   if path_is_dir "$BENCH_PARENT"; then
@@ -4887,14 +5249,17 @@ show_advanced_menu() {
     echo "21) Configure Local SSL"
     echo "22) Disable Local SSL"
     echo "23) Verify SSL Rollback"
-    echo "24) Domain Config"
-    echo "25) Production Readiness Preview"
-    echo "26) Production Domain Guide"
-    echo "27) Production SSL Guide"
-    echo "28) Start Bench in Foreground"
-    echo "29) Show Service Logs"
-    echo "30) Access Submenu"
-    echo "31) Back"
+    echo "24) Storage Status"
+    echo "25) Expand Root Storage"
+    echo "26) Verify Storage"
+    echo "27) Domain Config"
+    echo "28) Production Readiness Preview"
+    echo "29) Production Domain Guide"
+    echo "30) Production SSL Guide"
+    echo "31) Start Bench in Foreground"
+    echo "32) Show Service Logs"
+    echo "33) Access Submenu"
+    echo "34) Back"
     echo
     read -r -p "Choose an option: " advanced_choice
 
@@ -4922,14 +5287,17 @@ show_advanced_menu() {
       21) configure_local_ssl ;;
       22) disable_local_ssl ;;
       23) verify_ssl_rollback ;;
-      24) show_domain_config ;;
-      25) show_production_readiness ;;
-      26) show_production_domain_guide ;;
-      27) show_production_ssl_guide ;;
-      28) run_foreground_start ;;
-      29) show_erpnext_service_logs ;;
-      30) show_access_menu ;;
-      31) return 0 ;;
+      24) show_storage_status ;;
+      25) expand_root_storage ;;
+      26) verify_storage ;;
+      27) show_domain_config ;;
+      28) show_production_readiness ;;
+      29) show_production_domain_guide ;;
+      30) show_production_ssl_guide ;;
+      31) run_foreground_start ;;
+      32) show_erpnext_service_logs ;;
+      33) show_access_menu ;;
+      34) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -5028,6 +5396,9 @@ Advanced actions:
   site-config         Show current local site/domain configuration
   domain-config       Show local/future production domain configuration
   repair-site-config  Repair saved site/domain config from detected Bench site
+  storage-status      Show root disk/filesystem expansion status
+  expand-root-storage Safely expand root filesystem when VM disk is larger
+  verify-storage      Verify root storage is suitable for ERPNext
   site-name-guide     Show custom .test hostname guide
   production-readiness Show production readiness preview
   production-domain-guide Show production domain planning guide
@@ -5054,6 +5425,7 @@ Environment overrides:
   INSIGHTS_BRANCH=main
   AUTO_START=true|false|prompt
   ENABLE_AUTOSTART=true|false|prompt
+  AUTO_EXPAND_ROOT=true|false|prompt
 
 Browser access:
   Direct IP URL works while ERPNext is running: http://VM_IP:8000
@@ -5077,6 +5449,7 @@ Examples:
   ./install-erpnext-dev.sh verify-local-ssl
   ./install-erpnext-dev.sh environment-check
   ./install-erpnext-dev.sh site-config
+  ./install-erpnext-dev.sh storage-status
   ./install-erpnext-dev.sh domain-config
   ./install-erpnext-dev.sh production-readiness
   ./install-erpnext-dev.sh doctor
@@ -5125,7 +5498,7 @@ parse_args() {
         ASSUME_YES=1
         shift
         ;;
-      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|production-readiness|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|expand-root-storage|verify-storage|production-readiness|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -5205,6 +5578,9 @@ main() {
     disable-local-ssl) disable_local_ssl ;;
     environment-check|where-am-i) show_environment_check ;;
     site-config) show_site_config ;;
+    storage-status) show_storage_status ;;
+    expand-root-storage) expand_root_storage ;;
+    verify-storage) verify_storage ;;
     domain-config) show_domain_config ;;
     production-readiness) show_production_readiness ;;
     production-domain-guide) show_production_domain_guide ;;

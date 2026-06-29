@@ -1,10 +1,10 @@
-# ERPNext Developer Installer v0.8.8
+# ERPNext Developer Installer v0.8.9
 
-A local ERPNext/Frappe developer VM installer and environment manager for Ubuntu 24.04 / 26.04 LTS.
+Local ERPNext/Frappe developer VM installer for Ubuntu 24.04/26.04.
 
 ## Quick start
 
-Run this inside the ERPNext VM:
+Run inside the ERPNext VM:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh -o install-erpnext-dev.sh
@@ -18,63 +18,44 @@ During setup, choose a local site name:
 Local site name [erp.test]:
 ```
 
-Press Enter for `erp.test`, or type a custom name such as `erp208.test`.
+Press Enter for `erp.test`, or enter a custom local name such as `erp08.test`.
 
-## v0.8.8 focus
+## v0.8.9 highlights
 
-v0.8.8 prepares the project for future production-domain and SSL work without turning the developer installer into a production installer yet.
-
-New planning commands:
+- Generic root storage detection and expansion.
+- Setup can detect when a cloned VM disk is larger than the Ubuntu root filesystem.
+- Supports common Ubuntu layouts:
+  - LVM + ext4 root
+  - direct ext4 partition root
+  - direct XFS partition root
+- Adds clear storage commands:
 
 ```bash
-./install-erpnext-dev.sh domain-config
-./install-erpnext-dev.sh production-readiness
-./install-erpnext-dev.sh production-domain-guide
-./install-erpnext-dev.sh production-ssl-guide
+./install-erpnext-dev.sh storage-status
+./install-erpnext-dev.sh expand-root-storage
+./install-erpnext-dev.sh verify-storage
 ```
 
-## Local vs production naming
+## Local domain flow
 
-Local developer site:
+After setup, run the shown `/etc/hosts` command on the HOST machine, not inside the VM.
 
-```text
-erp208.test
+Example:
+
+```bash
+sudo sed -i '/[[:space:]]erp08\.test$/d' /etc/hosts
+echo "192.168.122.181 erp08.test" | sudo tee -a /etc/hosts
 ```
 
-Future production domain:
+Then test from the host:
 
-```text
-erp.company.com
+```bash
+curl -I http://erp08.test:8000
 ```
 
-The installer keeps these concepts separate so local development remains safe while production planning can reuse the domain-first workflow later.
+## Local SSL flow
 
-## Future production config fields
-
-The non-secret config can now carry future production planning values:
-
-```text
-/etc/erpnext-dev-installer/config.env
-```
-
-Example fields:
-
-```text
-SITE_NAME=erp208.test
-DEPLOYMENT_MODE=development
-PRODUCTION_DOMAIN=erp.company.com
-PRODUCTION_SSL_MODE=planned
-```
-
-Credentials remain private:
-
-```text
-/home/frappe/erpnext-dev-credentials.txt
-```
-
-## Local HTTPS
-
-Quick self-signed test:
+Inside the VM:
 
 ```bash
 ./install-erpnext-dev.sh create-self-signed-local-cert
@@ -85,22 +66,41 @@ Quick self-signed test:
 Host tests:
 
 ```bash
-curl -I http://erp208.test
-curl -kI https://erp208.test
-curl -I http://erp208.test:8000
+curl -I http://erp08.test
+curl -kI https://erp08.test
+curl -I http://erp08.test:8000
 ```
 
-## Production SSL planning
-
-Production SSL should be a separate future track. Planned options:
-
-- Let's Encrypt HTTP-01
-- Let's Encrypt DNS-01 with Cloudflare
-- Cloudflare Origin CA
-- Manual/private datacenter certificate install
-
-Run:
+For browser-trusted local SSL, use:
 
 ```bash
-./install-erpnext-dev.sh production-ssl-guide
+./install-erpnext-dev.sh mkcert-guide
+./install-erpnext-dev.sh browser-trust-guide
+```
+
+## Optional apps
+
+Install optional apps only after the base install and access are verified:
+
+```bash
+./install-erpnext-dev.sh app-library
+```
+
+Available app commands include:
+
+```bash
+./install-erpnext-dev.sh install-crm
+./install-erpnext-dev.sh install-hrms
+./install-erpnext-dev.sh install-helpdesk
+./install-erpnext-dev.sh install-insights
+```
+
+## Health checks
+
+```bash
+./install-erpnext-dev.sh site-config
+./install-erpnext-dev.sh storage-status
+./install-erpnext-dev.sh runtime-status
+./install-erpnext-dev.sh ssl-status
+./install-erpnext-dev.sh doctor
 ```

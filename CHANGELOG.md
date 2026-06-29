@@ -1,27 +1,28 @@
-# CHANGELOG
+# Changelog v0.8.9
 
-## v0.8.8 - Production Domain / SSL Readiness Foundation
+## Added
 
-### Added
+- Generic root storage status command:
+  - `storage-status`
+- Generic root storage expansion command:
+  - `expand-root-storage`
+- Storage verification command:
+  - `verify-storage`
+- Setup-time storage check for cloned/resized VMs where the virtual disk is larger than the root filesystem.
+- Support for common Ubuntu storage layouts:
+  - LVM root on a partition
+  - direct ext4 root partition
+  - direct XFS root partition
+- `AUTO_EXPAND_ROOT=true|false|prompt` environment control.
 
-- Added `domain-config` command.
-- Added `production-readiness` command.
-- Added `production-domain-guide` command.
-- Added `production-ssl-guide` command.
-- Added future production planning config fields:
-  - `DEPLOYMENT_MODE`
-  - `PRODUCTION_DOMAIN`
-  - `PRODUCTION_SSL_MODE`
-- Added production-domain validation helper for future use.
+## Improved
 
-### Changed
+- Setup can now offer to expand root storage before ERPNext installation consumes disk space.
+- The storage expansion logic is detector-based and avoids hardcoded devices such as `/dev/vda3`.
+- Unknown/risky layouts are detected and skipped safely.
 
-- Developer/local `SITE_NAME` remains separate from future production domain planning.
-- Config now prepares for production-domain workflows without enabling production automation.
-- Access and Advanced menus now include production planning entries.
+## Safety
 
-### Notes
-
-- This is not a production installer.
-- Production automation should remain a separate future track.
-- Local development still uses Bench/service workflow and optional local SSL.
+- Automatic expansion only runs when the root disk layout is clearly detected.
+- Unsupported layouts show a warning and make no changes.
+- The command remains interactive unless `AUTO_EXPAND_ROOT=true` or `--yes` is used.

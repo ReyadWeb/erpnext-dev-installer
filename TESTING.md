@@ -1,10 +1,6 @@
-# TESTING - v0.8.8
+# Testing v0.8.9
 
-## Goal
-
-Validate that production-domain planning commands work without changing the local developer environment.
-
-## Verify version
+## Version check
 
 ```bash
 grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
@@ -13,50 +9,69 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="0.8.8"
+SCRIPT_VERSION="0.8.9"
 ```
 
-## Planning commands
+## Storage tests
+
+Inside the VM:
 
 ```bash
-./install-erpnext-dev.sh domain-config
-./install-erpnext-dev.sh production-readiness
-./install-erpnext-dev.sh production-domain-guide
-./install-erpnext-dev.sh production-ssl-guide
+./install-erpnext-dev.sh storage-status
+./install-erpnext-dev.sh verify-storage
 ```
 
-Expected:
-
-- Commands should print planning guidance only.
-- No production changes should be applied.
-- Local ERPNext service should remain unchanged.
-
-## Test with future domain variable
+If expansion is recommended:
 
 ```bash
-PRODUCTION_DOMAIN=erp.company.com ./install-erpnext-dev.sh domain-config
-PRODUCTION_DOMAIN=erp.company.com ./install-erpnext-dev.sh production-readiness
+./install-erpnext-dev.sh expand-root-storage
+./install-erpnext-dev.sh storage-status
+./install-erpnext-dev.sh verify-storage
 ```
 
-Expected:
+Expected after expansion:
 
 ```text
-Production domain OK erp.company.com
+Expansion OK not needed
 ```
 
-## Existing local checks should still pass
+or root storage should show a larger size than before.
+
+## Fresh install test
+
+```bash
+./install-erpnext-dev.sh setup
+```
+
+Expected behavior:
+
+- Checks RAM and disk.
+- If the VM disk is larger than root, offers to expand storage.
+- Prompts for local site name.
+- Installs ERPNext.
+- Starts service and waits for ports.
+
+## Post-install checks
 
 ```bash
 ./install-erpnext-dev.sh site-config
-./install-erpnext-dev.sh doctor
 ./install-erpnext-dev.sh runtime-status
+./install-erpnext-dev.sh service-summary
+./install-erpnext-dev.sh doctor
 ```
 
-Expected:
+## Local SSL test
 
-```text
-Bench web         OK
-Socket.io         OK
-Site app: frappe  OK
-Site app: erpnext OK
+```bash
+./install-erpnext-dev.sh create-self-signed-local-cert
+./install-erpnext-dev.sh configure-local-ssl
+./install-erpnext-dev.sh verify-local-ssl
+```
+
+From HOST:
+
+```bash
+curl -I http://YOUR-SITE.test
+curl -kI https://YOUR-SITE.test
+curl -I http://YOUR-SITE.test:8000
 ```

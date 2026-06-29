@@ -1,37 +1,29 @@
-# ROADMAP - ERPNext Developer Installer v0.8.8
+# Roadmap v0.8.9
 
-## Current focus
+## Completed in v0.8.9
 
-v0.8.8 adds a production-domain and SSL planning foundation while keeping the current installer focused on local development.
+- Generic root storage detection.
+- Generic root storage expansion for common Ubuntu VM layouts.
+- Setup-time expansion prompt.
+- Storage status and verification commands.
 
-## Completed in v0.8.x
+## Next recommended patch
 
-- Fresh ERPNext developer VM setup
-- Service/autostart management
-- App Library for CRM, HRMS, Helpdesk, Telephony, and Insights
-- Backup and maintenance commands
-- KVM/network diagnostics
-- Local HTTPS reverse proxy workflow
-- Host/VM safety guards
-- Custom site-name support and config repair
-- Compact site-name prompt for small terminals
-- Future production domain/SSL planning commands
+### v0.9.0 Guided Install Workflow
 
-## v0.8.8 additions
+Planned flow:
 
-- `domain-config`
-- `production-readiness`
-- `production-domain-guide`
-- `production-ssl-guide`
-- Future config fields:
-  - `DEPLOYMENT_MODE`
-  - `PRODUCTION_DOMAIN`
-  - `PRODUCTION_SSL_MODE`
+1. Install ERPNext.
+2. Register local domain on the HOST `/etc/hosts`.
+3. Verify HTTP access.
+4. Configure local SSL.
+5. Verify HTTPS.
+6. Configure trusted browser SSL with mkcert guidance.
+7. Install optional apps after the base system is confirmed.
 
-## Next recommended work
+The goal is a step-by-step installer that tells the user exactly when to run commands inside the VM and when to run commands on the HOST.
 
-1. Finish fresh VM regression testing with a custom `.test` site.
-2. Install optional apps one by one and verify `doctor`.
-3. Test self-signed local SSL against the custom site name.
-4. Harden restore/uninstall flows before v1.0.
-5. Start v0.9.0 production planning as a separate branch/track.
+## Later production track
+
+- Keep the developer installer separate from production automation.
+- Reuse the same domain-first design for future production domain and SSL workflows.
