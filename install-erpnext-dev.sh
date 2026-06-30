@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.8.18"
+SCRIPT_VERSION="0.8.19"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -29,6 +29,7 @@ PRODUCTION_DOMAIN="${PRODUCTION_DOMAIN:-}"
 PRODUCTION_SSL_MODE="${PRODUCTION_SSL_MODE:-planned}"
 AUTO_START="${AUTO_START:-prompt}"
 ENABLE_AUTOSTART="${ENABLE_AUTOSTART:-prompt}"
+APP_BACKUP_BEFORE_INSTALL="${APP_BACKUP_BEFORE_INSTALL:-prompt}"
 ERPNEXT_SERVICE_NAME="${ERPNEXT_SERVICE_NAME:-erpnext-dev.service}"
 READY_TIMEOUT="${READY_TIMEOUT:-90}"
 READY_INTERVAL="${READY_INTERVAL:-5}"
@@ -101,7 +102,7 @@ acquire_installer_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+    ""|menu|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
       return 0
       ;;
     *)
@@ -2228,8 +2229,13 @@ show_next_step() {
           echo "Optional: enable autostart."
           echo "  ./install-erpnext-dev.sh enable-autostart"
         else
-          echo "After access works, optional next step:"
-          echo "  ./install-erpnext-dev.sh local-ssl-wizard"
+          if port_listens 443; then
+            echo "After SSL works, optional next step:"
+            echo "  ./install-erpnext-dev.sh app-install-wizard"
+          else
+            echo "After access works, optional next step:"
+            echo "  ./install-erpnext-dev.sh local-ssl-wizard"
+          fi
         fi
       fi
       ;;
@@ -5062,6 +5068,214 @@ install_app_dependencies() {
   esac
 }
 
+
+show_app_install_guide() {
+  echo
+  echo "============================================================"
+  echo "Optional App Install Guide"
+  echo "============================================================"
+  echo "Recommended order:"
+  echo "  1) CRM, HRMS, or Insights if needed"
+  echo "  2) Telephony before Helpdesk, unless the wizard installs it"
+  echo "  3) Helpdesk after Telephony dependency is ready"
+  echo
+  echo "Safety workflow:"
+  echo "  - Install one optional app at a time."
+  echo "  - Create a backup checkpoint before each app."
+  echo "  - Run app-status and doctor after each install."
+  echo "  - Take a VM snapshot before testing several apps together."
+  echo
+  echo "Commands:"
+  echo "  ./install-erpnext-dev.sh app-install-wizard"
+  echo "  ./install-erpnext-dev.sh app-status"
+  echo "  ./install-erpnext-dev.sh app-rollback-guide"
+  echo "============================================================"
+}
+
+create_app_install_checkpoint() {
+  local display="$1"
+  local reply
+
+  if [[ "${APP_BACKUP_BEFORE_INSTALL}" == "false" ]]; then
+    warn "Pre-app backup skipped by APP_BACKUP_BEFORE_INSTALL=false."
+    return 0
+  fi
+
+  echo
+  echo "Backup checkpoint recommended before installing ${display}."
+
+  if [[ "${APP_BACKUP_BEFORE_INSTALL}" == "true" || "$ASSUME_YES" -eq 1 ]]; then
+    if ! create_site_backup true; then
+      fail "Pre-app backup failed. Stop here or set APP_BACKUP_BEFORE_INSTALL=false only for disposable test VMs."
+    fi
+    return 0
+  fi
+
+  if [[ -t 0 ]]; then
+    read -r -p "Create database + files backup now? [Y/n]: " reply
+    reply="${reply:-Y}"
+    if [[ "$reply" =~ ^[Yy]$ ]]; then
+      if ! create_site_backup true; then
+        warn "Pre-app backup failed."
+        if ! confirm "Continue installing ${display} without a verified backup?"; then
+          fail "App installation cancelled because backup failed."
+        fi
+      fi
+    else
+      warn "Backup checkpoint skipped. This is OK only for disposable test VMs or VM snapshots."
+      if ! confirm "Continue installing ${display} without a backup checkpoint?"; then
+        fail "App installation cancelled."
+      fi
+    fi
+  fi
+}
+
+run_post_app_validation() {
+  local app_name="$1"
+  local display="$2"
+
+  echo
+  echo "============================================================"
+  echo "Post-App Validation"
+  echo "============================================================"
+  if site_app_installed "$app_name"; then
+    status_line "$display" "OK" "installed on ${SITE_NAME}"
+  else
+    status_line "$display" "WARN" "not confirmed on ${SITE_NAME}"
+  fi
+
+  if [[ "$(runtime_state 2>/dev/null || echo Stopped)" == Running* ]]; then
+    status_line "Runtime" "OK" "$(runtime_state 2>/dev/null || echo Running)"
+  else
+    status_line "Runtime" "WARN" "$(runtime_state 2>/dev/null || echo Stopped)"
+  fi
+
+  if port_listens 8000; then
+    status_line "Bench web" "OK" "port 8000 listening"
+  else
+    status_line "Bench web" "WARN" "port 8000 not listening"
+  fi
+
+  echo
+  echo "Next checks:"
+  echo "  ./install-erpnext-dev.sh app-status"
+  echo "  ./install-erpnext-dev.sh doctor"
+  echo "  ./install-erpnext-dev.sh verify-access"
+  echo "============================================================"
+}
+
+show_app_rollback_guide() {
+  cat <<EOF_APP_ROLLBACK
+
+============================================================
+Optional App Rollback Guide
+============================================================
+
+The safest rollback is to restore a backup created before the app install.
+Do not rely on deleting app folders as a clean rollback because DocTypes,
+patches, database changes, and assets may already be applied.
+
+Recommended rollback flow:
+  1) Stop the service if needed:
+     ./install-erpnext-dev.sh stop
+
+  2) List available backups:
+     ./install-erpnext-dev.sh list-backups
+
+  3) Restore the pre-app database/files backup:
+     ./install-erpnext-dev.sh restore-full
+
+  4) Start and validate:
+     ./install-erpnext-dev.sh start
+     ./install-erpnext-dev.sh app-status
+     ./install-erpnext-dev.sh doctor
+
+Best practice:
+  - Take a VM snapshot before installing optional apps.
+  - Install one app at a time.
+  - Keep the pre-app backup until the app is fully tested.
+
+============================================================
+EOF_APP_ROLLBACK
+}
+
+app_wizard_preflight() {
+  local bench_dir="$1"
+
+  echo
+  echo "============================================================"
+  echo "Optional App Install Preflight"
+  echo "============================================================"
+  status_line "Site" "INFO" "${SITE_NAME}"
+  status_line "Bench" "INFO" "$bench_dir"
+
+  if [[ "$(install_state 2>/dev/null || echo Not installed)" == "Installed" ]]; then
+    status_line "Core install" "OK" "ERPNext installed"
+  else
+    status_line "Core install" "WARN" "not fully confirmed; run doctor before app installs"
+  fi
+
+  if [[ "$(runtime_state 2>/dev/null || echo Stopped)" == Running* ]]; then
+    status_line "Runtime" "OK" "$(runtime_state 2>/dev/null || echo Running)"
+  else
+    status_line "Runtime" "INFO" "ERPNext is not running; app install can still continue"
+  fi
+
+  if port_listens 443; then
+    status_line "Local HTTPS" "OK" "port 443 listening"
+  else
+    status_line "Local HTTPS" "INFO" "not configured or not running; optional apps can still install"
+  fi
+
+  echo
+  echo "Backup policy: ${APP_BACKUP_BEFORE_INSTALL}"
+  echo "============================================================"
+}
+
+run_app_install_wizard() {
+  require_sudo
+  check_internet
+
+  local bench_dir choice
+  bench_dir="$(require_site_environment)" || return 1
+
+  normalize_apps_txt "$bench_dir" "" "true" || warn "Could not normalize sites/apps.txt before app wizard."
+
+  while true; do
+    app_wizard_preflight "$bench_dir"
+    echo
+    echo "============================================================"
+    echo "Optional App Install Wizard"
+    echo "============================================================"
+    echo "1) Show optional app status"
+    echo "2) Install Frappe CRM"
+    echo "3) Install Frappe HR / HRMS"
+    echo "4) Install Frappe Insights"
+    echo "5) Install Frappe Telephony"
+    echo "6) Install Frappe Helpdesk"
+    echo "7) Install custom app from Git URL"
+    echo "8) Rollback guide"
+    echo "9) Back"
+    echo
+    echo "Install one app at a time. The wizard will offer a backup checkpoint first."
+    echo
+    read -r -p "Choose an option: " choice
+
+    case "$choice" in
+      1) run_app_status; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      2) install_app_profile crm; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      3) install_app_profile hrms; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      4) install_app_profile insights; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      5) install_app_profile telephony; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      6) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      7) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      8) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      9) return 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
+}
+
 install_frappe_app() {
   require_sudo
   check_internet
@@ -5099,9 +5313,7 @@ install_frappe_app() {
     return 0
   fi
 
-  if confirm "Create a database + files backup before installing ${display}?"; then
-    create_site_backup true || warn "Pre-install backup failed. Continuing only because app installation was explicitly confirmed."
-  fi
+  create_app_install_checkpoint "$display"
 
   ensure_app_library_node_tools
   install_app_dependencies "$bench_dir" "$app_name"
@@ -5158,6 +5370,7 @@ install_frappe_app() {
 
   ok "${display} installation workflow completed"
   show_installed_apps
+  run_post_app_validation "$app_name" "$display"
 }
 
 install_app_profile() {
@@ -5207,31 +5420,36 @@ show_app_library_menu() {
     echo "============================================================"
     echo "App Library"
     echo "============================================================"
-    echo "1) Show installed apps"
-    echo "2) Install Frappe CRM"
-    echo "3) Install Frappe HR / HRMS"
-    echo "4) Install Frappe Helpdesk"
-    echo "5) Install Frappe Telephony"
-    echo "6) Install Frappe Insights"
-    echo "7) Install custom app from Git URL"
-    echo "8) Back"
+    echo "1) Optional App Install Wizard"
+    echo "2) Show optional app status"
+    echo "3) Show installed apps"
+    echo "4) Optional app install guide"
+    echo "5) Rollback guide"
+    echo "6) Install Frappe CRM"
+    echo "7) Install Frappe HR / HRMS"
+    echo "8) Install Frappe Helpdesk"
+    echo "9) Install Frappe Telephony"
+    echo "10) Install Frappe Insights"
+    echo "11) Install custom app from Git URL"
+    echo "12) Back"
     echo
-    echo "Notes:"
-    echo "  - App installs can take several minutes."
-    echo "  - The script offers a backup before installation."
-    echo "  - Optional apps should be tested in a VM snapshot before production use."
+    echo "Notes: install one app at a time and keep a backup checkpoint."
     echo
     read -r -p "Choose an option: " app_choice
 
     case "$app_choice" in
-      1) show_installed_apps; pause_after_screen "Press Enter to return to App Library..." ;;
-      2) install_app_profile crm; pause_after_screen "Press Enter to return to App Library..." ;;
-      3) install_app_profile hrms; pause_after_screen "Press Enter to return to App Library..." ;;
-      4) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Library..." ;;
-      5) install_app_profile telephony; pause_after_screen "Press Enter to return to App Library..." ;;
-      6) install_app_profile insights; pause_after_screen "Press Enter to return to App Library..." ;;
-      7) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Library..." ;;
-      8) return 0 ;;
+      1) run_app_install_wizard ;;
+      2) run_app_status; pause_after_screen "Press Enter to return to App Library..." ;;
+      3) show_installed_apps; pause_after_screen "Press Enter to return to App Library..." ;;
+      4) show_app_install_guide; pause_after_screen "Press Enter to return to App Library..." ;;
+      5) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Library..." ;;
+      6) install_app_profile crm; pause_after_screen "Press Enter to return to App Library..." ;;
+      7) install_app_profile hrms; pause_after_screen "Press Enter to return to App Library..." ;;
+      8) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Library..." ;;
+      9) install_app_profile telephony; pause_after_screen "Press Enter to return to App Library..." ;;
+      10) install_app_profile insights; pause_after_screen "Press Enter to return to App Library..." ;;
+      11) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Library..." ;;
+      12) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -5883,7 +6101,9 @@ show_advanced_menu() {
     echo "34) Access Submenu"
     echo "35) Next Step"
     echo "36) Verify ERPNext HTTP Access"
-    echo "37) Back"
+    echo "37) App Install Wizard"
+    echo "38) App Rollback Guide"
+    echo "39) Back"
     echo
     read -r -p "Choose an option: " advanced_choice
 
@@ -5924,7 +6144,9 @@ show_advanced_menu() {
       34) show_access_menu ;;
       35) show_next_step ;;
       36) verify_access ;;
-      37) return 0 ;;
+      37) run_app_install_wizard ;;
+      38) show_app_rollback_guide ;;
+      39) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -5973,6 +6195,7 @@ Basic actions:
   backup        Create database backup
   backup-files  Create database + files backup
   list-backups  List site backups
+  app-install-wizard Guided optional app installation with backup checkpoint
   app-library   Show optional Frappe app library
   apps          Alias for app-library
   list-apps     Show installed and downloaded Frappe apps
@@ -5984,6 +6207,9 @@ Basic actions:
 Advanced actions:
   repair              Run safe environment repair
   backup-menu         Show backup/restore/maintenance menu
+  app-install-wizard  Guided optional app installation workflow
+  app-install-guide   Show optional app install safety guide
+  app-rollback-guide  Show optional app rollback/restore guide
   install-crm         Install Frappe CRM
   install-hrms        Install Frappe HR / HRMS
   install-helpdesk    Install Frappe Helpdesk
@@ -6062,6 +6288,7 @@ Environment overrides:
   AUTO_START=true|false|prompt
   ENABLE_AUTOSTART=true|false|prompt
   AUTO_EXPAND_ROOT=true|false|prompt
+  APP_BACKUP_BEFORE_INSTALL=true|false|prompt
 
 Browser access:
   Direct IP URL works while ERPNext is running: http://VM_IP:8000
@@ -6077,6 +6304,7 @@ Examples:
   ./install-erpnext-dev.sh verify-access
   ./install-erpnext-dev.sh next-step
   ./install-erpnext-dev.sh backup
+  ./install-erpnext-dev.sh app-install-wizard
   ./install-erpnext-dev.sh app-library
   ./install-erpnext-dev.sh install-crm
   ./install-erpnext-dev.sh app-status
@@ -6111,7 +6339,7 @@ show_menu() {
     echo "7) Next Step"
     echo "8) Local SSL Wizard"
     echo "9) Backup / Maintenance"
-    echo "10) App Library"
+    echo "10) App Library / App Wizard"
     echo "11) Advanced Options"
     echo "12) Help"
     echo "13) Exit"
@@ -6144,7 +6372,7 @@ parse_args() {
         ASSUME_YES=1
         shift
         ;;
-      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -6184,6 +6412,9 @@ main() {
     access-menu) show_access_menu ;;
     backup-menu) run_backup_maintenance_menu ;;
     app-library|apps) show_app_library_menu ;;
+    app-install-wizard|app-wizard) run_app_install_wizard ;;
+    app-install-guide) show_app_install_guide ;;
+    app-rollback-guide) show_app_rollback_guide ;;
     list-apps) show_installed_apps ;;
     app-status) run_app_status ;;
     install-crm) install_app_profile crm ;;

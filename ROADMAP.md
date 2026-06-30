@@ -1,8 +1,8 @@
 # ERPNext Developer Installer Roadmap
 
-## Current baseline: v0.8.18
+## Current baseline: v0.8.19
 
-v0.8.18 focuses on the local SSL wizard and improves the user path after ERPNext access is verified.
+v0.8.19 focuses on optional app checkpointing and safer app installation workflows.
 
 Completed:
 
@@ -18,18 +18,22 @@ Completed:
 - Verify access workflow
 - Next-step workflow
 - Local SSL wizard
+- Optional app install wizard
+- Pre-app backup checkpoint prompt
+- Post-app validation summary
+- Optional app rollback guide
 
-## Next recommended patch: v0.8.19
+## Next recommended patch: v0.8.20
 
-Focus: optional app checkpointing and app-install reliability.
+Focus: final polish before v0.9 planning.
 
 Targets:
 
-- Pre-app installation validation
-- Optional app compatibility notes
-- Automatic backup checkpoint before optional apps
-- Clear app install recovery guidance
-- Better app install summary
+- Improve host/VM IP hinting in guard messages
+- Add a compact `release-check` command
+- Add shellcheck-oriented cleanup
+- Improve app install failure recovery notes
+- Add final guided workflow documentation pass
 
 ## Future v0.9.x
 

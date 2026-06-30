@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.8.18
+# ERPNext Developer Installer v0.8.19
 
 A guided ERPNext/Frappe developer VM installer for Ubuntu 24.04 / 26.04 LTS.
 
@@ -10,6 +10,7 @@ Default stack:
 - Developer runtime using `bench start`
 - Optional systemd autostart service
 - Optional local HTTPS reverse proxy
+- Optional app install wizard with backup checkpoints
 
 ## Quick start
 
@@ -33,14 +34,13 @@ Use `.test` for local development. Avoid `.local` because it can conflict with m
 ./install-erpnext-dev.sh guided-setup
 ./install-erpnext-dev.sh verify-access
 ./install-erpnext-dev.sh local-ssl-wizard
+./install-erpnext-dev.sh app-install-wizard
 ./install-erpnext-dev.sh next-step
 ```
 
 The guided flow checks storage, installs ERPNext, starts the service, and shows the host `/etc/hosts` command.
 
 ## Local HTTPS
-
-v0.8.18 adds a guided local SSL wizard:
 
 ```bash
 ./install-erpnext-dev.sh local-ssl-wizard
@@ -52,26 +52,41 @@ The wizard supports:
 2. Trusted local SSL using `mkcert` from the host.
 3. SSL status-only checks.
 
-Expected local HTTPS target:
-
-```text
-https://erp.test
-```
-
-The local HTTPS flow uses Nginx inside the VM:
-
-```text
-Browser HTTPS :443
-  -> Nginx inside VM
-    -> Bench web 127.0.0.1:8000
-    -> Socket.io 127.0.0.1:9000
-```
-
 Direct Bench access remains available:
 
 ```text
 http://VM_IP:8000
 http://erp.test:8000
+```
+
+## Optional apps
+
+v0.8.19 adds a safer optional app workflow:
+
+```bash
+./install-erpnext-dev.sh app-install-wizard
+```
+
+The wizard provides:
+
+- Pre-app install checks
+- Backup checkpoint prompt before each app
+- Recommended one-app-at-a-time flow
+- Post-app validation summary
+- Rollback guidance
+
+Supported app profiles include Frappe CRM, HRMS, Helpdesk, Telephony, and Insights.
+
+Backup behavior can be controlled with:
+
+```bash
+APP_BACKUP_BEFORE_INSTALL=true|false|prompt
+```
+
+Default is `prompt`. For disposable test VMs only, you can skip app backup prompts:
+
+```bash
+APP_BACKUP_BEFORE_INSTALL=false ./install-erpnext-dev.sh app-install-wizard
 ```
 
 ## Useful commands
@@ -85,6 +100,9 @@ http://erp.test:8000
 ./install-erpnext-dev.sh verify-access
 ./install-erpnext-dev.sh next-step
 ./install-erpnext-dev.sh local-ssl-wizard
+./install-erpnext-dev.sh app-install-wizard
+./install-erpnext-dev.sh app-status
+./install-erpnext-dev.sh app-rollback-guide
 ```
 
 ## Storage expansion
@@ -117,14 +135,6 @@ Expected permissions:
 ```text
 -rw-------
 ```
-
-## Optional apps
-
-```bash
-./install-erpnext-dev.sh app-library
-```
-
-Supported app profiles include Frappe CRM, HRMS, Helpdesk, Telephony, and Insights.
 
 ## Production note
 

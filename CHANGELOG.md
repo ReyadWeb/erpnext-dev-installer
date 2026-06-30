@@ -1,23 +1,26 @@
 # Changelog
 
-## v0.8.18
+## v0.8.19
 
-Added local SSL wizard workflow.
+Added optional app checkpoint workflow.
 
 Changes:
 
-- Added `local-ssl-wizard` command.
-- Added `ssl-wizard` alias.
-- Added local SSL wizard to the main menu.
-- Added local SSL wizard to the Access submenu.
-- Added local SSL wizard to Advanced Options.
-- Wizard checks ERPNext direct HTTP before configuring SSL.
-- Wizard supports quick self-signed local certificates.
-- Wizard supports trusted mkcert workflow from the host.
-- Wizard detects existing `/tmp/<site>.crt` and `/tmp/<site>.key` files for mkcert install.
-- Wizard verifies HTTPS after configuration.
-- `next-step` now points running systems toward `local-ssl-wizard` after access works.
-- Documentation updated for the SSL wizard flow.
+- Added `app-install-wizard` command.
+- Added `app-wizard` alias.
+- Added `app-install-guide` command.
+- Added `app-rollback-guide` command.
+- Added pre-app install validation summary.
+- Added backup checkpoint prompt before optional app installs.
+- Added `APP_BACKUP_BEFORE_INSTALL=true|false|prompt` override.
+- Added post-app validation summary after optional app installation.
+- Updated App Library menu to prioritize the app install wizard.
+- Updated `next-step` to point HTTPS-ready systems toward `app-install-wizard`.
+- Documentation updated for optional app checkpoint workflow.
+
+## v0.8.18
+
+Added local SSL wizard workflow.
 
 ## v0.8.17
 

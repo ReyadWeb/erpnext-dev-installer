@@ -1,4 +1,4 @@
-# Testing Guide v0.8.18
+# Testing Guide v0.8.19
 
 ## 1. Syntax check
 
@@ -10,7 +10,7 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="0.8.18"
+SCRIPT_VERSION="0.8.19"
 ```
 
 ## 2. Existing VM validation
@@ -31,85 +31,73 @@ Expected:
 - Socket.io on 9000 OK
 - Redis queue/cache ports OK
 
-## 3. Local SSL wizard: self-signed path
-
-Inside the VM:
+## 3. Optional app wizard menu test
 
 ```bash
-./install-erpnext-dev.sh local-ssl-wizard
-```
-
-Choose:
-
-```text
-1) Quick self-signed certificate
+./install-erpnext-dev.sh app-install-wizard
 ```
 
 Expected:
 
-- Self-signed certificate is created.
-- Nginx is installed if needed.
-- Local SSL site is enabled.
-- `verify-local-ssl` reports HTTPS OK.
+- Preflight screen appears.
+- Site and bench path are shown.
+- Runtime is shown as OK or informational.
+- Backup policy is shown.
+- Menu lists CRM, HRMS, Insights, Telephony, Helpdesk, custom app, and rollback guide.
 
-Host tests:
+Choose Back for a non-destructive menu test.
+
+## 4. App install safety test
+
+For a disposable VM or snapshot, install one app:
 
 ```bash
-curl -I http://erp.test
-curl -kI https://erp.test
-curl -I http://erp.test:8000
+./install-erpnext-dev.sh app-install-wizard
 ```
 
 Expected:
 
-- HTTP redirects to HTTPS.
-- HTTPS returns 200 with `curl -kI`.
-- Direct Bench port remains available.
+- The script asks to install the selected app.
+- The script offers a database + files backup checkpoint before installing.
+- After install, post-app validation is shown.
+- `app-status`, `doctor`, and `verify-access` are suggested.
 
-## 4. Local SSL wizard: mkcert path
+## 5. Backup policy override test
 
-On the host:
-
-```bash
-sudo apt update
-sudo apt install -y libnss3-tools mkcert
-mkcert -install
-mkcert -cert-file erp.test.crt -key-file erp.test.key erp.test VM_IP localhost 127.0.0.1
-scp erp.test.crt erp.test.key USER@VM_IP:/tmp/
-```
-
-Inside the VM:
+For disposable test VMs only:
 
 ```bash
-./install-erpnext-dev.sh local-ssl-wizard
-```
-
-Choose:
-
-```text
-2) Trusted mkcert certificate from HOST
+APP_BACKUP_BEFORE_INSTALL=false ./install-erpnext-dev.sh app-install-wizard
 ```
 
 Expected:
 
-- Wizard detects files in `/tmp`.
-- Cert/key are installed into `/etc/erpnext-dev-ssl`.
-- Nginx reloads successfully.
-- `curl -I https://erp.test` works from the host without `-k`.
+- Backup checkpoint is skipped with a warning.
+- App install still requires explicit confirmation.
 
-## 5. Rollback test
+## 6. Rollback guide test
 
 ```bash
-./install-erpnext-dev.sh disable-local-ssl
-./install-erpnext-dev.sh verify-ssl-rollback
+./install-erpnext-dev.sh app-rollback-guide
 ```
 
 Expected:
 
-- Local SSL Nginx site is disabled.
-- Direct Bench access on `:8000` remains available.
+- Restore-first rollback guidance is shown.
+- It does not make system changes.
 
-## 6. Log permissions check
+## 7. Local SSL sanity check
+
+```bash
+./install-erpnext-dev.sh ssl-status
+./install-erpnext-dev.sh verify-local-ssl
+```
+
+Expected:
+
+- Existing v0.8.18 SSL behavior is unchanged.
+
+## 8. Log permissions check
 
 ```bash
 ls -l /tmp/erpnext-dev-installer-*.log | tail -1
