@@ -1,8 +1,9 @@
-# TESTING v0.8.22
+# TESTING v0.8.23
 
 ## Syntax
 
 ```bash
+chmod +x install-erpnext-dev.sh
 bash -n install-erpnext-dev.sh
 grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 ```
@@ -10,9 +11,20 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="0.8.22"
+SCRIPT_VERSION="0.8.23"
 ```
 
+## Help command
+
+```bash
+./install-erpnext-dev.sh help | grep -E "doctor --plain|doctor --json|support-bundle"
+```
+
+Expected:
+
+- Help lists `doctor --plain`.
+- Help lists `doctor --json`.
+- Help lists `support-bundle`.
 
 ## Doctor plain/json diagnostics
 
@@ -35,12 +47,84 @@ Expected:
 ./install-erpnext-dev.sh --plain doctor
 ./install-erpnext-dev.sh --json doctor > /tmp/erpnext-doctor-order.json
 python3 -m json.tool /tmp/erpnext-doctor-order.json >/dev/null
+./install-erpnext-dev.sh --json > /tmp/erpnext-doctor-default.json
+python3 -m json.tool /tmp/erpnext-doctor-default.json >/dev/null
 ```
 
 Expected:
 
 - Diagnostic format flags work before or after the `doctor` action.
 - `--json` alone defaults to the doctor action and produces valid JSON.
+
+## Support bundle
+
+```bash
+./install-erpnext-dev.sh support-bundle
+```
+
+Expected:
+
+- Command creates `/tmp/erpnext-dev-support-bundle-YYYYMMDD-HHMMSS.tar.gz` unless `SUPPORT_BUNDLE_DIR` is overridden.
+- Command prints the final archive path.
+- Archive permissions are private, usually `600`.
+- Temporary bundle directory is removed after packaging.
+
+Inspect the archive:
+
+```bash
+BUNDLE="$(ls -1t /tmp/erpnext-dev-support-bundle-*.tar.gz | head -1)"
+tar -tzf "$BUNDLE"
+mkdir -p /tmp/erpnext-support-review
+rm -rf /tmp/erpnext-support-review/*
+tar -xzf "$BUNDLE" -C /tmp/erpnext-support-review
+find /tmp/erpnext-support-review -type f -maxdepth 2 -print
+python3 -m json.tool /tmp/erpnext-support-review/*/doctor.json >/dev/null
+```
+
+Expected archive files:
+
+```text
+manifest.txt
+doctor-plain.txt
+doctor.json
+doctor-json-validation.txt
+system-summary.txt
+service-status.txt
+port-status.txt
+storage-status.txt
+ssl-status.txt
+bench-status.txt
+recent-errors.txt
+```
+
+Expected safety behavior:
+
+- Archive does not include `erpnext-dev-credentials.txt`.
+- Archive does not include raw `site_config.json`.
+- Archive does not include `.key` files or TLS private keys.
+- Archive does not include raw database credentials.
+- Included text files are redacted before packaging.
+
+Optional redaction smoke test after extraction:
+
+```bash
+grep -RInE "password[=:]|token[=:]|secret[=:]|api[_-]?key[=:]|BEGIN .*PRIVATE KEY" /tmp/erpnext-support-review || true
+```
+
+Expected:
+
+- No unredacted secrets should appear.
+- Safe explanatory text such as “passwords are excluded” may still appear.
+
+## Support alias
+
+```bash
+./install-erpnext-dev.sh support
+```
+
+Expected:
+
+- Same behavior as `support-bundle`.
 
 ## Next-step regression test after storage expansion
 
@@ -127,6 +211,7 @@ Expected:
 ./install-erpnext-dev.sh doctor
 ./install-erpnext-dev.sh doctor --plain
 ./install-erpnext-dev.sh doctor --json
+./install-erpnext-dev.sh support-bundle
 ./install-erpnext-dev.sh verify-access
 ./install-erpnext-dev.sh ssl-status
 ```

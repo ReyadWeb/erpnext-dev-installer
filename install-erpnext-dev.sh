@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.8.22"
+SCRIPT_VERSION="0.8.23"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1116,14 +1116,12 @@ check_resources() {
 
 bytes_to_gib() {
   local bytes="${1:-0}"
-  python3 - "$bytes" <<'PY_GIB'
-import sys
-try:
-    b = int(float(sys.argv[1]))
-except Exception:
-    b = 0
-print(f"{round(b / (1024 ** 3))}G")
-PY_GIB
+
+  if [[ "$bytes" =~ ^[0-9]+$ ]]; then
+    awk -v b="$bytes" 'BEGIN { printf "%.0fG\n", b / 1073741824 }'
+  else
+    echo "0G"
+  fi
 }
 
 storage_part_number() {
@@ -4942,6 +4940,283 @@ run_doctor_json() {
   printf '}\n'
 }
 
+
+redact_file_in_place() {
+  local file="$1"
+
+  [[ -f "$file" ]] || return 0
+
+  if command -v perl >/dev/null 2>&1; then
+    perl -0pi -e 's/(?i)(("?)(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|authorization|cookie|db_password|admin_password)\2\s*[:=]\s*)(["\x27])(?:(?!\3).)*\3/${1}${3}[REDACTED]${3}/gs; s/(?i)(("?)(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|authorization|cookie|db_password|admin_password)\2\s*[:=]\s*)[^\s,;}]+/${1}[REDACTED]/g; s/(?i)(Bearer\s+)[A-Za-z0-9._~+\/=-]+/${1}[REDACTED]/g; s/-----BEGIN ([A-Z0-9 ]*PRIVATE KEY)-----.*?-----END \1-----/-----BEGIN $1-----\n[REDACTED]\n-----END $1-----/gis;' "$file" 2>/dev/null || true
+  else
+    sed -Ei \
+      -e "s/(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|authorization|cookie)([[:space:]_:=\"]+)[^[:space:]\",;}]+/\1\2[REDACTED]/Ig" \
+      -e "s/(Bearer[[:space:]]+)[A-Za-z0-9._~+\/=-]+/\1[REDACTED]/Ig" \
+      "$file" 2>/dev/null || true
+  fi
+}
+
+support_bundle_write_file() {
+  local output_file="$1"
+  shift
+
+  if ! "$@" > "$output_file" 2>&1; then
+    {
+      echo
+      echo "WARN: command failed while collecting this section."
+      echo "Command: $*"
+    } >> "$output_file"
+  fi
+
+  redact_file_in_place "$output_file"
+  chmod 600 "$output_file" 2>/dev/null || true
+}
+
+support_bundle_manifest() {
+  cat <<EOF_SUPPORT_MANIFEST
+ERPNext Developer Installer Support Bundle
+=========================================
+
+Generated: $(date -Iseconds 2>/dev/null || date)
+Script:    ${APP_NAME} v${SCRIPT_VERSION}
+Site:      ${SITE_NAME}
+
+Safe-to-share intent:
+- This bundle is designed for troubleshooting and support.
+- It includes share-safe diagnostics, status summaries, and recent redacted service errors.
+- It intentionally excludes credential files, private keys, raw site_config.json secrets, tokens, and database passwords.
+
+Recommended review before sharing:
+- Open the included .txt and .json files.
+- Confirm there is no client-sensitive text from custom logs before sending outside your organization.
+
+Included files:
+- doctor-plain.txt
+- doctor.json
+- doctor-json-validation.txt
+- system-summary.txt
+- service-status.txt
+- port-status.txt
+- storage-status.txt
+- ssl-status.txt
+- bench-status.txt
+- recent-errors.txt
+- manifest.txt
+EOF_SUPPORT_MANIFEST
+}
+
+support_bundle_system_summary() {
+  echo "Generated: $(date -Iseconds 2>/dev/null || date)"
+  echo "Script: ${APP_NAME} v${SCRIPT_VERSION}"
+  echo
+  echo "OS release:"
+  if [[ -f /etc/os-release ]]; then
+    cat /etc/os-release
+  else
+    echo "/etc/os-release missing"
+  fi
+  echo
+  echo "Kernel:"
+  uname -a || true
+  echo
+  echo "Hostname:"
+  hostname || true
+  echo
+  echo "Current user:"
+  id || true
+  echo
+  echo "Uptime:"
+  uptime || true
+  echo
+  echo "Memory:"
+  free -h || true
+  echo
+  echo "Root filesystem:"
+  df -hT / || true
+  echo
+  echo "Tool versions:"
+  python3 --version 2>&1 || true
+  mariadb --version 2>&1 || mysql --version 2>&1 || true
+  redis-server --version 2>&1 || true
+  if id "$FRAPPE_USER" >/dev/null 2>&1; then
+    doctor_run_as_frappe_one_line 'node --version 2>/dev/null || echo node missing'
+    doctor_run_as_frappe_one_line 'python --version 2>&1 || echo python missing'
+  fi
+}
+
+support_bundle_service_status() {
+  local svc
+  for svc in mariadb redis-server "$ERPNEXT_SERVICE_NAME"; do
+    echo "============================================================"
+    echo "Service: ${svc}"
+    echo "============================================================"
+    systemctl is-enabled "$svc" 2>/dev/null || true
+    systemctl is-active "$svc" 2>/dev/null || true
+    systemctl status "$svc" --no-pager --lines=30 2>&1 || true
+    echo
+  done
+}
+
+support_bundle_port_status() {
+  echo "Listening TCP ports:"
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>&1 || true
+  else
+    netstat -ltn 2>&1 || true
+  fi
+  echo
+  echo "ERPNext development port checks:"
+  local item port label
+  for item in "8000:Bench web" "9000:Socket.io" "11000:Bench Redis queue" "13000:Bench Redis cache" "80:HTTP" "443:HTTPS"; do
+    port="${item%%:*}"
+    label="${item#*:}"
+    if port_listens "$port"; then
+      printf '%-24s OK    port %s listening\n' "$label" "$port"
+    else
+      printf '%-24s INFO  port %s not listening\n' "$label" "$port"
+    fi
+  done
+}
+
+support_bundle_storage_status() {
+  echo "Raw storage evaluator output:"
+  storage_eval 2>&1 || true
+  echo
+  echo "Root mount:"
+  findmnt -n -o SOURCE,FSTYPE,SIZE,AVAIL,TARGET / 2>&1 || true
+  echo
+  echo "df -hT:"
+  df -hT || true
+  echo
+  echo "lsblk -f:"
+  lsblk -f 2>&1 || true
+  echo
+  if command -v pvs >/dev/null 2>&1; then
+    echo "LVM physical volumes:"
+    pvs 2>&1 || true
+    echo
+  fi
+  if command -v vgs >/dev/null 2>&1; then
+    echo "LVM volume groups:"
+    vgs 2>&1 || true
+    echo
+  fi
+  if command -v lvs >/dev/null 2>&1; then
+    echo "LVM logical volumes:"
+    lvs 2>&1 || true
+    echo
+  fi
+}
+
+support_bundle_ssl_status() {
+  echo "Script SSL status:"
+  show_ssl_status || true
+  echo
+  echo "Local SSL verification summary:"
+  verify_local_ssl || true
+}
+
+support_bundle_bench_status() {
+  local bench_dir
+  bench_dir="$(active_bench_dir 2>/dev/null || echo "$BENCH_DIR")"
+
+  echo "Bench directory: ${bench_dir}"
+  echo "Site: ${SITE_NAME}"
+  echo
+
+  if ! id "$FRAPPE_USER" >/dev/null 2>&1; then
+    echo "frappe user missing; Bench status unavailable."
+    return 0
+  fi
+
+  if ! path_is_dir "$bench_dir"; then
+    echo "Bench directory missing; Bench status unavailable."
+    return 0
+  fi
+
+  echo "Bench version:"
+  run_as_frappe "cd '${bench_dir}' && bench version" 2>&1 || true
+  echo
+  echo "Installed site apps:"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' list-apps" 2>&1 || true
+  echo
+  echo "Downloaded app folders and Git branches:"
+  run_as_frappe "cd '${bench_dir}' && for appdir in apps/*; do [ -d \"\$appdir\" ] || continue; app=\$(basename \"\$appdir\"); branch=\$(git -C \"\$appdir\" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); printf '%s %s\\n' \"\$app\" \"\$branch\"; done | sort" 2>&1 || true
+}
+
+support_bundle_recent_errors() {
+  local svc
+  for svc in "$ERPNEXT_SERVICE_NAME" mariadb redis-server; do
+    echo "============================================================"
+    echo "Recent warnings/errors: ${svc}"
+    echo "============================================================"
+    journalctl -u "$svc" -n 120 --no-pager -o short-iso -p warning..alert 2>&1 || true
+    echo
+  done
+}
+
+create_support_bundle() {
+  require_sudo
+
+  local timestamp bundle_name bundle_parent bundle_dir archive json_stderr validation_file
+  timestamp="$(date +%Y%m%d-%H%M%S)"
+  bundle_name="erpnext-dev-support-bundle-${timestamp}"
+  bundle_parent="${SUPPORT_BUNDLE_DIR:-/tmp}"
+  bundle_dir="${bundle_parent}/${bundle_name}"
+  archive="${bundle_parent}/${bundle_name}.tar.gz"
+  json_stderr="${bundle_dir}/doctor-json.stderr"
+  validation_file="${bundle_dir}/doctor-json-validation.txt"
+
+  log "Creating redacted support bundle"
+
+  rm -rf "$bundle_dir" "$archive" 2>/dev/null || true
+  mkdir -p "$bundle_dir"
+  chmod 700 "$bundle_dir" 2>/dev/null || true
+
+  support_bundle_write_file "${bundle_dir}/manifest.txt" support_bundle_manifest
+  support_bundle_write_file "${bundle_dir}/doctor-plain.txt" run_doctor_plain
+
+  if run_doctor_json > "${bundle_dir}/doctor.json" 2> "$json_stderr"; then
+    :
+  else
+    echo "WARN: doctor --json returned a non-zero exit code." > "$validation_file"
+  fi
+  redact_file_in_place "${bundle_dir}/doctor.json"
+  redact_file_in_place "$json_stderr"
+  chmod 600 "${bundle_dir}/doctor.json" "$json_stderr" 2>/dev/null || true
+
+  if [[ ! -s "$json_stderr" ]]; then
+    rm -f "$json_stderr"
+  fi
+
+  if command -v python3 >/dev/null 2>&1 && python3 -m json.tool "${bundle_dir}/doctor.json" >/dev/null 2>&1; then
+    echo "OK: doctor.json is valid JSON." >> "$validation_file"
+  else
+    echo "WARN: doctor.json could not be validated as JSON on this system." >> "$validation_file"
+  fi
+  chmod 600 "$validation_file" 2>/dev/null || true
+
+  support_bundle_write_file "${bundle_dir}/system-summary.txt" support_bundle_system_summary
+  support_bundle_write_file "${bundle_dir}/service-status.txt" support_bundle_service_status
+  support_bundle_write_file "${bundle_dir}/port-status.txt" support_bundle_port_status
+  support_bundle_write_file "${bundle_dir}/storage-status.txt" support_bundle_storage_status
+  support_bundle_write_file "${bundle_dir}/ssl-status.txt" support_bundle_ssl_status
+  support_bundle_write_file "${bundle_dir}/bench-status.txt" support_bundle_bench_status
+  support_bundle_write_file "${bundle_dir}/recent-errors.txt" support_bundle_recent_errors
+
+  tar -C "$bundle_parent" -czf "$archive" "$bundle_name"
+  chmod 600 "$archive" 2>/dev/null || true
+  rm -rf "$bundle_dir"
+
+  ok "Support bundle created: ${archive}"
+  echo
+  echo "Review before sharing:"
+  echo "  tar -tzf ${archive}"
+  echo "  mkdir -p /tmp/erpnext-support-review && tar -xzf ${archive} -C /tmp/erpnext-support-review"
+  echo
+  echo "This bundle intentionally excludes credential files, private keys, raw site_config.json secrets, tokens, and passwords."
+}
+
 run_full_status() {
   require_sudo
 
@@ -6783,6 +7058,7 @@ Advanced actions:
   doctor              Show full health report
   doctor --plain      Show share-safe plain diagnostics without ANSI colors
   doctor --json       Show share-safe diagnostics as JSON
+  support-bundle      Create a redacted support archive for troubleshooting
   full-status         Show full health report
   uninstall           Show uninstall/reset menu
   advanced            Show advanced options menu
@@ -6881,6 +7157,7 @@ Examples:
   ./install-erpnext-dev.sh doctor
   ./install-erpnext-dev.sh doctor --plain
   ./install-erpnext-dev.sh doctor --json
+  ./install-erpnext-dev.sh support-bundle
 EOF_HELP
 }
 
@@ -6940,7 +7217,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -6979,6 +7256,7 @@ main() {
         *) run_full_status ;;
       esac
       ;;
+    support-bundle|support) create_support_bundle ;;
     start) run_start ;;
     stop) run_stop ;;
     uninstall) run_uninstall_menu ;;

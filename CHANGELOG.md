@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## v0.8.23
+
+### Added
+
+- Added `support-bundle` command for generating a redacted troubleshooting archive.
+- Support bundle includes `doctor --plain`, `doctor --json`, JSON validation, system summary, service status, port status, storage status, SSL status, Bench status, recent warnings/errors, and a manifest.
+- Added `support` as a short alias for `support-bundle`.
+
+### Safety
+
+- Support bundle generation excludes credential files, TLS private keys, raw `site_config.json` secrets, tokens, and database passwords.
+- Bundle text outputs are passed through a redaction step before packaging.
+- Generated support archives are written with private file permissions.
+
+### Improved
+
+- Help text now documents `support-bundle`.
+- The support workflow builds directly on the v0.8.22 plain and JSON diagnostic primitives.
+- Replaced the internal GiB formatter with an `awk` implementation to avoid depending on Python during support/status collection.
+
 ## v0.8.22
 
 ### Added

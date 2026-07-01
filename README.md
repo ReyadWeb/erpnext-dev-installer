@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.8.22
+# ERPNext Developer Installer v0.8.23
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -21,14 +21,53 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh doctor
 ./install-erpnext-dev.sh doctor --plain
 ./install-erpnext-dev.sh doctor --json
+./install-erpnext-dev.sh support-bundle
 ./install-erpnext-dev.sh next-step
 ```
 
-## v0.8.22 focus
+## v0.8.23 focus
 
-v0.8.22 adds share-safe diagnostic output for troubleshooting and future support-bundle work.
+v0.8.23 adds a redacted support bundle command for safer troubleshooting.
 
-The regular `doctor` command still shows the existing full health report:
+Create a support archive with:
+
+```bash
+./install-erpnext-dev.sh support-bundle
+```
+
+The command creates an archive like:
+
+```text
+erpnext-dev-support-bundle-YYYYMMDD-HHMMSS.tar.gz
+```
+
+The bundle includes:
+
+- `doctor-plain.txt`
+- `doctor.json`
+- `doctor-json-validation.txt`
+- `system-summary.txt`
+- `service-status.txt`
+- `port-status.txt`
+- `storage-status.txt`
+- `ssl-status.txt`
+- `bench-status.txt`
+- `recent-errors.txt`
+- `manifest.txt`
+
+The support bundle intentionally excludes credential files, private keys, raw `site_config.json` secrets, tokens, and passwords. Bundle text files are also passed through a redaction step before packaging.
+
+Review before sharing:
+
+```bash
+tar -tzf /tmp/erpnext-dev-support-bundle-YYYYMMDD-HHMMSS.tar.gz
+mkdir -p /tmp/erpnext-support-review
+tar -xzf /tmp/erpnext-dev-support-bundle-YYYYMMDD-HHMMSS.tar.gz -C /tmp/erpnext-support-review
+```
+
+## Diagnostics
+
+The regular `doctor` command shows the existing full health report:
 
 ```bash
 ./install-erpnext-dev.sh doctor
@@ -40,7 +79,7 @@ For copy/paste support output without ANSI colors, use:
 ./install-erpnext-dev.sh doctor --plain
 ```
 
-For structured tooling or future support-bundle generation, use:
+For structured tooling and support-bundle generation, use:
 
 ```bash
 ./install-erpnext-dev.sh doctor --json
