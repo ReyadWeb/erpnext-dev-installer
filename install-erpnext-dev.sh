@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.8.24"
+SCRIPT_VERSION="0.9.0"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -2656,40 +2656,259 @@ Current local SSL remains separate:
 EOF_PROD_SSL
 }
 
-show_production_readiness() {
-  local domain_state="not set"
-  local domain_status="WARN"
-  local nginx_state="not installed"
-  local ssl_state="local/dev only"
+production_cpu_count() {
+  nproc 2>/dev/null || echo 0
+}
 
-  if [[ -n "$PRODUCTION_DOMAIN" ]]; then
-    if validate_production_domain_value "$PRODUCTION_DOMAIN" >/dev/null 2>&1; then
-      domain_state="$PRODUCTION_DOMAIN"
-      domain_status="OK"
-    else
-      domain_state="invalid: $PRODUCTION_DOMAIN"
-      domain_status="WARN"
-    fi
+production_memory_mb() {
+  awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0
+}
+
+production_root_total_gb() {
+  df -BG / 2>/dev/null | awk 'NR==2 {gsub("G", "", $2); print $2+0}' || echo 0
+}
+
+production_root_free_gb() {
+  df -BG / 2>/dev/null | awk 'NR==2 {gsub("G", "", $4); print $4+0}' || echo 0
+}
+
+production_quick_install_state() {
+  local bench_dir
+  bench_dir="$(active_bench_dir 2>/dev/null || echo "$BENCH_DIR")"
+
+  if [[ -d "$bench_dir" && -d "${bench_dir}/apps/frappe" && -d "${bench_dir}/apps/erpnext" && -d "${bench_dir}/sites/${SITE_NAME}" ]]; then
+    echo "Installed"
+  elif [[ -d "$bench_dir" || -d "$FRAPPE_HOME" ]]; then
+    echo "Incomplete"
+  else
+    echo "Not installed"
   fi
+}
+
+production_backup_count() {
+  local bench_dir backup_dir
+  bench_dir="$(active_bench_dir 2>/dev/null || echo "$BENCH_DIR")"
+  backup_dir="${bench_dir}/sites/${SITE_NAME}/private/backups"
+
+  if [[ ! -d "$backup_dir" ]]; then
+    echo "0"
+    return 0
+  fi
+
+  if [[ ! -r "$backup_dir" ]]; then
+    echo "unknown"
+    return 0
+  fi
+
+  find "$backup_dir" -maxdepth 1 -type f \( -name '*.sql.gz' -o -name '*.tgz' -o -name '*.tar' -o -name '*.tar.gz' \) 2>/dev/null | wc -l | awk '{print $1+0}'
+}
+
+production_domain_readiness_status() {
+  if [[ -z "$PRODUCTION_DOMAIN" ]]; then
+    echo "WARN|not set"
+  elif validate_production_domain_value "$PRODUCTION_DOMAIN" >/dev/null 2>&1; then
+    echo "OK|$PRODUCTION_DOMAIN"
+  else
+    echo "WARN|invalid: $PRODUCTION_DOMAIN"
+  fi
+}
+
+production_ssl_readiness_detail() {
+  local cert_path
+  cert_path="$(ssl_cert_path 2>/dev/null || true)"
+
+  if ssl_is_configured 2>/dev/null; then
+    if [[ -n "$cert_path" && -f "$cert_path" ]] && ssl_cert_is_self_signed "$cert_path" 2>/dev/null; then
+      echo "WARN|local self-signed SSL only; not production SSL"
+    else
+      echo "INFO|local HTTPS configured; still verify production certificate plan"
+    fi
+  else
+    echo "WARN|not configured for production"
+  fi
+}
+
+production_classification() {
+  local install_state="$1"
+  local cpu_count="$2"
+  local mem_mb="$3"
+  local free_gb="$4"
+  local domain_state="$5"
+  local backup_count="$6"
+
+  if [[ "$install_state" != "Installed" ]]; then
+    echo "Not recommended|core ERPNext install is incomplete"
+    return 0
+  fi
+
+  if [[ "$cpu_count" =~ ^[0-9]+$ && "$cpu_count" -lt 2 ]]; then
+    echo "Not recommended|CPU is below the practical minimum"
+    return 0
+  fi
+
+  if [[ "$mem_mb" =~ ^[0-9]+$ && "$mem_mb" -lt 4096 ]]; then
+    echo "Not recommended|RAM is below the practical minimum"
+    return 0
+  fi
+
+  if [[ "$free_gb" =~ ^[0-9]+$ && "$free_gb" -lt 20 ]]; then
+    echo "Not recommended|root filesystem free space is low"
+    return 0
+  fi
+
+  if [[ "$domain_state" != "OK" ]]; then
+    echo "Dev-only|no valid production domain is configured"
+    return 0
+  fi
+
+  if [[ "$backup_count" == "0" || "$backup_count" == "unknown" ]]; then
+    echo "Dev-only|backup readiness is not confirmed"
+    return 0
+  fi
+
+  echo "Production candidate|resources and basic planning inputs look usable; hardening still required"
+}
+
+show_production_readiness() {
+  local bench_dir install_quick runtime service auto cpu_count mem_mb total_gb free_gb nginx_state backup_count
+  local domain_pair domain_status domain_state ssl_pair ssl_status ssl_detail class_pair class_name class_reason
+
+  bench_dir="$(active_bench_dir 2>/dev/null || echo "$BENCH_DIR")"
+  install_quick="$(production_quick_install_state)"
+  runtime="$(runtime_state 2>/dev/null || echo unknown)"
+  service="$(service_state 2>/dev/null || echo unknown)"
+  auto="$(autostart_state 2>/dev/null || echo unknown)"
+  cpu_count="$(production_cpu_count)"
+  mem_mb="$(production_memory_mb)"
+  total_gb="$(production_root_total_gb)"
+  free_gb="$(production_root_free_gb)"
+  backup_count="$(production_backup_count)"
+  nginx_state="not installed"
 
   if command -v nginx >/dev/null 2>&1; then
     nginx_state="installed"
   fi
 
+  domain_pair="$(production_domain_readiness_status)"
+  domain_status="${domain_pair%%|*}"
+  domain_state="${domain_pair#*|}"
+
+  ssl_pair="$(production_ssl_readiness_detail)"
+  ssl_status="${ssl_pair%%|*}"
+  ssl_detail="${ssl_pair#*|}"
+
+  class_pair="$(production_classification "$install_quick" "$cpu_count" "$mem_mb" "$free_gb" "$domain_status" "$backup_count")"
+  class_name="${class_pair%%|*}"
+  class_reason="${class_pair#*|}"
+
   echo
   echo "============================================================"
-  echo "Production Readiness Preview"
+  echo "Production Readiness / Planning"
   echo "============================================================"
-  status_line "Developer mode" "OK" "active"
-  status_line "Production automation" "INFO" "planned, not enabled"
-  status_line "Local site" "INFO" "$SITE_NAME"
+  status_line "Classification" "INFO" "$class_name — $class_reason"
+  status_line "Automation mode" "INFO" "planning only; no production changes are applied"
+  status_line "Local site" "INFO" "${SITE_NAME} (${SITE_NAME_SOURCE})"
+  status_line "Bench" "INFO" "$bench_dir"
+  if [[ "$install_quick" == "Installed" ]]; then
+    status_line "Install state" "OK" "$install_quick"
+  else
+    status_line "Install state" "WARN" "$install_quick"
+  fi
+  if [[ "$runtime" == Running* ]]; then
+    status_line "Runtime" "OK" "$runtime"
+  else
+    status_line "Runtime" "WARN" "$runtime"
+  fi
+  status_line "Service" "INFO" "$service; autostart=${auto}"
+
+  if [[ "$cpu_count" =~ ^[0-9]+$ && "$cpu_count" -ge 2 ]]; then
+    status_line "CPU" "OK" "${cpu_count} vCPU"
+  else
+    status_line "CPU" "WARN" "${cpu_count} vCPU; recommended minimum is 2+"
+  fi
+
+  if [[ "$mem_mb" =~ ^[0-9]+$ && "$mem_mb" -ge 8192 ]]; then
+    status_line "RAM" "OK" "${mem_mb} MB"
+  elif [[ "$mem_mb" =~ ^[0-9]+$ && "$mem_mb" -ge 4096 ]]; then
+    status_line "RAM" "WARN" "${mem_mb} MB; usable for dev/small testing, 8192+ MB preferred"
+  else
+    status_line "RAM" "FAIL" "${mem_mb} MB; recommended minimum is 4096 MB"
+  fi
+
+  if [[ "$free_gb" =~ ^[0-9]+$ && "$free_gb" -ge 60 ]]; then
+    status_line "Root disk" "OK" "${free_gb}G free of ${total_gb}G"
+  elif [[ "$free_gb" =~ ^[0-9]+$ && "$free_gb" -ge 20 ]]; then
+    status_line "Root disk" "WARN" "${free_gb}G free of ${total_gb}G; 60G+ free preferred"
+  else
+    status_line "Root disk" "FAIL" "${free_gb}G free of ${total_gb}G; too low for safe growth/backups"
+  fi
+
   status_line "Production domain" "$domain_status" "$domain_state"
   status_line "Nginx" "INFO" "$nginx_state"
-  status_line "SSL mode" "INFO" "$ssl_state"
+  status_line "Production SSL" "$ssl_status" "$ssl_detail"
+
+  if [[ "$backup_count" =~ ^[0-9]+$ && "$backup_count" -gt 0 ]]; then
+    status_line "Backup readiness" "OK" "${backup_count} local backup file(s) found; off-VM backups still recommended"
+  elif [[ "$backup_count" == "unknown" ]]; then
+    status_line "Backup readiness" "WARN" "backup folder not readable from current user"
+  else
+    status_line "Backup readiness" "WARN" "no local backup files detected"
+  fi
+
   echo
-  echo "Next planning commands:"
+  echo "Recommended next commands:"
+  echo "  ./install-erpnext-dev.sh production-plan"
   echo "  ./install-erpnext-dev.sh production-domain-guide"
   echo "  ./install-erpnext-dev.sh production-ssl-guide"
+  echo "============================================================"
+}
+
+show_production_plan() {
+  local domain_hint="${PRODUCTION_DOMAIN:-erp.company.com}"
+
+  echo
+  echo "============================================================"
+  echo "Production Planning Checklist"
+  echo "============================================================"
+  echo
+  echo "This command is planning-only. It does not convert the dev VM into production."
+  echo
+  echo "1) Decide the target architecture"
+  echo "   - Keep this VM as development only, or migrate/harden a separate production VM."
+  echo "   - Production should not rely on a casual bench start workflow."
+  echo
+  echo "2) Confirm production domain"
+  echo "   - Current local site: ${SITE_NAME}"
+  echo "   - Planned production domain: ${domain_hint}"
+  echo "   - Use a real DNS name such as erp.company.com, not .test or .local."
+  echo
+  echo "3) Confirm DNS and network path"
+  echo "   - A/AAAA record points to the production server."
+  echo "   - Ports 80 and 443 are reachable where required."
+  echo "   - Do not change MX/email DNS records unless ERPNext email routing requires it."
+  echo
+  echo "4) Confirm SSL approach"
+  echo "   - Local mkcert/self-signed SSL is for development only."
+  echo "   - Production should use Let's Encrypt, Cloudflare Origin CA, or a business-approved certificate."
+  echo
+  echo "5) Confirm backup and restore readiness"
+  echo "   - Create database + files backup."
+  echo "   - Store a copy off the VM."
+  echo "   - Test restore before trusting the environment."
+  echo
+  echo "6) Confirm hardening before go-live"
+  echo "   - Firewall policy"
+  echo "   - Service supervision"
+  echo "   - Update strategy"
+  echo "   - Monitoring/log review"
+  echo "   - Admin password and credential handling"
+  echo
+  echo "Useful commands now:"
+  echo "  ./install-erpnext-dev.sh production-readiness"
+  echo "  ./install-erpnext-dev.sh production-domain-guide"
+  echo "  ./install-erpnext-dev.sh production-ssl-guide"
+  echo "  ./install-erpnext-dev.sh backup-files"
+  echo "  ./install-erpnext-dev.sh support-bundle"
   echo "============================================================"
 }
 
@@ -7376,7 +7595,8 @@ Advanced actions:
   expand-root-storage Safely expand root filesystem when VM disk is larger
   verify-storage      Verify root storage is suitable for ERPNext
   site-name-guide     Show custom .test hostname guide
-  production-readiness Show production readiness preview
+  production-readiness Show production readiness/planning classification
+  production-plan      Show production planning checklist
   production-domain-guide Show production domain planning guide
   production-ssl-guide Show production SSL planning guide
   configure-local-ssl Configure Nginx local HTTPS reverse proxy
@@ -7435,6 +7655,7 @@ Examples:
   ./install-erpnext-dev.sh storage-status
   ./install-erpnext-dev.sh domain-config
   ./install-erpnext-dev.sh production-readiness
+  ./install-erpnext-dev.sh production-plan
   ./install-erpnext-dev.sh doctor
   ./install-erpnext-dev.sh doctor --plain
   ./install-erpnext-dev.sh doctor --json
@@ -7498,7 +7719,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -7607,6 +7828,7 @@ main() {
     verify-storage) verify_storage ;;
     domain-config) show_domain_config ;;
     production-readiness) show_production_readiness ;;
+    production-plan|prod-plan) show_production_plan ;;
     production-domain-guide) show_production_domain_guide ;;
     production-ssl-guide) show_production_ssl_guide ;;
     repair-site-config) repair_site_config ;;

@@ -1,4 +1,4 @@
-# TESTING v0.8.24
+# TESTING v0.9.0
 
 ## Syntax
 
@@ -11,13 +11,13 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="0.8.24"
+SCRIPT_VERSION="0.9.0"
 ```
 
 ## Help command
 
 ```bash
-./install-erpnext-dev.sh help | grep -E "doctor --plain|doctor --json|support-bundle|app-compatibility"
+./install-erpnext-dev.sh help | grep -E "doctor --plain|doctor --json|support-bundle|app-compatibility|production-plan"
 ```
 
 Expected:
@@ -26,7 +26,25 @@ Expected:
 - Help lists `doctor --json`.
 - Help lists `support-bundle`.
 - Help lists `app-compatibility`.
+- Help lists `production-plan`.
 
+
+
+## Production readiness / planning
+
+```bash
+./install-erpnext-dev.sh production-readiness
+./install-erpnext-dev.sh production-plan
+./install-erpnext-dev.sh prod-plan
+```
+
+Expected:
+
+- `production-readiness` shows a classification row.
+- It reports CPU, RAM, root disk, install/runtime/service state, domain status, SSL planning status, and backup readiness.
+- It remains planning-only and does not modify the VM.
+- `production-plan` prints a checklist for architecture, domain, DNS/network path, SSL, backup/restore, and hardening.
+- `prod-plan` works as an alias.
 
 ## Optional app compatibility
 

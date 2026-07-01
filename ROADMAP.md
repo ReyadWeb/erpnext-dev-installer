@@ -1,8 +1,8 @@
 # ROADMAP
 
-## Current: v0.8.24
+## Current: v0.9.0
 
-Stable developer installer baseline with share-safe diagnostics, redacted support bundles, and optional app compatibility preflight checks.
+Stable developer installer baseline with production readiness/planning classification, share-safe diagnostics, redacted support bundles, and optional app compatibility preflight checks.
 
 Completed:
 
@@ -15,6 +15,8 @@ Completed:
 - `support-bundle` redacted troubleshooting archive
 - `app-compatibility` optional app branch compatibility matrix
 - compatibility warnings in `app-install-wizard`
+- `production-readiness` environment classification
+- `production-plan` planning checklist
 - root storage expansion
 - corrected post-expansion storage decision logic
 - guided setup flow
@@ -25,12 +27,6 @@ Completed:
 - private installer logs and safer credential handling
 
 ## Next recommended work
-
-### v0.9.0
-
-- add production readiness/planning branch
-- classify the VM as dev-only, production candidate, or not recommended
-- check CPU, RAM, disk, services, domain assumptions, SSL assumptions, and backup readiness
 
 ### v0.9.1
 

@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.8.24
+# ERPNext Developer Installer v0.9.0
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -19,6 +19,8 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh local-ssl-wizard
 ./install-erpnext-dev.sh app-install-wizard
 ./install-erpnext-dev.sh app-compatibility
+./install-erpnext-dev.sh production-readiness
+./install-erpnext-dev.sh production-plan
 ./install-erpnext-dev.sh doctor
 ./install-erpnext-dev.sh doctor --plain
 ./install-erpnext-dev.sh doctor --json
@@ -26,9 +28,22 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh next-step
 ```
 
-## v0.8.24 focus
+## v0.9.0 focus
 
-v0.8.24 adds optional app compatibility preflight checks before app download/install.
+v0.9.0 adds a production readiness and planning branch. It does not convert the developer VM into production; it classifies the environment and shows the planning checklist needed before any production hardening or migration work.
+
+Run:
+
+```bash
+./install-erpnext-dev.sh production-readiness
+./install-erpnext-dev.sh production-plan
+```
+
+`production-readiness` checks CPU, RAM, disk, install/runtime/service state, production domain configuration, local SSL assumptions, and backup readiness. It classifies the VM as dev-only, production candidate, or not recommended.
+
+`production-plan` prints the planning checklist for architecture, domain, DNS/network path, SSL, backups, and hardening.
+
+## v0.8.24 optional app compatibility
 
 Check the optional app matrix with:
 

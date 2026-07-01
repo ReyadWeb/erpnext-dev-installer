@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## v0.9.0
+
+### Added
+
+- Added `production-plan` command and `prod-plan` alias.
+- Expanded `production-readiness` from a preview into a production planning classifier.
+- Added checks for CPU, RAM, root disk, install state, runtime/service state, production domain setting, local SSL assumptions, Nginx presence, and backup readiness.
+
+### Improved
+
+- Production readiness now classifies the VM as `Dev-only`, `Production candidate`, or `Not recommended`.
+- Help text and examples now include `production-plan`.
+- The production commands are planning-only and do not apply production changes.
+
 ## v0.8.24
 
 ### Added
