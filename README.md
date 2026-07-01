@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.8.20
+# ERPNext Developer Installer v0.8.22
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -19,17 +19,34 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh local-ssl-wizard
 ./install-erpnext-dev.sh app-install-wizard
 ./install-erpnext-dev.sh doctor
+./install-erpnext-dev.sh doctor --plain
+./install-erpnext-dev.sh doctor --json
 ./install-erpnext-dev.sh next-step
 ```
 
-## v0.8.20 focus
+## v0.8.22 focus
 
-v0.8.20 fixes the post-expansion storage status decision. Previous versions could still say `Expansion recommended` after the root LV had already been expanded, because they compared the whole disk size to the partition size. That counted earlier partitions such as `/boot` as if they were growable free space.
+v0.8.22 adds share-safe diagnostic output for troubleshooting and future support-bundle work.
 
-The storage planner now checks actual free space after the root partition/PV at the end of the disk using sysfs sector data. Expansion is recommended only when:
+The regular `doctor` command still shows the existing full health report:
 
-- LVM has free VG extents, or
-- the root partition/PV has growable free space after it on disk.
+```bash
+./install-erpnext-dev.sh doctor
+```
+
+For copy/paste support output without ANSI colors, use:
+
+```bash
+./install-erpnext-dev.sh doctor --plain
+```
+
+For structured tooling or future support-bundle generation, use:
+
+```bash
+./install-erpnext-dev.sh doctor --json
+```
+
+The plain and JSON diagnostic modes intentionally exclude secrets, passwords, tokens, private keys, and credential file contents. They report paths and presence checks only.
 
 ## Local SSL
 
@@ -40,6 +57,20 @@ For quick local HTTPS:
 ```
 
 Self-signed certificates are useful for testing. For trusted browser SSL, use `mkcert` on the host and install the generated cert/key into the VM.
+
+Typical trusted replacement flow:
+
+```bash
+# on the HOST
+mkcert -install
+mkcert -cert-file erp.test.crt -key-file erp.test.key erp.test VM_IP localhost 127.0.0.1
+scp erp.test.crt erp.test.key USER@VM_IP:/tmp/
+
+# inside the VM
+./install-erpnext-dev.sh local-ssl-wizard
+```
+
+Existing VM cert/key files are backed up before replacement.
 
 ## Optional apps
 

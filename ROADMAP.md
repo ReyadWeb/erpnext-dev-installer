@@ -1,8 +1,8 @@
 # ROADMAP
 
-## Current: v0.8.20
+## Current: v0.8.22
 
-Stable developer installer baseline with corrected storage expansion decision logic.
+Stable developer installer baseline with share-safe diagnostic output for support/debug workflows.
 
 Completed:
 
@@ -10,20 +10,31 @@ Completed:
 - custom local `.test` site names
 - autostart service
 - runtime and doctor checks
+- `doctor --plain` safe copy/paste diagnostics
+- `doctor --json` structured diagnostics
 - root storage expansion
+- corrected post-expansion storage decision logic
 - guided setup flow
 - access verification
 - local SSL wizard
+- trusted mkcert replacement path
 - optional app checkpoint workflow
 - private installer logs and safer credential handling
 
 ## Next recommended work
 
-### v0.8.21
+### v0.8.23
 
-- small UX polish for host/VM hints
-- improve `next-step` priority after storage is already expanded
-- add clearer trusted `mkcert` replacement wizard
+- add safer support bundle export with secrets redacted
+- include `doctor --plain` and `doctor --json` outputs in the support bundle
+- include recent service logs with redaction
+- exclude credentials, private keys, tokens, and raw site config secrets
+
+### v0.8.24
+
+- improve optional app compatibility checks before download/install
+- show detected Frappe/ERPNext branch and target app branch
+- warn before installing uncertain or experimental app branches
 
 ### v0.9.x
 

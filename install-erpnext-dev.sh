@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.8.20"
+SCRIPT_VERSION="0.8.22"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -52,6 +52,7 @@ ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 
 ASSUME_YES=0
 ACTION=""
+DOCTOR_FORMAT="human"
 LOG_DIR="${LOG_DIR:-/tmp}"
 LOG_FILE="${LOG_FILE:-${LOG_DIR}/erpnext-dev-installer-$(date +%Y%m%d-%H%M%S).log}"
 LOCK_FILE="${LOCK_FILE:-/tmp/erpnext-dev-installer.lock}"
@@ -2250,63 +2251,82 @@ verify_access() {
 show_next_step() {
   require_sudo
 
-  local vm_ip installed runtime auto data can_expand
+  local vm_ip installed runtime auto data can_expand storage_reason storage_state ssl_state next_label next_command
   vm_ip="$(get_vm_ip)"
   installed="$(install_state 2>/dev/null || echo "Not installed")"
   runtime="$(runtime_state 2>/dev/null || echo "Stopped")"
   auto="$(autostart_state 2>/dev/null || echo "Not configured")"
   data="$(storage_eval 2>/dev/null || true)"
   can_expand="$(printf '%s\n' "$data" | awk -F= '$1=="CAN_EXPAND" {print $2; exit}')"
+  storage_reason="$(printf '%s\n' "$data" | awk -F= '$1=="REASON" {print $2; exit}')"
+  storage_state="OK"
+  ssl_state="not configured"
+
+  if [[ "${can_expand:-no}" == "yes" ]]; then
+    storage_state="recommended"
+  elif [[ -z "${can_expand:-}" ]]; then
+    storage_state="unknown"
+  fi
+
+  if ssl_is_configured 2>/dev/null; then
+    ssl_state="configured"
+  fi
 
   echo
   echo "============================================================"
   echo "Next Step"
   echo "============================================================"
+  status_line "Storage" "INFO" "${storage_state}${storage_reason:+ - ${storage_reason}}"
+  status_line "Install" "INFO" "$installed"
+  status_line "Runtime" "INFO" "$runtime"
+  status_line "Autostart" "INFO" "$auto"
+  status_line "Local SSL" "INFO" "$ssl_state"
+  echo
 
   if [[ "${can_expand:-no}" == "yes" ]]; then
-    echo "Recommended next step: expand root storage."
-    echo "  ./install-erpnext-dev.sh expand-root-storage"
-    echo "============================================================"
-    return 0
+    next_label="expand root storage"
+    next_command="./install-erpnext-dev.sh expand-root-storage"
+  else
+    case "$installed" in
+      "Not installed")
+        next_label="run guided setup"
+        next_command="./install-erpnext-dev.sh guided-setup"
+        ;;
+      "Incomplete")
+        next_label="repair or reinstall the environment"
+        next_command="./install-erpnext-dev.sh repair"
+        ;;
+      *)
+        if [[ "$runtime" != Running* ]]; then
+          next_label="start ERPNext"
+          next_command="./install-erpnext-dev.sh start"
+        elif [[ "$auto" != "Enabled" ]]; then
+          next_label="enable autostart so the VM recovers cleanly after reboot"
+          next_command="./install-erpnext-dev.sh enable-autostart"
+        elif [[ "$ssl_state" != "configured" ]]; then
+          next_label="configure local HTTPS"
+          next_command="./install-erpnext-dev.sh local-ssl-wizard"
+        else
+          next_label="install optional apps with a checkpoint"
+          next_command="./install-erpnext-dev.sh app-install-wizard"
+        fi
+        ;;
+    esac
   fi
 
-  case "$installed" in
-    "Not installed")
-      echo "Recommended next step: run guided setup."
-      echo "  ./install-erpnext-dev.sh guided-setup"
-      ;;
-    "Incomplete")
-      echo "Recommended next step: repair or reinstall the environment."
-      echo "  ./install-erpnext-dev.sh repair"
-      ;;
-    *)
-      if [[ "$runtime" != Running* ]]; then
-        echo "Recommended next step: start ERPNext."
-        echo "  ./install-erpnext-dev.sh start"
-      else
-        echo "ERPNext is running. Verify browser access next."
-        echo "  ./install-erpnext-dev.sh verify-access"
-        echo
-        echo "Open:"
-        echo "  http://${vm_ip}:8000"
-        echo "  http://${SITE_NAME}:8000"
-        echo
-        if [[ "$auto" != "Enabled" ]]; then
-          echo "Optional: enable autostart."
-          echo "  ./install-erpnext-dev.sh enable-autostart"
-        else
-          if port_listens 443; then
-            echo "After SSL works, optional next step:"
-            echo "  ./install-erpnext-dev.sh app-install-wizard"
-          else
-            echo "After access works, optional next step:"
-            echo "  ./install-erpnext-dev.sh local-ssl-wizard"
-          fi
-        fi
-      fi
-      ;;
-  esac
-
+  echo "Recommended next step: ${next_label}."
+  echo "  ${next_command}"
+  echo
+  echo "Useful checks:"
+  echo "  ./install-erpnext-dev.sh verify-access"
+  echo "  ./install-erpnext-dev.sh storage-status"
+  echo
+  echo "Open when running:"
+  echo "  http://${vm_ip}:8000"
+  echo "  http://${SITE_NAME}:8000"
+  if [[ "$ssl_state" == "configured" ]]; then
+    echo "  https://${SITE_NAME}"
+  fi
   echo "============================================================"
 }
 
@@ -2954,9 +2974,9 @@ install_local_ssl_cert() {
     echo "  /tmp/${SITE_NAME}.crt"
     echo "  /tmp/${SITE_NAME}.key"
     echo
-    echo "Generate trusted local certificates on the HOST with mkcert, then copy them to the VM:"
-    echo "  scp ${SITE_NAME}.crt test@VM_IP:/tmp/${SITE_NAME}.crt"
-    echo "  scp ${SITE_NAME}.key test@VM_IP:/tmp/${SITE_NAME}.key"
+    echo "Generate trusted local certificates on the HOST with mkcert, then copy them to the VM."
+    echo "Existing VM cert/key files will be backed up automatically when the files are installed."
+    show_local_ssl_wizard_host_mkcert_steps
     echo
     echo "You can override the VM source paths like this:"
     echo "  LOCAL_SSL_CERT_SOURCE=/path/to/${SITE_NAME}.crt LOCAL_SSL_KEY_SOURCE=/path/to/${SITE_NAME}.key ./install-erpnext-dev.sh install-local-ssl-cert"
@@ -3128,6 +3148,20 @@ ssl_is_configured() {
   [[ "$https_head" == HTTP/* ]]
 }
 
+ssl_cert_is_self_signed() {
+  local cert_path subject issuer
+  cert_path="${1:-$(ssl_cert_path)}"
+
+  [[ -f "$cert_path" ]] || return 1
+  command -v openssl >/dev/null 2>&1 || return 1
+
+  subject="$(openssl x509 -in "$cert_path" -noout -subject 2>/dev/null | sed 's/^subject=//; s/^ *//')"
+  issuer="$(openssl x509 -in "$cert_path" -noout -issuer 2>/dev/null | sed 's/^issuer=//; s/^ *//')"
+
+  [[ -n "$subject" && "$subject" == "$issuer" ]]
+}
+
+
 show_local_ssl_wizard_host_mkcert_steps() {
   local vm_ip escaped_site cert_path key_path
   vm_ip="$(get_vm_ip)"
@@ -3144,6 +3178,11 @@ show_local_ssl_wizard_host_mkcert_steps() {
   echo
   echo "Then run inside this VM:"
   echo "  ./install-erpnext-dev.sh local-ssl-wizard"
+  echo "  # choose the mkcert replace/install option"
+  echo
+  echo "Replacement safety:"
+  echo "  Existing VM cert/key files are backed up before replacement."
+  echo "  Browser trust still belongs on the HOST where mkcert -install was run."
   echo
   echo "Target VM paths:"
   echo "  ${cert_path}"
@@ -3173,10 +3212,12 @@ run_local_ssl_wizard() {
   require_erpnext_vm_context "local-ssl-wizard" || return 1
   require_sudo
 
-  local vm_ip direct_head friendly_head choice reply src_cert src_key
+  local vm_ip direct_head friendly_head choice reply src_cert src_key cert_path cert_mode
   vm_ip="$(get_vm_ip)"
   src_cert="/tmp/${SITE_NAME}.crt"
   src_key="/tmp/${SITE_NAME}.key"
+  cert_path="$(ssl_cert_path)"
+  cert_mode="not installed"
 
   echo
   echo "============================================================"
@@ -3216,9 +3257,65 @@ run_local_ssl_wizard() {
     return 1
   fi
 
+  if [[ -f "$cert_path" ]]; then
+    if ssl_cert_is_self_signed "$cert_path"; then
+      cert_mode="self-signed/local test certificate"
+    else
+      cert_mode="existing certificate, not self-signed"
+    fi
+  fi
+
   if ssl_is_configured; then
     status_line "Local HTTPS" "OK" "already configured"
-    show_local_ssl_wizard_host_tests
+    status_line "Certificate mode" "INFO" "$cert_mode"
+    echo
+    echo "Choose SSL action:"
+    echo "  1) Keep current SSL and show HOST checks"
+    echo "  2) Replace/install trusted mkcert certificate from HOST files in /tmp"
+    echo "  3) Regenerate quick self-signed certificate"
+    echo "  4) Show SSL status only"
+    echo
+
+    if [[ "$ASSUME_YES" -eq 1 ]]; then
+      choice="1"
+    else
+      read -r -p "Choose [1-4]: " choice
+      choice="${choice:-1}"
+    fi
+
+    case "$choice" in
+      1)
+        show_local_ssl_wizard_host_tests
+        ;;
+      2)
+        if [[ -f "$src_cert" && -f "$src_key" ]]; then
+          status_line "mkcert files" "OK" "found in /tmp"
+          install_local_ssl_cert
+          configure_local_ssl
+          verify_local_ssl
+          show_local_ssl_wizard_host_tests
+        else
+          status_line "mkcert files" "INFO" "not found in /tmp"
+          warn "No certificate was replaced. Generate/copy mkcert files first, then rerun this wizard."
+          show_local_ssl_wizard_host_mkcert_steps
+        fi
+        ;;
+      3)
+        create_self_signed_local_cert
+        configure_local_ssl
+        verify_local_ssl
+        show_local_ssl_wizard_host_tests
+        echo
+        warn "Self-signed SSL works for testing, but browsers will show a warning."
+        ;;
+      4)
+        show_ssl_status
+        ;;
+      *)
+        warn "Invalid choice. No changes made."
+        ;;
+    esac
+
     echo "============================================================"
     return 0
   fi
@@ -3410,6 +3507,11 @@ show_ssl_status() {
   fi
 
   if [[ -f "$cert_path" ]]; then
+    if ssl_cert_is_self_signed "$cert_path"; then
+      status_line "Certificate trust" "WARN" "self-signed; browser warning is expected unless the HOST trusts this certificate/CA"
+    else
+      status_line "Certificate trust" "INFO" "not self-signed; if this is mkcert, trust must be installed on the HOST"
+    fi
     echo
     echo "Certificate details:"
     ssl_cert_summary "$cert_path"
@@ -3996,7 +4098,15 @@ detect_bench_dir() {
 }
 
 active_bench_dir() {
-  detect_bench_dir 2>/dev/null || echo "$BENCH_DIR"
+  local detected
+
+  detected="$(detect_bench_dir 2>/dev/null || true)"
+  if [[ -n "$detected" ]]; then
+    printf '%s
+' "$detected" | head -n 1
+  else
+    echo "$BENCH_DIR"
+  fi
 }
 
 
@@ -4451,6 +4561,386 @@ show_status_menu() {
   done
 }
 
+
+
+status_line_plain() {
+  local label="$1"
+  local state="$2"
+  local message="$3"
+
+  printf "  %-28s %-7s %s\n" "$label" "$state" "$message"
+}
+
+json_escape() {
+  local s="${1:-}"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\t'/\\t}"
+  printf '"%s"' "$s"
+}
+
+doctor_add_check() {
+  DOCTOR_CHECK_NAMES+=("$1")
+  DOCTOR_CHECK_STATUSES+=("$2")
+  DOCTOR_CHECK_DETAILS+=("$3")
+}
+
+doctor_command_version() {
+  local cmd="$1"
+  shift || true
+
+  if command -v "$cmd" >/dev/null 2>&1; then
+    "$cmd" "$@" 2>/dev/null | head -n 1 || true
+  else
+    echo "missing"
+  fi
+}
+
+doctor_run_as_frappe_one_line() {
+  local cmd="$1"
+
+  if id "$FRAPPE_USER" >/dev/null 2>&1; then
+    run_as_frappe "$cmd" 2>/dev/null | head -n 1 || true
+  else
+    echo "frappe user missing"
+  fi
+}
+
+doctor_storage_detail() {
+  local data layout root_bytes vg_free_bytes tail_free_bytes can_expand reason
+  data="$(storage_eval 2>/dev/null || true)"
+
+  while IFS='=' read -r k v; do
+    case "$k" in
+      LAYOUT) layout="$v" ;;
+      ROOT_BYTES) root_bytes="$v" ;;
+      VG_FREE_BYTES) vg_free_bytes="$v" ;;
+      TAIL_FREE_BYTES) tail_free_bytes="$v" ;;
+      CAN_EXPAND) can_expand="$v" ;;
+      REASON) reason="$v" ;;
+    esac
+  done <<< "$data"
+
+  printf 'layout=%s; root=%s; vg_free=%s; tail_free=%s; reason=%s\n' \
+    "${layout:-unknown}" \
+    "$(bytes_to_gib "${root_bytes:-0}" 2>/dev/null || echo unknown)" \
+    "$(bytes_to_gib "${vg_free_bytes:-0}" 2>/dev/null || echo unknown)" \
+    "$(bytes_to_gib "${tail_free_bytes:-0}" 2>/dev/null || echo unknown)" \
+    "${reason:-unknown}"
+}
+
+doctor_optional_app_detail() {
+  local bench_dir="$1"
+  local app="$2"
+
+  if site_app_installed "$app" 2>/dev/null; then
+    echo "installed on ${SITE_NAME}"
+  elif app_folder_exists "$bench_dir" "$app" 2>/dev/null && app_in_apps_txt "$app" 2>/dev/null; then
+    echo "downloaded and registered, not installed on ${SITE_NAME}"
+  elif app_folder_exists "$bench_dir" "$app" 2>/dev/null; then
+    echo "downloaded, not registered"
+  else
+    echo "not installed"
+  fi
+}
+
+doctor_collect() {
+  require_sudo
+
+  DOCTOR_GENERATED_AT="$(date -Iseconds 2>/dev/null || date)"
+  DOCTOR_HOSTNAME="$(hostname 2>/dev/null || echo unknown)"
+  DOCTOR_CURRENT_USER="$(id -un 2>/dev/null || echo unknown)"
+  DOCTOR_VM_IP="$(get_vm_ip 2>/dev/null || echo unknown)"
+  DOCTOR_BENCH_DIR="$(active_bench_dir 2>/dev/null || echo "$BENCH_DIR")"
+  DOCTOR_INSTALL_STATE="$(install_state 2>/dev/null || echo unknown)"
+  DOCTOR_RUNTIME_STATE="$(runtime_state 2>/dev/null || echo unknown)"
+  DOCTOR_SERVICE_STATE="$(service_state 2>/dev/null || echo unknown)"
+  DOCTOR_AUTOSTART_STATE="$(autostart_state 2>/dev/null || echo unknown)"
+  DOCTOR_SSL_STATE="not configured"
+  DOCTOR_CHECK_NAMES=()
+  DOCTOR_CHECK_STATUSES=()
+  DOCTOR_CHECK_DETAILS=()
+  DOCTOR_OPTIONAL_APPS=()
+  DOCTOR_OPTIONAL_LABELS=()
+  DOCTOR_OPTIONAL_DETAILS=()
+
+  if ssl_is_configured 2>/dev/null; then
+    DOCTOR_SSL_STATE="configured"
+  fi
+
+  if [[ -f /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    DOCTOR_OS="${PRETTY_NAME:-unknown}"
+    if [[ "${ID:-}" == "ubuntu" && ( "${VERSION_ID:-}" == "24.04" || "${VERSION_ID:-}" == "26.04" ) ]]; then
+      doctor_add_check "OS" "OK" "$DOCTOR_OS"
+    else
+      doctor_add_check "OS" "FAIL" "${DOCTOR_OS}; supported: Ubuntu 24.04 / 26.04"
+    fi
+  else
+    DOCTOR_OS="unknown"
+    doctor_add_check "OS" "FAIL" "/etc/os-release not found"
+  fi
+
+  local py_system py_frappe node_frappe mariadb_version redis_version storage_detail storage_data storage_can_expand storage_layout storage_reason
+  py_system="$(doctor_command_version python3 --version)"
+  py_frappe="$(doctor_run_as_frappe_one_line 'python --version 2>&1')"
+  node_frappe="$(doctor_run_as_frappe_one_line 'node --version 2>/dev/null || echo missing')"
+  mariadb_version="$(doctor_command_version mariadb --version)"
+  if [[ "$mariadb_version" == "missing" ]]; then
+    mariadb_version="$(doctor_command_version mysql --version)"
+  fi
+  redis_version="$(doctor_command_version redis-server --version)"
+
+  doctor_add_check "System Python" "INFO" "$py_system"
+  doctor_add_check "frappe Python" "INFO" "$py_frappe"
+  doctor_add_check "frappe Node" "INFO" "$node_frappe"
+  doctor_add_check "MariaDB version" "INFO" "$mariadb_version"
+  doctor_add_check "Redis version" "INFO" "$redis_version"
+
+  if systemctl is-active --quiet mariadb 2>/dev/null; then
+    doctor_add_check "MariaDB service" "OK" "running"
+  else
+    doctor_add_check "MariaDB service" "WARN" "not running"
+  fi
+
+  if systemctl is-active --quiet redis-server 2>/dev/null; then
+    doctor_add_check "Redis service" "OK" "running"
+  else
+    doctor_add_check "Redis service" "WARN" "not running"
+  fi
+
+  if [[ "$(sysctl -n vm.overcommit_memory 2>/dev/null || echo 0)" == "1" ]]; then
+    doctor_add_check "Redis overcommit" "OK" "vm.overcommit_memory=1"
+  else
+    doctor_add_check "Redis overcommit" "WARN" "not set to 1"
+  fi
+
+  if id "$FRAPPE_USER" >/dev/null 2>&1; then
+    doctor_add_check "frappe user" "OK" "$FRAPPE_USER exists"
+  else
+    doctor_add_check "frappe user" "FAIL" "$FRAPPE_USER missing"
+  fi
+
+  if path_is_dir "$DOCTOR_BENCH_DIR"; then
+    doctor_add_check "Bench folder" "OK" "$DOCTOR_BENCH_DIR"
+  else
+    doctor_add_check "Bench folder" "FAIL" "$DOCTOR_BENCH_DIR missing"
+  fi
+
+  if check_bench_app_installed frappe; then
+    doctor_add_check "Frappe app files" "OK" "apps/frappe exists"
+  else
+    doctor_add_check "Frappe app files" "FAIL" "apps/frappe missing"
+  fi
+
+  if check_bench_app_installed erpnext; then
+    doctor_add_check "ERPNext app files" "OK" "apps/erpnext exists"
+  else
+    doctor_add_check "ERPNext app files" "WARN" "apps/erpnext missing"
+  fi
+
+  if site_exists; then
+    doctor_add_check "Site folder" "OK" "${SITE_NAME} exists"
+  else
+    doctor_add_check "Site folder" "WARN" "${SITE_NAME} missing"
+  fi
+
+  if site_app_installed frappe 2>/dev/null; then
+    doctor_add_check "Site app: frappe" "OK" "installed on ${SITE_NAME}"
+  else
+    doctor_add_check "Site app: frappe" "WARN" "not confirmed on ${SITE_NAME}"
+  fi
+
+  if site_app_installed erpnext 2>/dev/null; then
+    doctor_add_check "Site app: erpnext" "OK" "installed on ${SITE_NAME}"
+  else
+    doctor_add_check "Site app: erpnext" "WARN" "not confirmed on ${SITE_NAME}"
+  fi
+
+  case "$DOCTOR_INSTALL_STATE" in
+    Installed) doctor_add_check "Install state" "OK" "$DOCTOR_INSTALL_STATE" ;;
+    Incomplete) doctor_add_check "Install state" "WARN" "$DOCTOR_INSTALL_STATE" ;;
+    *) doctor_add_check "Install state" "INFO" "$DOCTOR_INSTALL_STATE" ;;
+  esac
+
+  case "$DOCTOR_RUNTIME_STATE" in
+    Running*) doctor_add_check "Runtime state" "OK" "$DOCTOR_RUNTIME_STATE" ;;
+    Starting*) doctor_add_check "Runtime state" "WARN" "$DOCTOR_RUNTIME_STATE" ;;
+    *) doctor_add_check "Runtime state" "INFO" "$DOCTOR_RUNTIME_STATE" ;;
+  esac
+
+  case "$DOCTOR_SERVICE_STATE" in
+    Running) doctor_add_check "Service state" "OK" "$DOCTOR_SERVICE_STATE" ;;
+    "Not configured") doctor_add_check "Service state" "WARN" "$DOCTOR_SERVICE_STATE" ;;
+    *) doctor_add_check "Service state" "INFO" "$DOCTOR_SERVICE_STATE" ;;
+  esac
+
+  case "$DOCTOR_AUTOSTART_STATE" in
+    Enabled) doctor_add_check "Autostart" "OK" "$DOCTOR_AUTOSTART_STATE" ;;
+    *) doctor_add_check "Autostart" "WARN" "$DOCTOR_AUTOSTART_STATE" ;;
+  esac
+
+  local port label item
+  for item in "8000:Bench web" "9000:Socket.io" "11000:Bench Redis queue" "13000:Bench Redis cache"; do
+    port="${item%%:*}"
+    label="${item#*:}"
+    if port_listens "$port"; then
+      doctor_add_check "$label" "OK" "port ${port} listening"
+    else
+      doctor_add_check "$label" "INFO" "port ${port} not listening"
+    fi
+  done
+
+  storage_data="$(storage_eval 2>/dev/null || true)"
+  storage_can_expand="$(printf '%s\n' "$storage_data" | awk -F= '$1=="CAN_EXPAND" {print $2; exit}')"
+  storage_layout="$(printf '%s\n' "$storage_data" | awk -F= '$1=="LAYOUT" {print $2; exit}')"
+  storage_reason="$(printf '%s\n' "$storage_data" | awk -F= '$1=="REASON" {print $2; exit}')"
+  storage_detail="$(doctor_storage_detail)"
+  if [[ "${storage_can_expand:-no}" == "yes" ]]; then
+    doctor_add_check "Root storage" "WARN" "expansion recommended; ${storage_detail}"
+  elif [[ "${storage_layout:-unknown}" == "unknown" ]]; then
+    doctor_add_check "Root storage" "WARN" "not automatic; ${storage_reason:-unknown}"
+  else
+    doctor_add_check "Root storage" "OK" "${storage_detail}"
+  fi
+
+  if [[ "$DOCTOR_SSL_STATE" == "configured" ]]; then
+    local cert_path cert_detail="configured"
+    cert_path="$(ssl_cert_path 2>/dev/null || true)"
+    if [[ -n "$cert_path" && -f "$cert_path" ]] && ssl_cert_is_self_signed "$cert_path" 2>/dev/null; then
+      cert_detail="configured; self-signed/local test certificate"
+    elif [[ -n "$cert_path" && -f "$cert_path" ]]; then
+      cert_detail="configured; certificate is not self-signed"
+    fi
+    doctor_add_check "Local SSL" "OK" "$cert_detail"
+  else
+    doctor_add_check "Local SSL" "INFO" "not configured"
+  fi
+
+  if path_is_executable "${FRAPPE_HOME}/start-erpnext-dev.sh"; then
+    doctor_add_check "Start helper" "OK" "${FRAPPE_HOME}/start-erpnext-dev.sh"
+  else
+    doctor_add_check "Start helper" "WARN" "missing or not executable at ${FRAPPE_HOME}/start-erpnext-dev.sh"
+  fi
+
+  if path_is_file "${FRAPPE_HOME}/erpnext-dev-credentials.txt"; then
+    doctor_add_check "Credentials file" "OK" "present; content intentionally not displayed"
+  else
+    doctor_add_check "Credentials file" "WARN" "missing"
+  fi
+
+  local optional_item optional_app optional_label optional_detail
+  for optional_item in "crm:Frappe CRM" "hrms:Frappe HR / HRMS" "telephony:Frappe Telephony" "helpdesk:Frappe Helpdesk" "insights:Frappe Insights"; do
+    optional_app="${optional_item%%:*}"
+    optional_label="${optional_item#*:}"
+    optional_detail="$(doctor_optional_app_detail "$DOCTOR_BENCH_DIR" "$optional_app")"
+    DOCTOR_OPTIONAL_APPS+=("$optional_app")
+    DOCTOR_OPTIONAL_LABELS+=("$optional_label")
+    DOCTOR_OPTIONAL_DETAILS+=("$optional_detail")
+  done
+
+  DOCTOR_BENCH_VERSION="$(doctor_run_as_frappe_one_line "cd '${DOCTOR_BENCH_DIR}' 2>/dev/null && bench version 2>/dev/null | head -n 1")"
+  [[ -n "$DOCTOR_BENCH_VERSION" ]] || DOCTOR_BENCH_VERSION="not available"
+}
+
+run_doctor_plain() {
+  doctor_collect
+
+  echo
+  echo "============================================================"
+  echo "ERPNext Developer Diagnostics (Plain / Safe to Share)"
+  echo "============================================================"
+  echo "Generated: ${DOCTOR_GENERATED_AT}"
+  echo "Script:    ${APP_NAME} v${SCRIPT_VERSION}"
+  echo "Note:      Secrets, passwords, tokens, private keys, and credential contents are intentionally excluded."
+  echo
+  echo "Context:"
+  status_line_plain "Hostname" "INFO" "$DOCTOR_HOSTNAME"
+  status_line_plain "Current user" "INFO" "$DOCTOR_CURRENT_USER"
+  status_line_plain "VM IP" "INFO" "$DOCTOR_VM_IP"
+  status_line_plain "Site" "INFO" "${SITE_NAME} (${SITE_NAME_SOURCE})"
+  status_line_plain "Bench" "INFO" "$DOCTOR_BENCH_DIR"
+  status_line_plain "Bench version" "INFO" "$DOCTOR_BENCH_VERSION"
+  status_line_plain "Service name" "INFO" "$ERPNEXT_SERVICE_NAME"
+  status_line_plain "Config file" "INFO" "${CONFIG_FILE}"
+  echo
+  echo "Checks:"
+
+  local i
+  for i in "${!DOCTOR_CHECK_NAMES[@]}"; do
+    status_line_plain "${DOCTOR_CHECK_NAMES[$i]}" "${DOCTOR_CHECK_STATUSES[$i]}" "${DOCTOR_CHECK_DETAILS[$i]}"
+  done
+
+  echo
+  echo "Optional apps:"
+  for i in "${!DOCTOR_OPTIONAL_APPS[@]}"; do
+    status_line_plain "${DOCTOR_OPTIONAL_APPS[$i]}" "INFO" "${DOCTOR_OPTIONAL_LABELS[$i]}: ${DOCTOR_OPTIONAL_DETAILS[$i]}"
+  done
+
+  echo
+  echo "Access:"
+  echo "  Direct URL:   http://${DOCTOR_VM_IP}:8000"
+  echo "  Friendly URL: http://${SITE_NAME}:8000"
+  if [[ "$DOCTOR_SSL_STATE" == "configured" ]]; then
+    echo "  HTTPS URL:    https://${SITE_NAME}"
+  fi
+  echo "  HOST mapping: ${DOCTOR_VM_IP} ${SITE_NAME}"
+  echo
+  echo "Log file for this run: ${LOG_FILE}"
+  echo "============================================================"
+}
+
+run_doctor_json() {
+  doctor_collect
+
+  local i
+  printf '{\n'
+  printf '  "schema_version": "1",\n'
+  printf '  "safe_to_share": true,\n'
+  printf '  "redaction_note": ' ; json_escape "Secrets, passwords, tokens, private keys, and credential contents are intentionally excluded." ; printf ',\n'
+  printf '  "generated_at": ' ; json_escape "$DOCTOR_GENERATED_AT" ; printf ',\n'
+  printf '  "script": {"name": ' ; json_escape "$APP_NAME" ; printf ', "version": ' ; json_escape "$SCRIPT_VERSION" ; printf '},\n'
+  printf '  "context": {\n'
+  printf '    "hostname": ' ; json_escape "$DOCTOR_HOSTNAME" ; printf ',\n'
+  printf '    "current_user": ' ; json_escape "$DOCTOR_CURRENT_USER" ; printf ',\n'
+  printf '    "vm_ip": ' ; json_escape "$DOCTOR_VM_IP" ; printf ',\n'
+  printf '    "site_name": ' ; json_escape "$SITE_NAME" ; printf ',\n'
+  printf '    "site_source": ' ; json_escape "$SITE_NAME_SOURCE" ; printf ',\n'
+  printf '    "bench_dir": ' ; json_escape "$DOCTOR_BENCH_DIR" ; printf ',\n'
+  printf '    "bench_version": ' ; json_escape "$DOCTOR_BENCH_VERSION" ; printf ',\n'
+  printf '    "service_name": ' ; json_escape "$ERPNEXT_SERVICE_NAME" ; printf ',\n'
+  printf '    "config_file": ' ; json_escape "$CONFIG_FILE" ; printf ',\n'
+  printf '    "install_state": ' ; json_escape "$DOCTOR_INSTALL_STATE" ; printf ',\n'
+  printf '    "runtime_state": ' ; json_escape "$DOCTOR_RUNTIME_STATE" ; printf ',\n'
+  printf '    "service_state": ' ; json_escape "$DOCTOR_SERVICE_STATE" ; printf ',\n'
+  printf '    "autostart_state": ' ; json_escape "$DOCTOR_AUTOSTART_STATE" ; printf ',\n'
+  printf '    "local_ssl_state": ' ; json_escape "$DOCTOR_SSL_STATE" ; printf '\n'
+  printf '  },\n'
+  printf '  "checks": [\n'
+  for i in "${!DOCTOR_CHECK_NAMES[@]}"; do
+    if [[ "$i" -gt 0 ]]; then printf ',\n'; fi
+    printf '    {"name": ' ; json_escape "${DOCTOR_CHECK_NAMES[$i]}" ; printf ', "status": ' ; json_escape "${DOCTOR_CHECK_STATUSES[$i]}" ; printf ', "detail": ' ; json_escape "${DOCTOR_CHECK_DETAILS[$i]}" ; printf '}'
+  done
+  printf '\n  ],\n'
+  printf '  "optional_apps": [\n'
+  for i in "${!DOCTOR_OPTIONAL_APPS[@]}"; do
+    if [[ "$i" -gt 0 ]]; then printf ',\n'; fi
+    printf '    {"app": ' ; json_escape "${DOCTOR_OPTIONAL_APPS[$i]}" ; printf ', "label": ' ; json_escape "${DOCTOR_OPTIONAL_LABELS[$i]}" ; printf ', "detail": ' ; json_escape "${DOCTOR_OPTIONAL_DETAILS[$i]}" ; printf '}'
+  done
+  printf '\n  ],\n'
+  printf '  "access": {\n'
+  printf '    "direct_url": ' ; json_escape "http://${DOCTOR_VM_IP}:8000" ; printf ',\n'
+  printf '    "friendly_url": ' ; json_escape "http://${SITE_NAME}:8000" ; printf ',\n'
+  if [[ "$DOCTOR_SSL_STATE" == "configured" ]]; then
+    printf '    "https_url": ' ; json_escape "https://${SITE_NAME}" ; printf ',\n'
+  fi
+  printf '    "host_mapping": ' ; json_escape "${DOCTOR_VM_IP} ${SITE_NAME}" ; printf '\n'
+  printf '  }\n'
+  printf '}\n'
+}
 
 run_full_status() {
   require_sudo
@@ -6291,6 +6781,8 @@ Advanced actions:
   restart             Restart ERPNext service and wait until ready
   wait-ready          Wait until ERPNext development ports are ready
   doctor              Show full health report
+  doctor --plain      Show share-safe plain diagnostics without ANSI colors
+  doctor --json       Show share-safe diagnostics as JSON
   full-status         Show full health report
   uninstall           Show uninstall/reset menu
   advanced            Show advanced options menu
@@ -6387,6 +6879,8 @@ Examples:
   ./install-erpnext-dev.sh domain-config
   ./install-erpnext-dev.sh production-readiness
   ./install-erpnext-dev.sh doctor
+  ./install-erpnext-dev.sh doctor --plain
+  ./install-erpnext-dev.sh doctor --json
 EOF_HELP
 }
 
@@ -6438,6 +6932,14 @@ parse_args() {
         ASSUME_YES=1
         shift
         ;;
+      --plain)
+        DOCTOR_FORMAT="plain"
+        shift
+        ;;
+      --json)
+        DOCTOR_FORMAT="json"
+        shift
+        ;;
       guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
@@ -6447,6 +6949,10 @@ parse_args() {
         ;;
     esac
   done
+
+  if [[ -z "${ACTION}" && "${DOCTOR_FORMAT}" != "human" ]]; then
+    ACTION="doctor"
+  fi
 }
 
 main() {
@@ -6466,7 +6972,13 @@ main() {
     runtime-status) run_runtime_status ;;
     install-status) run_installation_status ;;
     service-summary) run_service_summary ;;
-    doctor|full-status) run_full_status ;;
+    doctor|full-status)
+      case "$DOCTOR_FORMAT" in
+        plain) run_doctor_plain ;;
+        json) run_doctor_json ;;
+        *) run_full_status ;;
+      esac
+      ;;
     start) run_start ;;
     stop) run_stop ;;
     uninstall) run_uninstall_menu ;;
