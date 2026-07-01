@@ -1,4 +1,4 @@
-# TESTING v0.8.23
+# TESTING v0.8.24
 
 ## Syntax
 
@@ -11,13 +11,13 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="0.8.23"
+SCRIPT_VERSION="0.8.24"
 ```
 
 ## Help command
 
 ```bash
-./install-erpnext-dev.sh help | grep -E "doctor --plain|doctor --json|support-bundle"
+./install-erpnext-dev.sh help | grep -E "doctor --plain|doctor --json|support-bundle|app-compatibility"
 ```
 
 Expected:
@@ -25,6 +25,47 @@ Expected:
 - Help lists `doctor --plain`.
 - Help lists `doctor --json`.
 - Help lists `support-bundle`.
+- Help lists `app-compatibility`.
+
+
+## Optional app compatibility
+
+```bash
+./install-erpnext-dev.sh app-compatibility
+```
+
+Expected:
+
+- Command shows the detected Frappe branch.
+- Command shows the detected ERPNext branch.
+- Command lists CRM, HRMS, Insights, Telephony, and Helpdesk.
+- Each app row shows target branch, current state, compatibility status, and recommendation detail.
+- Moving branches such as `main` show a warning or informational compatibility note.
+- Experimental branches such as `develop` show a warning.
+
+Alias checks:
+
+```bash
+./install-erpnext-dev.sh app-compat
+./install-erpnext-dev.sh app-preflight
+```
+
+Expected:
+
+- Aliases run the same compatibility matrix.
+
+## App wizard compatibility snapshot
+
+```bash
+./install-erpnext-dev.sh app-install-wizard
+```
+
+Expected:
+
+- Wizard preflight shows a compatibility snapshot before the menu.
+- The menu includes `Show optional app compatibility`.
+- Selecting an app shows a detailed compatibility card before the final install confirmation.
+- Warning-level compatibility findings ask for an extra confirmation before install continues.
 
 ## Doctor plain/json diagnostics
 
@@ -208,6 +249,7 @@ Expected:
 
 ```bash
 ./install-erpnext-dev.sh runtime-status
+./install-erpnext-dev.sh app-compatibility
 ./install-erpnext-dev.sh doctor
 ./install-erpnext-dev.sh doctor --plain
 ./install-erpnext-dev.sh doctor --json

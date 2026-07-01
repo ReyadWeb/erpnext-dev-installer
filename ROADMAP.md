@@ -1,8 +1,8 @@
 # ROADMAP
 
-## Current: v0.8.23
+## Current: v0.8.24
 
-Stable developer installer baseline with share-safe diagnostics and a redacted support bundle workflow.
+Stable developer installer baseline with share-safe diagnostics, redacted support bundles, and optional app compatibility preflight checks.
 
 Completed:
 
@@ -13,6 +13,8 @@ Completed:
 - `doctor --plain` safe copy/paste diagnostics
 - `doctor --json` structured diagnostics
 - `support-bundle` redacted troubleshooting archive
+- `app-compatibility` optional app branch compatibility matrix
+- compatibility warnings in `app-install-wizard`
 - root storage expansion
 - corrected post-expansion storage decision logic
 - guided setup flow
@@ -23,13 +25,6 @@ Completed:
 - private installer logs and safer credential handling
 
 ## Next recommended work
-
-### v0.8.24
-
-- improve optional app compatibility checks before download/install
-- show detected Frappe/ERPNext branch and target app branch
-- warn before installing uncertain or experimental app branches
-- make compatibility warnings visible in `app-install-wizard`
 
 ### v0.9.0
 

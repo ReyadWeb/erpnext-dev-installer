@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.8.23
+# ERPNext Developer Installer v0.8.24
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -18,6 +18,7 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh verify-access
 ./install-erpnext-dev.sh local-ssl-wizard
 ./install-erpnext-dev.sh app-install-wizard
+./install-erpnext-dev.sh app-compatibility
 ./install-erpnext-dev.sh doctor
 ./install-erpnext-dev.sh doctor --plain
 ./install-erpnext-dev.sh doctor --json
@@ -25,11 +26,39 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh next-step
 ```
 
-## v0.8.23 focus
+## v0.8.24 focus
 
-v0.8.23 adds a redacted support bundle command for safer troubleshooting.
+v0.8.24 adds optional app compatibility preflight checks before app download/install.
 
-Create a support archive with:
+Check the optional app matrix with:
+
+```bash
+./install-erpnext-dev.sh app-compatibility
+```
+
+The compatibility check shows:
+
+- detected Frappe branch
+- detected ERPNext branch
+- target optional app branch
+- current app install/download state
+- compatibility status and recommendation
+
+The app install wizard also shows a compact compatibility snapshot before the menu, and each app install shows a detailed preflight card before confirmation. Moving branches such as `main` and experimental branches such as `develop` are clearly marked with warnings.
+
+Branch overrides remain available:
+
+```bash
+CRM_BRANCH=main
+HRMS_BRANCH=version-16
+HELPDESK_BRANCH=main
+TELEPHONY_BRANCH=develop
+INSIGHTS_BRANCH=main
+```
+
+## Support bundle
+
+Create a redacted support archive with:
 
 ```bash
 ./install-erpnext-dev.sh support-bundle
@@ -41,29 +70,9 @@ The command creates an archive like:
 erpnext-dev-support-bundle-YYYYMMDD-HHMMSS.tar.gz
 ```
 
-The bundle includes:
-
-- `doctor-plain.txt`
-- `doctor.json`
-- `doctor-json-validation.txt`
-- `system-summary.txt`
-- `service-status.txt`
-- `port-status.txt`
-- `storage-status.txt`
-- `ssl-status.txt`
-- `bench-status.txt`
-- `recent-errors.txt`
-- `manifest.txt`
+The bundle includes `doctor-plain.txt`, `doctor.json`, JSON validation, system/service/port/storage/SSL/Bench status, recent errors, and a manifest.
 
 The support bundle intentionally excludes credential files, private keys, raw `site_config.json` secrets, tokens, and passwords. Bundle text files are also passed through a redaction step before packaging.
-
-Review before sharing:
-
-```bash
-tar -tzf /tmp/erpnext-dev-support-bundle-YYYYMMDD-HHMMSS.tar.gz
-mkdir -p /tmp/erpnext-support-review
-tar -xzf /tmp/erpnext-dev-support-bundle-YYYYMMDD-HHMMSS.tar.gz -C /tmp/erpnext-support-review
-```
 
 ## Diagnostics
 
@@ -116,7 +125,8 @@ Existing VM cert/key files are backed up before replacement.
 Use the checkpoint workflow:
 
 ```bash
+./install-erpnext-dev.sh app-compatibility
 ./install-erpnext-dev.sh app-install-wizard
 ```
 
-The wizard shows a preflight, recommends backup checkpoints, installs one optional app at a time, and runs post-app validation.
+The wizard shows a preflight, a compatibility snapshot, backup checkpoint prompts, one-app-at-a-time installation, and post-app validation.

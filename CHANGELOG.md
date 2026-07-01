@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## v0.8.24
+
+### Added
+
+- Added `app-compatibility` command for an optional app compatibility matrix.
+- Added aliases `app-compat` and `app-preflight`.
+- Added detailed compatibility cards before optional app install confirmation.
+- Added compatibility snapshot inside `app-install-wizard`.
+
+### Improved
+
+- App install flow now shows detected Frappe branch, detected ERPNext branch, target app branch, install state, compatibility status, and recommendation before download/install.
+- Moving branches such as `main` and experimental branches such as `develop` are now clearly warned before installation.
+- Help text and app install guide now document the compatibility command.
+
+### Safety
+
+- Optional app installs now require an extra confirmation when the compatibility preflight returns a warning.
+- Remote branch availability is checked before backup/download when a target branch is specified and the app is not already downloaded.
+
 ## v0.8.23
 
 ### Added

@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.8.23"
+SCRIPT_VERSION="0.8.24"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -5835,6 +5835,274 @@ print_app_profile() {
   echo
 }
 
+version_major_from_branch() {
+  local branch="$1"
+
+  if [[ "$branch" =~ ^version-([0-9]+)$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+  fi
+}
+
+branch_label() {
+  local branch="$1"
+  if [[ -n "$branch" ]]; then
+    echo "$branch"
+  else
+    echo "default repository branch"
+  fi
+}
+
+app_install_state_detail() {
+  local bench_dir="$1"
+  local app_name="$2"
+
+  if site_app_installed "$app_name"; then
+    echo "installed on ${SITE_NAME}"
+  elif app_folder_exists "$bench_dir" "$app_name" && app_in_apps_txt "$app_name"; then
+    echo "downloaded and registered, not installed"
+  elif app_folder_exists "$bench_dir" "$app_name"; then
+    echo "downloaded, not registered"
+  else
+    echo "not installed"
+  fi
+}
+
+assess_app_compatibility() {
+  local bench_dir="$1"
+  local app_name="$2"
+  local display="$3"
+  local branch="$4"
+  local repo="$5"
+  local remote_check="${6:-false}"
+  local frappe_branch erpnext_branch frappe_major erpnext_major target_major downloaded_branch branch_text
+
+  APP_COMPAT_STATUS="INFO"
+  APP_COMPAT_DETAIL="Compatibility cannot be fully verified automatically. Use a disposable VM snapshot or backup checkpoint first."
+  APP_COMPAT_RECOMMENDATION="Install one app at a time, then run app-status and doctor."
+  APP_COMPAT_FRAPPE_BRANCH=""
+  APP_COMPAT_ERPNEXT_BRANCH=""
+  APP_COMPAT_TARGET_BRANCH="$(branch_label "$branch")"
+  APP_COMPAT_REMOTE_STATUS="not checked"
+
+  frappe_branch="$(get_app_current_branch "$bench_dir" frappe | tail -1 | tr -d '[:space:]' || true)"
+  erpnext_branch="$(get_app_current_branch "$bench_dir" erpnext | tail -1 | tr -d '[:space:]' || true)"
+  frappe_branch="${frappe_branch:-${FRAPPE_BRANCH:-unknown}}"
+  erpnext_branch="${erpnext_branch:-${ERPNEXT_BRANCH:-unknown}}"
+
+  APP_COMPAT_FRAPPE_BRANCH="$frappe_branch"
+  APP_COMPAT_ERPNEXT_BRANCH="$erpnext_branch"
+
+  frappe_major="$(version_major_from_branch "$frappe_branch")"
+  erpnext_major="$(version_major_from_branch "$erpnext_branch")"
+  target_major="$(version_major_from_branch "$branch")"
+  branch_text="$(branch_label "$branch")"
+
+  if app_folder_exists "$bench_dir" "$app_name"; then
+    downloaded_branch="$(get_app_current_branch "$bench_dir" "$app_name" | tail -1 | tr -d '[:space:]' || true)"
+    if [[ -n "$branch" && -n "$downloaded_branch" && "$downloaded_branch" != "$branch" ]]; then
+      APP_COMPAT_STATUS="WARN"
+      APP_COMPAT_DETAIL="Downloaded branch is '${downloaded_branch}', but the requested target is '${branch}'. The script will not switch branches automatically."
+      APP_COMPAT_RECOMMENDATION="Review the app Git branch manually before installing on the site."
+      return 0
+    fi
+  fi
+
+  if [[ "$remote_check" == "true" && -n "$branch" ]] && ! app_folder_exists "$bench_dir" "$app_name"; then
+    if branch_available "$repo" "$branch"; then
+      APP_COMPAT_REMOTE_STATUS="branch exists"
+    else
+      APP_COMPAT_STATUS="FAIL"
+      APP_COMPAT_DETAIL="Target branch '${branch}' was not found for ${repo}, or the remote repository could not be reached."
+      APP_COMPAT_RECOMMENDATION="Choose a valid branch override before installing."
+      return 0
+    fi
+  fi
+
+  if [[ -n "$target_major" && -n "$frappe_major" && "$target_major" != "$frappe_major" ]]; then
+    APP_COMPAT_STATUS="WARN"
+    APP_COMPAT_DETAIL="Target branch ${branch_text} does not match detected Frappe branch ${frappe_branch}."
+    APP_COMPAT_RECOMMENDATION="Use a branch matching your Frappe/ERPNext major version when available."
+    return 0
+  fi
+
+  case "$app_name" in
+    hrms)
+      if [[ "$branch" == "version-16" && "${frappe_major:-16}" == "16" ]]; then
+        APP_COMPAT_STATUS="OK"
+        APP_COMPAT_DETAIL="Target branch version-16 matches the expected Frappe/ERPNext v16 developer stack."
+        APP_COMPAT_RECOMMENDATION="Safe to test after a backup checkpoint."
+      elif [[ "$branch" == main || "$branch" == develop ]]; then
+        APP_COMPAT_STATUS="WARN"
+        APP_COMPAT_DETAIL="${display} is targeting a moving branch (${branch_text}) instead of a pinned version branch."
+        APP_COMPAT_RECOMMENDATION="Prefer HRMS_BRANCH=version-16 for this installer unless you are intentionally testing upstream changes."
+      else
+        APP_COMPAT_STATUS="INFO"
+        APP_COMPAT_DETAIL="${display} target is ${branch_text}; verify it matches your Frappe/ERPNext branch."
+      fi
+      ;;
+    crm)
+      if [[ "$branch" == main ]]; then
+        APP_COMPAT_STATUS="WARN"
+        APP_COMPAT_DETAIL="Frappe CRM commonly tracks the moving main branch, so compatibility can change over time."
+        APP_COMPAT_RECOMMENDATION="Continue only on a dev VM after a backup checkpoint; pin CRM_BRANCH if you need repeatable installs."
+      elif [[ -n "$target_major" ]]; then
+        APP_COMPAT_STATUS="OK"
+        APP_COMPAT_DETAIL="Target branch ${branch_text} is version-pinned and matches the detected core major version."
+      else
+        APP_COMPAT_STATUS="INFO"
+        APP_COMPAT_DETAIL="Frappe CRM target is ${branch_text}; verify upstream compatibility before important data."
+      fi
+      ;;
+    insights)
+      if [[ "$branch" == main ]]; then
+        APP_COMPAT_STATUS="WARN"
+        APP_COMPAT_DETAIL="Frappe Insights is targeting the moving main branch; compatibility can change."
+        APP_COMPAT_RECOMMENDATION="Use a backup checkpoint and test before relying on it."
+      elif [[ -n "$target_major" ]]; then
+        APP_COMPAT_STATUS="OK"
+        APP_COMPAT_DETAIL="Target branch ${branch_text} is version-pinned and matches the detected core major version."
+      else
+        APP_COMPAT_STATUS="INFO"
+        APP_COMPAT_DETAIL="Frappe Insights target is ${branch_text}; verify upstream compatibility before important data."
+      fi
+      ;;
+    helpdesk)
+      if [[ "$branch" == main ]]; then
+        APP_COMPAT_STATUS="WARN"
+        APP_COMPAT_DETAIL="Frappe Helpdesk is targeting the moving main branch and also requires the Telephony dependency."
+        APP_COMPAT_RECOMMENDATION="Install on a dev VM with a backup checkpoint; expect Telephony compatibility checks as well."
+      elif [[ -n "$target_major" ]]; then
+        APP_COMPAT_STATUS="OK"
+        APP_COMPAT_DETAIL="Target branch ${branch_text} is version-pinned and matches the detected core major version."
+      else
+        APP_COMPAT_STATUS="INFO"
+        APP_COMPAT_DETAIL="Frappe Helpdesk target is ${branch_text}; verify dependency compatibility before important data."
+      fi
+      ;;
+    telephony)
+      if [[ "$branch" == develop ]]; then
+        APP_COMPAT_STATUS="WARN"
+        APP_COMPAT_DETAIL="Frappe Telephony targets the develop branch by default, which is experimental and can change."
+        APP_COMPAT_RECOMMENDATION="Use only when required for Helpdesk testing, and keep a backup checkpoint."
+      elif [[ -n "$target_major" ]]; then
+        APP_COMPAT_STATUS="OK"
+        APP_COMPAT_DETAIL="Target branch ${branch_text} is version-pinned and matches the detected core major version."
+      else
+        APP_COMPAT_STATUS="INFO"
+        APP_COMPAT_DETAIL="Frappe Telephony target is ${branch_text}; verify upstream compatibility before use."
+      fi
+      ;;
+    *)
+      APP_COMPAT_STATUS="WARN"
+      APP_COMPAT_DETAIL="Custom app compatibility cannot be verified by this installer."
+      APP_COMPAT_RECOMMENDATION="Only install trusted apps after confirming the app supports your detected Frappe branch."
+      ;;
+  esac
+
+  if [[ -n "$target_major" && -n "$erpnext_major" && "$target_major" != "$erpnext_major" ]]; then
+    APP_COMPAT_STATUS="WARN"
+    APP_COMPAT_DETAIL="Target branch ${branch_text} does not match detected ERPNext branch ${erpnext_branch}."
+    APP_COMPAT_RECOMMENDATION="Use an app branch that matches ERPNext/Frappe v${erpnext_major} when available."
+  fi
+}
+
+show_app_compatibility_card() {
+  local bench_dir="$1"
+  local app_name="$2"
+  local display="$3"
+  local repo="$4"
+  local branch="$5"
+  local notes="$6"
+  local remote_check="${7:-false}"
+
+  assess_app_compatibility "$bench_dir" "$app_name" "$display" "$branch" "$repo" "$remote_check"
+
+  echo
+  echo "Compatibility preflight: ${display}"
+  status_line "Detected Frappe" "INFO" "${APP_COMPAT_FRAPPE_BRANCH}"
+  status_line "Detected ERPNext" "INFO" "${APP_COMPAT_ERPNEXT_BRANCH}"
+  status_line "Target branch" "INFO" "${APP_COMPAT_TARGET_BRANCH}"
+  status_line "Install state" "INFO" "$(app_install_state_detail "$bench_dir" "$app_name")"
+  if [[ "$remote_check" == "true" ]]; then
+    status_line "Remote branch" "INFO" "${APP_COMPAT_REMOTE_STATUS}"
+  fi
+  status_line "Compatibility" "$APP_COMPAT_STATUS" "$APP_COMPAT_DETAIL"
+  status_line "Recommendation" "INFO" "$APP_COMPAT_RECOMMENDATION"
+  echo "Notes: ${notes}"
+}
+
+confirm_app_compatibility_before_install() {
+  local bench_dir="$1"
+  local app_name="$2"
+  local display="$3"
+  local repo="$4"
+  local branch="$5"
+  local notes="$6"
+
+  show_app_compatibility_card "$bench_dir" "$app_name" "$display" "$repo" "$branch" "$notes" "true"
+
+  case "$APP_COMPAT_STATUS" in
+    FAIL)
+      fail "Compatibility preflight failed for ${display}."
+      ;;
+    WARN)
+      warn "Compatibility warning for ${display}: ${APP_COMPAT_DETAIL}"
+      if ! confirm "Continue despite this compatibility warning?"; then
+        warn "App installation cancelled."
+        return 1
+      fi
+      ;;
+  esac
+
+  return 0
+}
+
+show_app_compatibility_matrix() {
+  require_sudo
+
+  local bench_dir profile app_state
+  bench_dir="$(require_site_environment)" || return 1
+
+  normalize_apps_txt "$bench_dir" "" "true" || warn "Could not normalize sites/apps.txt before compatibility check."
+
+  echo
+  echo "============================================================"
+  echo "Optional App Compatibility Matrix"
+  echo "============================================================"
+  echo "Site:  ${SITE_NAME}"
+  echo "Bench: ${bench_dir}"
+  echo
+  echo "This check is a pre-install guide. It does not guarantee upstream app compatibility."
+  echo "The install command still verifies remote branch availability before downloading."
+  echo
+
+  for profile in crm hrms insights telephony helpdesk; do
+    app_profile_defaults "$profile" || continue
+    assess_app_compatibility "$bench_dir" "$LIB_APP_NAME" "$LIB_APP_DISPLAY" "$LIB_APP_BRANCH" "$LIB_APP_REPO" "false"
+    app_state="$(app_install_state_detail "$bench_dir" "$LIB_APP_NAME")"
+    status_line "$LIB_APP_DISPLAY" "$APP_COMPAT_STATUS" "target=${APP_COMPAT_TARGET_BRANCH}; state=${app_state}; ${APP_COMPAT_DETAIL}"
+  done
+
+  echo
+  echo "Detailed check for one app is shown automatically before install."
+  echo "Branch overrides: CRM_BRANCH, HRMS_BRANCH, INSIGHTS_BRANCH, TELEPHONY_BRANCH, HELPDESK_BRANCH."
+  echo "============================================================"
+}
+
+print_app_compatibility_snapshot() {
+  local bench_dir="$1"
+  local profile summary
+
+  echo
+  echo "Compatibility snapshot:"
+  for profile in crm hrms insights telephony helpdesk; do
+    app_profile_defaults "$profile" || continue
+    assess_app_compatibility "$bench_dir" "$LIB_APP_NAME" "$LIB_APP_DISPLAY" "$LIB_APP_BRANCH" "$LIB_APP_REPO" "false"
+    summary="target=${APP_COMPAT_TARGET_BRANCH}; $(app_install_state_detail "$bench_dir" "$LIB_APP_NAME")"
+    status_line "$LIB_APP_DISPLAY" "$APP_COMPAT_STATUS" "$summary"
+  done
+}
+
 
 install_app_dependency_telephony() {
   local bench_dir="$1"
@@ -5855,6 +6123,8 @@ install_app_dependency_telephony() {
   if ! validate_branch_name "$dep_branch"; then
     fail "Invalid TELEPHONY_BRANCH value: ${dep_branch}"
   fi
+
+  confirm_app_compatibility_before_install "$bench_dir" "$dep_name" "$dep_display" "$dep_repo" "$dep_branch" "Dependency app used by Frappe Helpdesk for telephony integrations." || return 1
 
   if app_folder_exists "$bench_dir" "$dep_name"; then
     downloaded_branch="$(get_app_current_branch "$bench_dir" "$dep_name" | tail -1 | tr -d '[:space:]')"
@@ -5918,6 +6188,7 @@ show_app_install_guide() {
   echo
   echo "Commands:"
   echo "  ./install-erpnext-dev.sh app-install-wizard"
+  echo "  ./install-erpnext-dev.sh app-compatibility"
   echo "  ./install-erpnext-dev.sh app-status"
   echo "  ./install-erpnext-dev.sh app-rollback-guide"
   echo "============================================================"
@@ -6058,6 +6329,8 @@ app_wizard_preflight() {
     status_line "Local HTTPS" "INFO" "not configured or not running; optional apps can still install"
   fi
 
+  print_app_compatibility_snapshot "$bench_dir"
+
   echo
   echo "Backup policy: ${APP_BACKUP_BEFORE_INSTALL}"
   echo "============================================================"
@@ -6079,14 +6352,15 @@ run_app_install_wizard() {
     echo "Optional App Install Wizard"
     echo "============================================================"
     echo "1) Show optional app status"
-    echo "2) Install Frappe CRM"
-    echo "3) Install Frappe HR / HRMS"
-    echo "4) Install Frappe Insights"
-    echo "5) Install Frappe Telephony"
-    echo "6) Install Frappe Helpdesk"
-    echo "7) Install custom app from Git URL"
-    echo "8) Rollback guide"
-    echo "9) Back"
+    echo "2) Show optional app compatibility"
+    echo "3) Install Frappe CRM"
+    echo "4) Install Frappe HR / HRMS"
+    echo "5) Install Frappe Insights"
+    echo "6) Install Frappe Telephony"
+    echo "7) Install Frappe Helpdesk"
+    echo "8) Install custom app from Git URL"
+    echo "9) Rollback guide"
+    echo "10) Back"
     echo
     echo "Install one app at a time. The wizard will offer a backup checkpoint first."
     echo
@@ -6094,14 +6368,15 @@ run_app_install_wizard() {
 
     case "$choice" in
       1) run_app_status; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      2) install_app_profile crm; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      3) install_app_profile hrms; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      4) install_app_profile insights; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      5) install_app_profile telephony; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      6) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      7) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      8) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      9) return 0 ;;
+      2) show_app_compatibility_matrix; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      3) install_app_profile crm; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      4) install_app_profile hrms; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      5) install_app_profile insights; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      6) install_app_profile telephony; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      7) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      8) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      9) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      10) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -6129,6 +6404,7 @@ install_frappe_app() {
   fi
 
   print_app_profile "$display" "$app_name" "$repo" "$branch" "$notes"
+  confirm_app_compatibility_before_install "$bench_dir" "$app_name" "$display" "$repo" "$branch" "$notes" || return 1
 
   # Repair any existing apps.txt corruption before backups or bench site commands.
   # A prior interrupted app install can create concatenated entries like erpnextcrm.
@@ -6253,16 +6529,17 @@ show_app_library_menu() {
     echo "============================================================"
     echo "1) Optional App Install Wizard"
     echo "2) Show optional app status"
-    echo "3) Show installed apps"
-    echo "4) Optional app install guide"
-    echo "5) Rollback guide"
-    echo "6) Install Frappe CRM"
-    echo "7) Install Frappe HR / HRMS"
-    echo "8) Install Frappe Helpdesk"
-    echo "9) Install Frappe Telephony"
-    echo "10) Install Frappe Insights"
-    echo "11) Install custom app from Git URL"
-    echo "12) Back"
+    echo "3) Show optional app compatibility"
+    echo "4) Show installed apps"
+    echo "5) Optional app install guide"
+    echo "6) Rollback guide"
+    echo "7) Install Frappe CRM"
+    echo "8) Install Frappe HR / HRMS"
+    echo "9) Install Frappe Helpdesk"
+    echo "10) Install Frappe Telephony"
+    echo "11) Install Frappe Insights"
+    echo "12) Install custom app from Git URL"
+    echo "13) Back"
     echo
     echo "Notes: install one app at a time and keep a backup checkpoint."
     echo
@@ -6271,16 +6548,17 @@ show_app_library_menu() {
     case "$app_choice" in
       1) run_app_install_wizard ;;
       2) run_app_status; pause_after_screen "Press Enter to return to App Library..." ;;
-      3) show_installed_apps; pause_after_screen "Press Enter to return to App Library..." ;;
-      4) show_app_install_guide; pause_after_screen "Press Enter to return to App Library..." ;;
-      5) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Library..." ;;
-      6) install_app_profile crm; pause_after_screen "Press Enter to return to App Library..." ;;
-      7) install_app_profile hrms; pause_after_screen "Press Enter to return to App Library..." ;;
-      8) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Library..." ;;
-      9) install_app_profile telephony; pause_after_screen "Press Enter to return to App Library..." ;;
-      10) install_app_profile insights; pause_after_screen "Press Enter to return to App Library..." ;;
-      11) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Library..." ;;
-      12) return 0 ;;
+      3) show_app_compatibility_matrix; pause_after_screen "Press Enter to return to App Library..." ;;
+      4) show_installed_apps; pause_after_screen "Press Enter to return to App Library..." ;;
+      5) show_app_install_guide; pause_after_screen "Press Enter to return to App Library..." ;;
+      6) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Library..." ;;
+      7) install_app_profile crm; pause_after_screen "Press Enter to return to App Library..." ;;
+      8) install_app_profile hrms; pause_after_screen "Press Enter to return to App Library..." ;;
+      9) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Library..." ;;
+      10) install_app_profile telephony; pause_after_screen "Press Enter to return to App Library..." ;;
+      11) install_app_profile insights; pause_after_screen "Press Enter to return to App Library..." ;;
+      12) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Library..." ;;
+      13) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -7031,6 +7309,7 @@ Basic actions:
   apps          Alias for app-library
   list-apps     Show installed and downloaded Frappe apps
   app-status    Show optional Frappe app install status
+  app-compatibility Show optional app branch compatibility matrix
   maintenance   Show maintenance menu
   menu          Show interactive menu
   help          Show this help
@@ -7041,6 +7320,7 @@ Advanced actions:
   app-install-wizard  Guided optional app installation workflow
   app-install-guide   Show optional app install safety guide
   app-rollback-guide  Show optional app rollback/restore guide
+  app-compatibility   Show optional app compatibility matrix
   install-crm         Install Frappe CRM
   install-hrms        Install Frappe HR / HRMS
   install-helpdesk    Install Frappe Helpdesk
@@ -7142,6 +7422,7 @@ Examples:
   ./install-erpnext-dev.sh app-library
   ./install-erpnext-dev.sh install-crm
   ./install-erpnext-dev.sh app-status
+  ./install-erpnext-dev.sh app-compatibility
   ./install-erpnext-dev.sh network-status
   ./install-erpnext-dev.sh ssl-status
   ./install-erpnext-dev.sh local-ssl-guide
@@ -7217,7 +7498,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -7273,6 +7554,7 @@ main() {
     app-rollback-guide) show_app_rollback_guide ;;
     list-apps) show_installed_apps ;;
     app-status) run_app_status ;;
+    app-compatibility|app-compat|app-preflight) show_app_compatibility_matrix ;;
     install-crm) install_app_profile crm ;;
     install-hrms) install_app_profile hrms ;;
     install-helpdesk) install_app_profile helpdesk ;;
