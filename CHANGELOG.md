@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## v0.9.1
+
+### Added
+
+- Added `production-domain-plan` command and `prod-domain-plan` alias.
+- Added structured production DNS/domain planning output with local site, planned production domain, VM IP, recommended A record, provider notes, and validation checklist.
+
+### Fixed
+
+- Fixed `production-readiness` false `Incomplete` install state when the Bench folder is under the `frappe` user home and requires sudo traversal.
+- Production readiness now uses the same sudo-aware install detection as `doctor` and `status`.
+- Backup readiness now checks the backup folder through the sudo-aware path helpers.
+
+### Improved
+
+- `production-plan` and `production-readiness` now resolve saved/detected site config through sudo before reporting.
+- Production domain guide now points to the structured `production-domain-plan` command.
+- Help text and examples now include `production-domain-plan`.
+
 ## v0.9.0
 
 ### Added

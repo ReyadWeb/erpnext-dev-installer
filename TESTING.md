@@ -1,4 +1,4 @@
-# TESTING v0.9.0
+# TESTING v0.9.1
 
 ## Syntax
 
@@ -11,13 +11,13 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="0.9.0"
+SCRIPT_VERSION="0.9.1"
 ```
 
 ## Help command
 
 ```bash
-./install-erpnext-dev.sh help | grep -E "doctor --plain|doctor --json|support-bundle|app-compatibility|production-plan"
+./install-erpnext-dev.sh help | grep -E "doctor --plain|doctor --json|support-bundle|app-compatibility|production-plan|production-domain-plan"
 ```
 
 Expected:
@@ -27,6 +27,7 @@ Expected:
 - Help lists `support-bundle`.
 - Help lists `app-compatibility`.
 - Help lists `production-plan`.
+- Help lists `production-domain-plan`.
 
 
 
@@ -36,6 +37,8 @@ Expected:
 ./install-erpnext-dev.sh production-readiness
 ./install-erpnext-dev.sh production-plan
 ./install-erpnext-dev.sh prod-plan
+./install-erpnext-dev.sh production-domain-plan
+./install-erpnext-dev.sh prod-domain-plan
 ```
 
 Expected:
@@ -45,6 +48,9 @@ Expected:
 - It remains planning-only and does not modify the VM.
 - `production-plan` prints a checklist for architecture, domain, DNS/network path, SSL, backup/restore, and hardening.
 - `prod-plan` works as an alias.
+- `production-domain-plan` prints structured DNS/domain planning output.
+- `prod-domain-plan` works as an alias.
+- On an installed/running VM, `production-readiness` should not falsely report `Install state WARN Incomplete`.
 
 ## Optional app compatibility
 

@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.9.0"
+SCRIPT_VERSION="0.9.1"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -2624,10 +2624,78 @@ DNS requirements:
   - Local datacenter: internal DNS points to the ERPNext server.
   - Avoid .test and .local for production.
 
+Structured planning command:
+  ./install-erpnext-dev.sh production-domain-plan
+
 This developer installer only plans production settings.
 Production automation should be a separate track.
 ============================================================
 EOF_PROD_DOMAIN
+}
+
+show_production_domain_plan() {
+  local vm_ip planned_domain domain_status domain_detail network_note dns_target record_name record_value
+
+  require_sudo
+
+  vm_ip="$(get_vm_ip)"
+  planned_domain="${PRODUCTION_DOMAIN:-erp.company.com}"
+  domain_status="WARN"
+  domain_detail="not set; using placeholder example ${planned_domain}"
+
+  if [[ -n "${PRODUCTION_DOMAIN:-}" ]]; then
+    if validate_production_domain_value "$PRODUCTION_DOMAIN" >/dev/null 2>&1; then
+      domain_status="OK"
+      domain_detail="$PRODUCTION_DOMAIN"
+    else
+      domain_status="WARN"
+      domain_detail="invalid value: $PRODUCTION_DOMAIN"
+    fi
+  fi
+
+  network_note="Private/NAT address detected. For public production, DNS should point to the production server public IP, not this VM IP."
+  dns_target="PRODUCTION_SERVER_PUBLIC_IP"
+  record_name="$planned_domain"
+  record_value="$dns_target"
+
+  if [[ "$vm_ip" != 10.* && "$vm_ip" != 172.16.* && "$vm_ip" != 172.17.* && "$vm_ip" != 172.18.* && "$vm_ip" != 172.19.* && "$vm_ip" != 172.2* && "$vm_ip" != 172.30.* && "$vm_ip" != 172.31.* && "$vm_ip" != 192.168.* ]]; then
+    network_note="Current VM IP does not look private. Confirm it is the intended production server IP before using it in DNS."
+    dns_target="$vm_ip"
+    record_value="$vm_ip"
+  fi
+
+  echo
+  echo "============================================================"
+  echo "Production Domain Plan"
+  echo "============================================================"
+  status_line "Mode" "INFO" "planning only; no DNS changes are applied"
+  status_line "Local site" "INFO" "${SITE_NAME} (${SITE_NAME_SOURCE})"
+  status_line "Current VM IP" "INFO" "${vm_ip}"
+  status_line "Production domain" "$domain_status" "$domain_detail"
+  status_line "Network note" "INFO" "$network_note"
+  echo
+  echo "Recommended DNS record:"
+  echo "  Type:  A"
+  echo "  Name:  ${record_name}"
+  echo "  Value: ${record_value}"
+  echo
+  echo "Provider notes:"
+  echo "  - Cloudflare: create/update the A record, then decide proxied vs DNS-only before SSL planning."
+  echo "  - GoDaddy/other DNS: create/update the A record to the production server public IP."
+  echo "  - Internal-only ERPNext: use internal DNS instead of public DNS."
+  echo "  - Do not change MX/email records unless you are intentionally changing mail routing."
+  echo
+  echo "Validation checklist:"
+  echo "  - Domain is not .test or .local."
+  echo "  - DNS target is the production server, not a temporary dev NAT IP."
+  echo "  - Ports 80/443 are reachable for the chosen SSL method."
+  echo "  - The ERPNext site/domain mapping is planned before go-live."
+  echo
+  echo "Useful commands:"
+  echo "  PRODUCTION_DOMAIN=${record_name} ./install-erpnext-dev.sh production-readiness"
+  echo "  PRODUCTION_DOMAIN=${record_name} ./install-erpnext-dev.sh production-domain-plan"
+  echo "  ./install-erpnext-dev.sh production-ssl-guide"
+  echo "============================================================"
 }
 
 show_production_ssl_guide() {
@@ -2673,16 +2741,19 @@ production_root_free_gb() {
 }
 
 production_quick_install_state() {
-  local bench_dir
-  bench_dir="$(active_bench_dir 2>/dev/null || echo "$BENCH_DIR")"
+  local state
 
-  if [[ -d "$bench_dir" && -d "${bench_dir}/apps/frappe" && -d "${bench_dir}/apps/erpnext" && -d "${bench_dir}/sites/${SITE_NAME}" ]]; then
-    echo "Installed"
-  elif [[ -d "$bench_dir" || -d "$FRAPPE_HOME" ]]; then
-    echo "Incomplete"
-  else
-    echo "Not installed"
-  fi
+  # Use the same sudo-aware install detector as doctor/status.
+  # Direct [[ -d ... ]] checks can produce false "Incomplete" results when
+  # the caller cannot traverse /home/${FRAPPE_USER} without sudo.
+  state="$(install_state 2>/dev/null || echo "unknown")"
+
+  case "$state" in
+    Installed*) echo "Installed" ;;
+    Incomplete) echo "Incomplete" ;;
+    "Not installed") echo "Not installed" ;;
+    *) echo "$state" ;;
+  esac
 }
 
 production_backup_count() {
@@ -2690,17 +2761,16 @@ production_backup_count() {
   bench_dir="$(active_bench_dir 2>/dev/null || echo "$BENCH_DIR")"
   backup_dir="${bench_dir}/sites/${SITE_NAME}/private/backups"
 
-  if [[ ! -d "$backup_dir" ]]; then
+  if ! path_is_dir "$backup_dir"; then
     echo "0"
     return 0
   fi
 
-  if [[ ! -r "$backup_dir" ]]; then
-    echo "unknown"
-    return 0
+  if [[ "${SUDO:-}" == "sudo" ]]; then
+    $SUDO find "$backup_dir" -maxdepth 1 -type f \( -name '*.sql.gz' -o -name '*.tgz' -o -name '*.tar' -o -name '*.tar.gz' \) 2>/dev/null | wc -l | awk '{print $1+0}'
+  else
+    find "$backup_dir" -maxdepth 1 -type f \( -name '*.sql.gz' -o -name '*.tgz' -o -name '*.tar' -o -name '*.tar.gz' \) 2>/dev/null | wc -l | awk '{print $1+0}'
   fi
-
-  find "$backup_dir" -maxdepth 1 -type f \( -name '*.sql.gz' -o -name '*.tgz' -o -name '*.tar' -o -name '*.tar.gz' \) 2>/dev/null | wc -l | awk '{print $1+0}'
 }
 
 production_domain_readiness_status() {
@@ -2736,7 +2806,7 @@ production_classification() {
   local domain_state="$5"
   local backup_count="$6"
 
-  if [[ "$install_state" != "Installed" ]]; then
+  if [[ "$install_state" != Installed* ]]; then
     echo "Not recommended|core ERPNext install is incomplete"
     return 0
   fi
@@ -2771,6 +2841,8 @@ production_classification() {
 
 show_production_readiness() {
   local bench_dir install_quick runtime service auto cpu_count mem_mb total_gb free_gb nginx_state backup_count
+
+  require_sudo
   local domain_pair domain_status domain_state ssl_pair ssl_status ssl_detail class_pair class_name class_reason
 
   bench_dir="$(active_bench_dir 2>/dev/null || echo "$BENCH_DIR")"
@@ -2809,7 +2881,7 @@ show_production_readiness() {
   status_line "Automation mode" "INFO" "planning only; no production changes are applied"
   status_line "Local site" "INFO" "${SITE_NAME} (${SITE_NAME_SOURCE})"
   status_line "Bench" "INFO" "$bench_dir"
-  if [[ "$install_quick" == "Installed" ]]; then
+  if [[ "$install_quick" == Installed* ]]; then
     status_line "Install state" "OK" "$install_quick"
   else
     status_line "Install state" "WARN" "$install_quick"
@@ -2858,6 +2930,7 @@ show_production_readiness() {
   echo
   echo "Recommended next commands:"
   echo "  ./install-erpnext-dev.sh production-plan"
+  echo "  ./install-erpnext-dev.sh production-domain-plan"
   echo "  ./install-erpnext-dev.sh production-domain-guide"
   echo "  ./install-erpnext-dev.sh production-ssl-guide"
   echo "============================================================"
@@ -2905,6 +2978,7 @@ show_production_plan() {
   echo
   echo "Useful commands now:"
   echo "  ./install-erpnext-dev.sh production-readiness"
+  echo "  ./install-erpnext-dev.sh production-domain-plan"
   echo "  ./install-erpnext-dev.sh production-domain-guide"
   echo "  ./install-erpnext-dev.sh production-ssl-guide"
   echo "  ./install-erpnext-dev.sh backup-files"
@@ -7597,6 +7671,7 @@ Advanced actions:
   site-name-guide     Show custom .test hostname guide
   production-readiness Show production readiness/planning classification
   production-plan      Show production planning checklist
+  production-domain-plan Show structured production DNS/domain plan
   production-domain-guide Show production domain planning guide
   production-ssl-guide Show production SSL planning guide
   configure-local-ssl Configure Nginx local HTTPS reverse proxy
@@ -7656,6 +7731,7 @@ Examples:
   ./install-erpnext-dev.sh domain-config
   ./install-erpnext-dev.sh production-readiness
   ./install-erpnext-dev.sh production-plan
+  ./install-erpnext-dev.sh production-domain-plan
   ./install-erpnext-dev.sh doctor
   ./install-erpnext-dev.sh doctor --plain
   ./install-erpnext-dev.sh doctor --json
@@ -7719,7 +7795,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -7829,6 +7905,7 @@ main() {
     domain-config) show_domain_config ;;
     production-readiness) show_production_readiness ;;
     production-plan|prod-plan) show_production_plan ;;
+    production-domain-plan|prod-domain-plan) show_production_domain_plan ;;
     production-domain-guide) show_production_domain_guide ;;
     production-ssl-guide) show_production_ssl_guide ;;
     repair-site-config) repair_site_config ;;

@@ -1,8 +1,8 @@
 # ROADMAP
 
-## Current: v0.9.0
+## Current: v0.9.1
 
-Stable developer installer baseline with production readiness/planning classification, share-safe diagnostics, redacted support bundles, and optional app compatibility preflight checks.
+Stable developer installer baseline with production readiness/planning classification, structured production domain planning, share-safe diagnostics, redacted support bundles, and optional app compatibility preflight checks.
 
 Completed:
 
@@ -17,6 +17,7 @@ Completed:
 - compatibility warnings in `app-install-wizard`
 - `production-readiness` environment classification
 - `production-plan` planning checklist
+- `production-domain-plan` structured DNS/domain planning
 - root storage expansion
 - corrected post-expansion storage decision logic
 - guided setup flow
@@ -27,12 +28,6 @@ Completed:
 - private installer logs and safer credential handling
 
 ## Next recommended work
-
-### v0.9.1
-
-- production domain planning
-- guide DNS record requirements without changing public DNS automatically
-- clarify local `.test` site versus real production domain
 
 ### v0.9.2
 

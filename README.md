@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.9.0
+# ERPNext Developer Installer v0.9.1
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -28,20 +28,23 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh next-step
 ```
 
-## v0.9.0 focus
+## v0.9.1 focus
 
-v0.9.0 adds a production readiness and planning branch. It does not convert the developer VM into production; it classifies the environment and shows the planning checklist needed before any production hardening or migration work.
+v0.9.1 adds structured production domain planning and fixes production readiness install detection. It does not convert the developer VM into production; it classifies the environment, shows the planning checklist, and provides DNS/domain guidance before any production hardening or migration work.
 
 Run:
 
 ```bash
 ./install-erpnext-dev.sh production-readiness
 ./install-erpnext-dev.sh production-plan
+./install-erpnext-dev.sh production-domain-plan
 ```
 
 `production-readiness` checks CPU, RAM, disk, install/runtime/service state, production domain configuration, local SSL assumptions, and backup readiness. It classifies the VM as dev-only, production candidate, or not recommended.
 
 `production-plan` prints the planning checklist for architecture, domain, DNS/network path, SSL, backups, and hardening.
+
+`production-domain-plan` prints a structured DNS/domain plan, including the local `.test` site, planned production domain, recommended A record, provider notes, and warnings when the current VM IP is private/NAT.
 
 ## v0.8.24 optional app compatibility
 
