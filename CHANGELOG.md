@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.1
+
+- Hotfix: ensure production operations commands are registered in the main command dispatcher.
+- Verified aliases: `production-ops-wizard`, `operations-wizard`, `ops-wizard`.
+- Verified scheduled backup commands: `backup-schedule-plan`, `configure-backup-schedule`, `backup-schedule-status`, `disable-backup-schedule`.
+- Verified restore preflight command: `restore-preflight`.
+
+
 ## v1.1.0
 
 - Added scheduled local backups using a systemd service and timer.

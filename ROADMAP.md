@@ -1,8 +1,15 @@
 # Roadmap
 
-## v1.1.0 — Production operations
+## v1.1.1 — Production operations command hotfix
 
 Status: built.
+
+- Production operations commands registered and validated in the main command dispatcher.
+- `production-ops-wizard`, scheduled backup commands, and `restore-preflight` are available.
+
+## v1.1.0 — Production operations
+
+Status: superseded by v1.1.1 hotfix.
 
 - Scheduled local backups with systemd timer.
 - Production operations wizard.

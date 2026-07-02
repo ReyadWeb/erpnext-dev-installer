@@ -1,10 +1,10 @@
-# ERPNext Developer Installer v1.0.0
+# ERPNext Developer Installer v1.1.1
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
-## v1.1.0 production operations
+## v1.1.1 production operations
 
-After v1.0.0 deployment is validated, v1.1.0 adds safer production operations:
+After v1.0.0 deployment is validated, v1.1.1 adds safer production operations. This hotfix confirms the production operations commands are available from the dispatcher:
 
 ```bash
 /root/install-erpnext-dev.sh production-ops-wizard

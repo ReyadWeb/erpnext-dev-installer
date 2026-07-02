@@ -1,5 +1,24 @@
 # TESTING
 
+## v1.1.1 validation
+
+```bash
+chmod +x install-erpnext-dev.sh
+bash -n install-erpnext-dev.sh
+grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
+grep -n "production-ops-wizard" install-erpnext-dev.sh
+./install-erpnext-dev.sh help | grep -E "production-ops-wizard|backup-schedule|restore-preflight"
+printf '8\n' | ./install-erpnext-dev.sh production-ops-wizard
+```
+
+Expected:
+
+```text
+SCRIPT_VERSION="1.1.1"
+production-ops-wizard is accepted and opens the operations wizard
+```
+
+
 ## v1.0.0 validation
 
 ```bash
