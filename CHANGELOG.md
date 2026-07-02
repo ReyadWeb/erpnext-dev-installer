@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## v0.9.5
+
+### Fixed
+
+- Fixed the Let’s Encrypt staging-to-production transition in `configure-production-ssl`.
+- If an installed certificate issuer contains `STAGING` and `LETSENCRYPT_STAGING` is not enabled, the script now adds `--force-renewal` so Certbot replaces the staging certificate with a real production certificate.
+- After requesting a non-staging certificate, the script fails clearly if a staging certificate is still installed.
+
+### Improved
+
+- `production-ssl-status` now prints a `Certificate issuer` row.
+- Production SSL runtime classification now warns when a staging certificate is installed instead of treating certificate presence alone as sufficient.
+- `configure-production-ssl` now displays the existing certificate issuer before making changes.
+
+### Notes
+
+- This hotfix came from the first public Hetzner VM SSL test where a staging certificate successfully routed HTTPS but was not trusted by `curl` or browsers.
+
 ## v0.9.4
 
 ### Added

@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.9.4"
+SCRIPT_VERSION="0.9.5"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -3048,6 +3048,46 @@ production_http_status_plain() {
   curl -fsSI --max-time 10 "http://${domain}/" 2>/dev/null | awk 'NR==1 {print; exit}' || true
 }
 
+production_certificate_issuer() {
+  local fullchain
+  fullchain="$(production_letsencrypt_fullchain_path 2>/dev/null || true)"
+  [[ -n "$fullchain" && -f "$fullchain" ]] || return 1
+  openssl x509 -in "$fullchain" -noout -issuer 2>/dev/null | sed 's/^issuer=//' || return 1
+}
+
+production_certificate_subject() {
+  local fullchain
+  fullchain="$(production_letsencrypt_fullchain_path 2>/dev/null || true)"
+  [[ -n "$fullchain" && -f "$fullchain" ]] || return 1
+  openssl x509 -in "$fullchain" -noout -subject 2>/dev/null | sed 's/^subject=//' || return 1
+}
+
+production_certificate_dates() {
+  local fullchain
+  fullchain="$(production_letsencrypt_fullchain_path 2>/dev/null || true)"
+  [[ -n "$fullchain" && -f "$fullchain" ]] || return 1
+  openssl x509 -in "$fullchain" -noout -dates 2>/dev/null | paste -sd '; ' - || return 1
+}
+
+production_certificate_is_staging() {
+  local issuer
+  issuer="$(production_certificate_issuer 2>/dev/null || true)"
+  [[ "$issuer" == *STAGING* || "$issuer" == *staging* ]]
+}
+
+production_certificate_detail() {
+  local issuer dates
+  issuer="$(production_certificate_issuer 2>/dev/null || true)"
+  dates="$(production_certificate_dates 2>/dev/null || true)"
+  if [[ -z "$issuer" ]]; then
+    echo "missing or unreadable"
+  elif [[ "$issuer" == *STAGING* || "$issuer" == *staging* ]]; then
+    echo "STAGING certificate; issuer=${issuer}; ${dates}"
+  else
+    echo "production/trusted issuer likely; issuer=${issuer}; ${dates}"
+  fi
+}
+
 production_ssl_is_configured() {
   local domain fullchain key enabled_path https_head
   domain="$(production_ssl_domain 2>/dev/null || true)"
@@ -3075,6 +3115,10 @@ production_ssl_runtime_detail() {
   enabled_path="$(production_nginx_enabled_path)"
 
   if [[ -f "$fullchain" && ( -L "$enabled_path" || -f "$enabled_path" ) ]]; then
+    if production_certificate_is_staging; then
+      echo "WARN|Let's Encrypt staging certificate is installed; replace with production certificate before trusting HTTPS"
+      return 0
+    fi
     https_head="$(production_https_status "$domain")"
     if [[ "$https_head" == HTTP/* ]]; then
       echo "OK|Let's Encrypt/Nginx HTTPS responding: ${https_head}"
@@ -3194,7 +3238,7 @@ EOF_PROD_NGINX
 }
 
 show_production_ssl_status() {
-  local domain vm_ip dns_ip nginx_state certbot_state cert_state enabled_state http_head https_head ssl_pair ssl_status ssl_detail
+  local domain vm_ip dns_ip nginx_state certbot_state cert_state cert_detail cert_line_status enabled_state http_head https_head ssl_pair ssl_status ssl_detail
 
   require_sudo
   vm_ip="$(get_vm_ip)"
@@ -3205,8 +3249,16 @@ show_production_ssl_status() {
   certbot_state="not installed"
   command -v certbot >/dev/null 2>&1 && certbot_state="installed: $(certbot --version 2>&1 | head -n 1)"
   cert_state="missing"
+  cert_detail="missing"
+  cert_line_status="WARN"
   if production_ssl_domain >/dev/null 2>&1 && [[ -f "$(production_letsencrypt_fullchain_path 2>/dev/null || true)" ]]; then
     cert_state="present: $(production_letsencrypt_fullchain_path)"
+    cert_detail="$(production_certificate_detail 2>/dev/null || echo 'present, but issuer could not be read')"
+    if production_certificate_is_staging; then
+      cert_line_status="WARN"
+    else
+      cert_line_status="OK"
+    fi
   fi
   enabled_state="not enabled"
   if [[ -L "$(production_nginx_enabled_path)" || -f "$(production_nginx_enabled_path)" ]]; then
@@ -3225,7 +3277,8 @@ show_production_ssl_status() {
   status_line "Domain" "$([[ -n "$dns_ip" && "$dns_ip" == "$vm_ip" ]] && echo OK || echo WARN)" "${domain}; DNS=${dns_ip:-unresolved}; VM=${vm_ip}"
   status_line "Nginx" "$([[ "$nginx_state" == installed* ]] && echo OK || echo WARN)" "$nginx_state"
   status_line "Certbot" "$([[ "$certbot_state" == installed* ]] && echo OK || echo WARN)" "$certbot_state"
-  status_line "Certificate" "$([[ "$cert_state" == present* ]] && echo OK || echo WARN)" "$cert_state"
+  status_line "Certificate" "$cert_line_status" "$cert_state"
+  status_line "Certificate issuer" "$cert_line_status" "$cert_detail"
   status_line "Nginx site" "$([[ "$enabled_state" == enabled* ]] && echo OK || echo WARN)" "$enabled_state"
   status_line "Port 80" "INFO" "$(production_listener_detail 80)"
   status_line "Port 443" "INFO" "$(production_listener_detail 443)"
@@ -3244,7 +3297,7 @@ configure_production_ssl() {
   require_erpnext_vm_context "configure-production-ssl" || return 1
   require_sudo
 
-  local domain vm_ip dns_ip install_quick runtime backup_count email_args staging_args http_head https_head
+  local domain vm_ip dns_ip install_quick runtime backup_count email_args staging_args force_renewal_args http_head https_head existing_cert_detail
   domain="$(production_ssl_domain 2>/dev/null || true)"
   [[ -n "$domain" ]] || fail "Set a valid PRODUCTION_DOMAIN or SITE_NAME, for example: PRODUCTION_DOMAIN=erp.flowmaya.com SITE_NAME=erp.flowmaya.com ./install-erpnext-dev.sh configure-production-ssl"
 
@@ -3271,6 +3324,16 @@ configure_production_ssl() {
   fi
   status_line "Port 80" "INFO" "$(production_listener_detail 80)"
   status_line "Port 443" "INFO" "$(production_listener_detail 443)"
+  if [[ -f "$(production_letsencrypt_fullchain_path 2>/dev/null || true)" ]]; then
+    existing_cert_detail="$(production_certificate_detail 2>/dev/null || echo 'present, but issuer could not be read')"
+    if production_certificate_is_staging; then
+      status_line "Existing cert" "WARN" "$existing_cert_detail"
+    else
+      status_line "Existing cert" "OK" "$existing_cert_detail"
+    fi
+  else
+    status_line "Existing cert" "INFO" "none"
+  fi
   echo
 
   [[ -n "$dns_ip" && "$dns_ip" == "$vm_ip" ]] || fail "DNS for ${domain} must resolve to ${vm_ip} before issuing Let's Encrypt. Use DNS-only first if behind Cloudflare."
@@ -3315,8 +3378,12 @@ configure_production_ssl() {
     email_args=(--email "$LETSENCRYPT_EMAIL")
   fi
   staging_args=()
+  force_renewal_args=()
   if [[ "$LETSENCRYPT_STAGING" == "true" ]]; then
     staging_args=(--staging)
+  elif production_certificate_is_staging; then
+    warn "Existing Let's Encrypt staging certificate detected. Forcing replacement with a production certificate."
+    force_renewal_args=(--force-renewal)
   fi
 
   log "Requesting Let's Encrypt certificate"
@@ -3325,9 +3392,14 @@ configure_production_ssl() {
     --agree-tos \
     "${email_args[@]}" \
     "${staging_args[@]}" \
+    "${force_renewal_args[@]}" \
     --webroot \
     -w "$PRODUCTION_SSL_WEBROOT" \
     -d "$domain" || fail "Let's Encrypt certificate request failed. Check DNS, Cloudflare DNS-only/proxy status, and port 80 firewall."
+
+  if [[ "$LETSENCRYPT_STAGING" != "true" ]] && production_certificate_is_staging; then
+    fail "A staging certificate is still installed after the production request. Check /var/log/letsencrypt/letsencrypt.log and rerun with --force-renewal manually if needed."
+  fi
 
   log "Writing HTTPS reverse proxy config"
   write_production_nginx_config https

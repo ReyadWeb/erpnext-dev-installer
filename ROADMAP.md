@@ -1,8 +1,8 @@
 # ROADMAP
 
-## Current: v0.9.4
+## Current: v0.9.5
 
-Stable developer installer baseline with production readiness/planning classification, structured production domain planning, public VM readiness checks, production SSL/firewall planning, conservative Nginx/Let's Encrypt HTTPS implementation, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
+Stable developer installer baseline with production readiness/planning classification, structured production domain planning, public VM readiness checks, production SSL/firewall planning, conservative Nginx/Let's Encrypt HTTPS implementation, staging-to-production certificate replacement hotfix, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
 
 Completed:
 
@@ -25,6 +25,8 @@ Completed:
 - `configure-production-ssl` Nginx + Let's Encrypt HTTPS implementation
 - `production-ssl-status` production HTTPS status checks
 - `disable-production-ssl` managed production HTTPS rollback
+- Let’s Encrypt staging-to-production replacement detection
+- certificate issuer/status reporting for production SSL
 - root storage expansion
 - corrected post-expansion storage decision logic
 - guided setup flow
@@ -36,7 +38,7 @@ Completed:
 
 ## Next recommended work
 
-### v0.9.5
+### v0.9.6
 
 - backup/restore hardening
 - backup verification, restore warnings, off-VM backup guidance, and retention planning

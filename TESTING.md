@@ -1,4 +1,4 @@
-# TESTING v0.9.4
+# TESTING v0.9.5
 
 ## Syntax
 
@@ -11,7 +11,7 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="0.9.4"
+SCRIPT_VERSION="0.9.5"
 ```
 
 ## Help command
@@ -97,6 +97,24 @@ Expected after configuration:
 - Let's Encrypt certificate exists under `/etc/letsencrypt/live/erp.flowmaya.com/`.
 - `https://erp.flowmaya.com` returns an HTTP status.
 - `production-readiness` recognizes production SSL as OK.
+
+
+Staging-to-production replacement test:
+
+```bash
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com LETSENCRYPT_STAGING=true ./install-erpnext-dev.sh configure-production-ssl
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh production-ssl-status
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com LETSENCRYPT_EMAIL=admin@example.com ./install-erpnext-dev.sh configure-production-ssl
+curl -I https://erp.flowmaya.com
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh production-ssl-status
+```
+
+Expected:
+
+- After the staging run, `production-ssl-status` shows `Certificate issuer WARN` and indicates a staging certificate.
+- The non-staging run detects the staging certificate and forces production replacement.
+- After replacement, `curl -I https://DOMAIN` works without `-k`.
+- `production-ssl-status` shows a non-staging issuer and `Overall OK`.
 
 Rollback test:
 

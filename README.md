@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.9.4
+# ERPNext Developer Installer v0.9.5
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -28,9 +28,13 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh next-step
 ```
 
-## v0.9.4 focus
+## v0.9.5 focus
 
-v0.9.4 adds conservative production HTTPS implementation for the public VM path. It can install Nginx/Certbot, issue a Let's Encrypt certificate with HTTP-01 webroot validation, and proxy `https://DOMAIN` to the running ERPNext Bench service.
+v0.9.5 is a focused Let's Encrypt hotfix. It improves the public VM HTTPS workflow after a staging certificate test by detecting installed Let's Encrypt staging certificates and forcing replacement with a real production certificate when `LETSENCRYPT_STAGING` is not enabled.
+
+It also improves `production-ssl-status` by showing the certificate issuer and warning clearly when a staging certificate is installed.
+
+v0.9.4 added the conservative production HTTPS implementation for the public VM path. It can install Nginx/Certbot, issue a Let's Encrypt certificate with HTTP-01 webroot validation, and proxy `https://DOMAIN` to the running ERPNext Bench service.
 
 It still does **not** change DNS or firewall rules automatically. Keep Hetzner firewall changes manual: allow `80/443`, then restrict/close public `8000/9000` only after HTTPS is verified.
 
@@ -101,6 +105,23 @@ Optional environment variables:
 LETSENCRYPT_EMAIL=admin@example.com
 LETSENCRYPT_STAGING=true   # dry-run/staging certificate test
 ```
+
+
+### Staging-to-production certificate replacement
+
+If you first tested with:
+
+```bash
+LETSENCRYPT_STAGING=true SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh configure-production-ssl
+```
+
+then switch to the real certificate with:
+
+```bash
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com LETSENCRYPT_EMAIL=admin@example.com ./install-erpnext-dev.sh configure-production-ssl
+```
+
+v0.9.5 detects the installed staging issuer and adds `--force-renewal` automatically so Certbot replaces the staging certificate with a trusted production certificate.
 
 Check status with:
 
