@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="1.1.1"
+SCRIPT_VERSION="1.1.2"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -67,6 +67,8 @@ BACKUP_SCHEDULE_SERVICE="${BACKUP_SCHEDULE_SERVICE:-erpnext-dev-backup.service}"
 BACKUP_SCHEDULE_TIMER="${BACKUP_SCHEDULE_TIMER:-erpnext-dev-backup.timer}"
 BACKUP_SCHEDULE_ON_CALENDAR="${BACKUP_SCHEDULE_ON_CALENDAR:-daily}"
 BACKUP_SCHEDULE_RANDOM_DELAY="${BACKUP_SCHEDULE_RANDOM_DELAY:-30m}"
+BACKUP_RETENTION_KEEP_COMPLETE="${BACKUP_RETENTION_KEEP_COMPLETE:-14}"
+BACKUP_RETENTION_WARN_DISK_PERCENT="${BACKUP_RETENTION_WARN_DISK_PERCENT:-80}"
 
 if [[ -t 1 ]]; then
   BOLD="\033[1m"
@@ -114,7 +116,7 @@ acquire_installer_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
       return 0
       ;;
     *)
@@ -9890,6 +9892,188 @@ show_backup_schedule_status() {
   ui_box_end
 }
 
+
+backup_complete_sets() {
+  local backup_dir db_file candidate completeness prefix public_file private_file config_file mtime
+  backup_dir="$(site_backup_dir)"
+  if ! path_is_dir "$backup_dir"; then
+    return 1
+  fi
+
+  while IFS= read -r db_file; do
+    [[ -n "$db_file" ]] || continue
+    candidate="$(backup_set_paths_for_db "$db_file")"
+    completeness="$(printf '%s\n' "$candidate" | sed -n '6p')"
+    [[ "$completeness" == "complete" ]] || continue
+    prefix="$(printf '%s\n' "$candidate" | sed -n '1p')"
+    public_file="$(printf '%s\n' "$candidate" | sed -n '3p')"
+    private_file="$(printf '%s\n' "$candidate" | sed -n '4p')"
+    config_file="$(printf '%s\n' "$candidate" | sed -n '5p')"
+    mtime="$($SUDO stat -c '%Y' "$db_file" 2>/dev/null || echo 0)"
+    printf '%s|%s|%s|%s|%s|%s\n' "$mtime" "$prefix" "$db_file" "$public_file" "$private_file" "$config_file"
+  done < <($SUDO find "$backup_dir" -maxdepth 1 -type f \( -name '*-database.sql.gz' -o -name '*.sql.gz' \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | cut -d' ' -f2-)
+}
+
+backup_complete_set_count() {
+  backup_complete_sets 2>/dev/null | wc -l | awk '{print $1+0}'
+}
+
+backup_retention_keep_count() {
+  local keep="${BACKUP_RETENTION_KEEP_COMPLETE:-14}"
+  if [[ ! "$keep" =~ ^[0-9]+$ || "$keep" -lt 1 ]]; then
+    keep=14
+  fi
+  echo "$keep"
+}
+
+backup_disk_usage_percent() {
+  local backup_dir
+  backup_dir="$(site_backup_dir)"
+  if path_is_dir "$backup_dir"; then
+    df -P "$backup_dir" 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5+0}'
+  else
+    echo 0
+  fi
+}
+
+backup_retention_candidate_sets() {
+  local keep index line
+  keep="$(backup_retention_keep_count)"
+  index=0
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    index=$((index+1))
+    if [[ "$index" -gt "$keep" ]]; then
+      printf '%s\n' "$line"
+    fi
+  done < <(backup_complete_sets)
+}
+
+show_backup_retention_plan() {
+  require_sudo
+  require_site_environment >/dev/null || return 1
+  local backup_dir complete_count keep delete_count disk_percent warn_percent backup_total
+  backup_dir="$(site_backup_dir)"
+  complete_count="$(backup_complete_set_count)"
+  keep="$(backup_retention_keep_count)"
+  delete_count=0
+  if [[ "$complete_count" -gt "$keep" ]]; then
+    delete_count=$((complete_count-keep))
+  fi
+  disk_percent="$(backup_disk_usage_percent)"
+  warn_percent="${BACKUP_RETENTION_WARN_DISK_PERCENT:-80}"
+  backup_total="$($SUDO du -sh "$backup_dir" 2>/dev/null | awk '{print $1}' || echo unknown)"
+
+  ui_box_start "Backup Retention Plan"
+  status_line "Mode" "INFO" "planning only; no files are deleted"
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "Backup folder" "INFO" "$backup_dir"
+  status_line "Retention" "INFO" "keep latest ${keep} complete backup set(s)"
+  status_line "Complete sets" "$([[ "$complete_count" -gt 0 ]] && echo OK || echo WARN)" "${complete_count} found"
+  status_line "Cleanup candidates" "$([[ "$delete_count" -gt 0 ]] && echo WARN || echo OK)" "${delete_count} old complete set(s)"
+  status_line "Backup folder size" "INFO" "$backup_total"
+  status_line "Disk usage" "$([[ "$disk_percent" -ge "$warn_percent" ]] && echo WARN || echo OK)" "${disk_percent}% used; warn at ${warn_percent}%"
+  echo
+  echo "Safe retention policy:"
+  echo "  - Deletes only old complete backup sets after confirmation."
+  echo "  - Keeps the newest ${keep} complete set(s)."
+  echo "  - Does not replace off-VM backups or cloud snapshots."
+  echo "  - Does not delete partial/orphan files in this first implementation."
+  ui_next "./install-erpnext-dev.sh cleanup-old-backups-dry-run" "./install-erpnext-dev.sh cleanup-old-backups"
+  ui_box_end
+}
+
+show_backup_retention_status() {
+  require_sudo
+  require_site_environment >/dev/null || return 1
+  local backup_dir complete_count keep candidate_count disk_percent warn_percent backup_total latest_lines completeness
+  backup_dir="$(site_backup_dir)"
+  complete_count="$(backup_complete_set_count)"
+  keep="$(backup_retention_keep_count)"
+  candidate_count="$(backup_retention_candidate_sets 2>/dev/null | wc -l | awk '{print $1+0}')"
+  disk_percent="$(backup_disk_usage_percent)"
+  warn_percent="${BACKUP_RETENTION_WARN_DISK_PERCENT:-80}"
+  backup_total="$($SUDO du -sh "$backup_dir" 2>/dev/null | awk '{print $1}' || echo unknown)"
+  latest_lines="$(backup_latest_set_paths 2>/dev/null || true)"
+  completeness="$(printf '%s\n' "$latest_lines" | sed -n '6p')"
+
+  ui_box_start "Backup Retention Status"
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "Retention" "INFO" "keep latest ${keep} complete backup set(s)"
+  status_line "Complete sets" "$([[ "$complete_count" -gt 0 ]] && echo OK || echo WARN)" "${complete_count} found"
+  status_line "Latest backup" "$([[ "$completeness" == complete ]] && echo OK || echo WARN)" "${completeness:-none}"
+  status_line "Cleanup candidates" "$([[ "$candidate_count" -gt 0 ]] && echo WARN || echo OK)" "${candidate_count} old set(s)"
+  status_line "Backup folder size" "INFO" "$backup_total"
+  status_line "Disk usage" "$([[ "$disk_percent" -ge "$warn_percent" ]] && echo WARN || echo OK)" "${disk_percent}% used; warn at ${warn_percent}%"
+  ui_next "./install-erpnext-dev.sh backup-retention-plan" "./install-erpnext-dev.sh cleanup-old-backups-dry-run"
+  ui_box_end
+}
+
+cleanup_old_backups() {
+  require_sudo
+  require_site_environment >/dev/null || return 1
+  local mode="${1:-prompt}" keep candidates count disk_before disk_after prefix db_file public_file private_file config_file file
+  keep="$(backup_retention_keep_count)"
+  candidates="$(backup_retention_candidate_sets 2>/dev/null || true)"
+  count="$(printf '%s\n' "$candidates" | sed '/^$/d' | wc -l | awk '{print $1+0}')"
+  disk_before="$($SUDO du -sh "$(site_backup_dir)" 2>/dev/null | awk '{print $1}' || echo unknown)"
+
+  ui_box_start "$([[ "$mode" == dry-run ]] && echo "Backup Cleanup Dry Run" || echo "Cleanup Old Backups")"
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "Retention" "INFO" "keep latest ${keep} complete backup set(s)"
+  status_line "Candidates" "$([[ "$count" -gt 0 ]] && echo WARN || echo OK)" "${count} old complete set(s)"
+  status_line "Current backup size" "INFO" "$disk_before"
+
+  if [[ "$count" -eq 0 ]]; then
+    echo
+    echo "No cleanup needed. Current complete backup count is within retention."
+    ui_next "./install-erpnext-dev.sh backup-retention-status"
+    ui_box_end
+    return 0
+  fi
+
+  echo
+  echo "Old complete backup sets selected by retention:"
+  while IFS='|' read -r _mtime prefix db_file public_file private_file config_file; do
+    [[ -n "$prefix" ]] || continue
+    echo "  - $prefix"
+  done <<< "$candidates"
+
+  if [[ "$mode" == "dry-run" ]]; then
+    echo
+    echo "Dry run only. No files were deleted."
+    ui_next "./install-erpnext-dev.sh cleanup-old-backups" "./install-erpnext-dev.sh backup-retention-status"
+    ui_box_end
+    return 0
+  fi
+
+  echo
+  echo "This will permanently delete the old complete backup set(s) listed above."
+  echo "Make sure an off-VM backup copy exists before cleanup."
+  if ! confirm "Delete old backup files now?"; then
+    warn "Backup cleanup cancelled."
+    ui_box_end
+    return 0
+  fi
+
+  while IFS='|' read -r _mtime prefix db_file public_file private_file config_file; do
+    [[ -n "$prefix" ]] || continue
+    for file in "$db_file" "$public_file" "$private_file" "$config_file"; do
+      if [[ -f "$file" ]]; then
+        $SUDO rm -f -- "$file"
+      fi
+    done
+  done <<< "$candidates"
+
+  disk_after="$($SUDO du -sh "$(site_backup_dir)" 2>/dev/null | awk '{print $1}' || echo unknown)"
+  echo
+  status_line "Deleted sets" "OK" "$count"
+  status_line "Backup size before" "INFO" "$disk_before"
+  status_line "Backup size after" "INFO" "$disk_after"
+  ui_next "./install-erpnext-dev.sh backup-retention-status" "./install-erpnext-dev.sh backup-verify"
+  ui_box_end
+}
+
 disable_backup_schedule() {
   require_sudo
   ui_box_start "Disable Scheduled Backups"
@@ -9938,10 +10122,14 @@ production_ops_wizard() {
     echo "2) Scheduled backup plan"
     echo "3) Configure scheduled backups"
     echo "4) Scheduled backup status"
-    echo "5) Backup verify"
-    echo "6) Restore preflight"
-    echo "7) Support bundle"
-    echo "8) Back"
+    echo "5) Backup retention plan"
+    echo "6) Backup retention status"
+    echo "7) Cleanup old backups dry run"
+    echo "8) Cleanup old backups"
+    echo "9) Backup verify"
+    echo "10) Restore preflight"
+    echo "11) Support bundle"
+    echo "12) Back"
     echo
     read -r -p "Choose an option: " ops_choice
     case "$ops_choice" in
@@ -9949,10 +10137,14 @@ production_ops_wizard() {
       2) show_backup_schedule_plan; pause_after_screen "Press Enter to return to Production Operations..." ;;
       3) configure_backup_schedule; pause_after_screen "Press Enter to return to Production Operations..." ;;
       4) show_backup_schedule_status; pause_after_screen "Press Enter to return to Production Operations..." ;;
-      5) verify_latest_backup_set; pause_after_screen "Press Enter to return to Production Operations..." ;;
-      6) show_restore_preflight; pause_after_screen "Press Enter to return to Production Operations..." ;;
-      7) create_support_bundle; pause_after_screen "Press Enter to return to Production Operations..." ;;
-      8) return 0 ;;
+      5) show_backup_retention_plan; pause_after_screen "Press Enter to return to Production Operations..." ;;
+      6) show_backup_retention_status; pause_after_screen "Press Enter to return to Production Operations..." ;;
+      7) cleanup_old_backups dry-run; pause_after_screen "Press Enter to return to Production Operations..." ;;
+      8) cleanup_old_backups prompt; pause_after_screen "Press Enter to return to Production Operations..." ;;
+      9) verify_latest_backup_set; pause_after_screen "Press Enter to return to Production Operations..." ;;
+      10) show_restore_preflight; pause_after_screen "Press Enter to return to Production Operations..." ;;
+      11) create_support_bundle; pause_after_screen "Press Enter to return to Production Operations..." ;;
+      12) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -10002,15 +10194,19 @@ show_production_checklist() {
   else
     status_line "Scheduled backups" "INFO" "not configured; optional but recommended"
   fi
+  local retention_candidates
+  retention_candidates="$(backup_retention_candidate_sets 2>/dev/null | wc -l | awk '{print $1+0}')"
+  status_line "Retention candidates" "$([[ "$retention_candidates" -gt 0 ]] && echo WARN || echo OK)" "${retention_candidates} old backup set(s)"
   status_line "Snapshot" "INFO" "take/verify cloud snapshot before go-live"
   echo
   echo "Remaining production decisions:"
   echo "  - Confirm off-VM backup location and restore rehearsal."
   echo "  - Configure scheduled local backups if this VM will remain active."
+  echo "  - Review backup retention before local backups grow too large."
   echo "  - Confirm cloud firewall: 22 admin IP, 80/443 allowed, 8000/9000 blocked."
   echo "  - Confirm Cloudflare SSL mode and DNS proxy state."
   echo "  - Create named cloud snapshot after final validation."
-  ui_next "./install-erpnext-dev.sh backup-status" "./install-erpnext-dev.sh backup-schedule-status" "./install-erpnext-dev.sh support-bundle"
+  ui_next "./install-erpnext-dev.sh backup-status" "./install-erpnext-dev.sh backup-retention-status" "./install-erpnext-dev.sh support-bundle"
   ui_box_end
 }
 
@@ -10089,6 +10285,7 @@ show_command_audit() {
   status_line "Firewall" "OK" "firewall-hardening-status, production-firewall-plan"
   status_line "Backups" "OK" "backup-files, backup-status, backup-verify, backup-hardening-wizard"
   status_line "Scheduled backups" "OK" "backup-schedule-plan, configure-backup-schedule, backup-schedule-status"
+  status_line "Backup retention" "OK" "backup-retention-plan, backup-retention-status, cleanup-old-backups"
   status_line "Restore safety" "OK" "restore-rehearsal-guide, restore-preflight, restore-db, restore-full"
   status_line "Optional apps" "OK" "app-install-wizard, app-status, app-compatibility"
   ui_box_end
@@ -10096,8 +10293,8 @@ show_command_audit() {
 }
 
 show_release_notes_guide() {
-  ui_box_start "v1.1.0 Release Notes Draft"
-  echo "Release focus: production operations after a successful ERPNext deployment."
+  ui_box_start "v1.1.2 Release Notes Draft"
+  echo "Release focus: production operations, scheduled backups, and backup retention."
   echo
   echo "Validated paths:"
   echo "  - Local VM quickstart path"
@@ -10107,6 +10304,7 @@ show_release_notes_guide() {
   echo "  - Cloud firewall + UFW + Fail2Ban hardening"
   echo "  - Backup inventory and readable-file verification"
   echo "  - Scheduled local backups with systemd timer"
+  echo "  - Backup retention plan and cleanup dry run"
   echo "  - Restore preflight and production operations wizard"
   echo
   echo "Known production responsibility:"
@@ -10165,7 +10363,10 @@ backup_hardening_wizard() {
     echo "8) Scheduled backup plan"
     echo "9) Configure scheduled backups"
     echo "10) Scheduled backup status"
-    echo "11) Back"
+    echo "11) Backup retention plan"
+    echo "12) Retention status"
+    echo "13) Cleanup dry run"
+    echo "14) Back"
     echo
     read -r -p "Choose an option: " backup_harden_choice
     case "$backup_harden_choice" in
@@ -10179,7 +10380,10 @@ backup_hardening_wizard() {
       8) show_backup_schedule_plan; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
       9) configure_backup_schedule; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
       10) show_backup_schedule_status; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
-      11) return 0 ;;
+      11) show_backup_retention_plan; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
+      12) show_backup_retention_status; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
+      13) cleanup_old_backups dry-run; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
+      14) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -10203,8 +10407,10 @@ run_backup_maintenance_menu() {
     echo "10) Scheduled backup status"
     echo "11) Configure scheduled backups"
     echo "12) Disable scheduled backups"
-    echo "13) Maintenance tasks"
-    echo "14) Back"
+    echo "13) Backup retention status"
+    echo "14) Cleanup old backups dry run"
+    echo "15) Maintenance tasks"
+    echo "16) Back"
     echo
     read -r -p "Choose an option: " backup_choice
 
@@ -10221,8 +10427,10 @@ run_backup_maintenance_menu() {
       10) show_backup_schedule_status; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
       11) configure_backup_schedule; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
       12) disable_backup_schedule; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
-      13) run_maintenance_menu ;;
-      14) return 0 ;;
+      13) show_backup_retention_status; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      14) cleanup_old_backups dry-run; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      15) run_maintenance_menu ;;
+      16) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -10630,6 +10838,8 @@ Production checklist:
   release-readiness    Compact final QA readiness summary
   final-qa             Final QA / release-readiness wizard
   production-ops-wizard Scheduled backup / restore / support operations
+  backup-retention-plan Backup retention and cleanup plan
+  cleanup-old-backups-dry-run Preview old backup cleanup
 
 Apps:
   app-install-wizard  Optional Frappe app installer
@@ -10676,6 +10886,8 @@ Common environment overrides:
   FAIL2BAN_SSH_MAXRETRY=5
   BACKUP_SCHEDULE_ON_CALENDAR=daily
   BACKUP_SCHEDULE_RANDOM_DELAY=30m
+  BACKUP_RETENTION_KEEP_COMPLETE=14
+  BACKUP_RETENTION_WARN_DISK_PERCENT=80
 
 Use ./install-erpnext-dev.sh advanced for the complete command menu.
 EOF_HELP
@@ -10743,7 +10955,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -10828,6 +11040,10 @@ main() {
     configure-backup-schedule) configure_backup_schedule ;;
     backup-schedule-status) show_backup_schedule_status ;;
     disable-backup-schedule) disable_backup_schedule ;;
+    backup-retention-plan) show_backup_retention_plan ;;
+    backup-retention-status) show_backup_retention_status ;;
+    cleanup-old-backups|backup-cleanup) cleanup_old_backups prompt ;;
+    cleanup-old-backups-dry-run|backup-cleanup-dry-run) cleanup_old_backups dry-run ;;
     restore-preflight) show_restore_preflight ;;
     production-ops-wizard|operations-wizard|ops-wizard) production_ops_wizard ;;
     list-backups|backups) list_site_backups ;;

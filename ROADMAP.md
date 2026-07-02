@@ -105,6 +105,8 @@ Completed:
 
 ### Post-v1.0.0
 
-- backup retention policy helper
-- scheduled backup helper
+- backup retention policy helper (complete in v1.1.2)
+- scheduled backup helper (complete in v1.1.0/v1.1.1)
+- off-VM backup automation
 - restore automation improvements after additional rehearsal testing
+- health monitoring and log review

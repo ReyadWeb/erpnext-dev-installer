@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.2
+
+- Added backup retention planning for scheduled/local backups.
+- Added `backup-retention-plan`, `backup-retention-status`, `cleanup-old-backups-dry-run`, and `cleanup-old-backups`.
+- Retention keeps the newest complete backup sets and only deletes old complete backup sets after confirmation.
+- Added disk usage warning support with `BACKUP_RETENTION_WARN_DISK_PERCENT`.
+- Updated production operations, backup hardening, command audit, and production checklist to include retention status.
+
 ## v1.1.1
 
 - Hotfix: ensure production operations commands are registered in the main command dispatcher.

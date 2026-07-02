@@ -733,3 +733,22 @@ journalctl -u erpnext-dev-backup.service --no-pager -n 80
 ./install-erpnext-dev.sh backup-verify
 ```
 
+
+
+## v1.1.2 backup retention validation
+
+```bash
+bash -n install-erpnext-dev.sh
+./install-erpnext-dev.sh help | grep -E "backup-retention|cleanup-old-backups"
+printf '12\n' | ./install-erpnext-dev.sh production-ops-wizard
+./install-erpnext-dev.sh backup-retention-plan
+./install-erpnext-dev.sh backup-retention-status
+./install-erpnext-dev.sh cleanup-old-backups-dry-run
+```
+
+Expected:
+
+- Production Operations menu includes retention options.
+- Retention status shows complete backup set count, cleanup candidates, backup folder size, and disk usage.
+- Dry run lists old complete backup sets without deleting files.
+- `cleanup-old-backups` requires confirmation before deleting old complete sets.

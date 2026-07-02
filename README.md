@@ -1,20 +1,23 @@
-# ERPNext Developer Installer v1.1.1
+# ERPNext Developer Installer v1.1.2
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
-## v1.1.1 production operations
+## v1.1.2 production operations
 
-After v1.0.0 deployment is validated, v1.1.1 adds safer production operations. This hotfix confirms the production operations commands are available from the dispatcher:
+After v1.0.0 deployment is validated, v1.1.2 adds safer production operations for scheduled backups and backup retention. It keeps v1.1.1 scheduled backup operations and adds retention planning plus safe cleanup previews:
 
 ```bash
 /root/install-erpnext-dev.sh production-ops-wizard
 /root/install-erpnext-dev.sh backup-schedule-plan
 /root/install-erpnext-dev.sh configure-backup-schedule
 /root/install-erpnext-dev.sh backup-schedule-status
+/root/install-erpnext-dev.sh backup-retention-plan
+/root/install-erpnext-dev.sh backup-retention-status
+/root/install-erpnext-dev.sh cleanup-old-backups-dry-run
 /root/install-erpnext-dev.sh restore-preflight
 ```
 
-Scheduled backups use a local systemd timer. They create database + files backups inside the VM. You still need an off-VM backup copy and a restore rehearsal on a disposable VM before trusting production data.
+Scheduled backups use a local systemd timer. They create database + files backups inside the VM. Backup retention keeps the newest complete backup sets and can safely preview cleanup before deleting old complete sets. You still need an off-VM backup copy and a restore rehearsal on a disposable VM before trusting production data.
 
 
 ## One-command start
@@ -64,6 +67,9 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh backup-hardening-wizard
 ./install-erpnext-dev.sh backup-status
 ./install-erpnext-dev.sh backup-verify
+./install-erpnext-dev.sh backup-retention-plan
+./install-erpnext-dev.sh backup-retention-status
+./install-erpnext-dev.sh cleanup-old-backups-dry-run
 ./install-erpnext-dev.sh off-vm-backup-guide
 ./install-erpnext-dev.sh restore-rehearsal-guide
 ./install-erpnext-dev.sh production-checklist
