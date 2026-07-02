@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.9.8
+# ERPNext Developer Installer v0.9.10
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -28,9 +28,25 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh next-step
 ```
 
-## v0.9.8 focus
+## v0.9.10 focus
 
-v0.9.8 adds Cloudflare-aware SSL status and post-HTTPS firewall hardening checks. When Cloudflare Origin CA is active and DNS returns Cloudflare IPs instead of the origin VM IP, `production-ssl-status` now treats that as expected instead of warning. A new `firewall-hardening-status` command reviews backend listener exposure after HTTPS is working and clearly marks `8000/9000` as safe to close or restrict.
+v0.9.10 adds optional VM-level hardening with UFW and Fail2Ban. The new safe default UFW profile denies incoming traffic by default, allows outgoing traffic, allows `22/80/443`, and does not allow backend ports `8000/9000/11000/13000`. SSH remains open at the UFW layer by default to avoid lockout caused by dynamic admin IPs; SSH IP restriction should normally be enforced in the Hetzner Cloud Firewall. Fail2Ban can be enabled for the `sshd` jail to reduce repeated unauthorized SSH login attempts.
+
+New commands:
+
+```bash
+./install-erpnext-dev.sh vm-firewall-plan
+./install-erpnext-dev.sh configure-vm-firewall
+./install-erpnext-dev.sh vm-firewall-status
+./install-erpnext-dev.sh configure-fail2ban
+./install-erpnext-dev.sh fail2ban-status
+./install-erpnext-dev.sh security-hardening-wizard
+./install-erpnext-dev.sh ufw-ssh-admin-only   # advanced, lockout risk
+```
+
+v0.9.9 improves firewall hardening output after the first real Hetzner + Cloudflare production test. `firewall-hardening-status` now clearly separates **local listeners inside the VM** from **external exposure controlled by the Hetzner Cloud Firewall**. It no longer implies that `8000/9000` are publicly reachable just because Bench and Socket.io are bound locally; instead it gives workstation-side validation commands to confirm those ports are blocked externally.
+
+v0.9.8 added Cloudflare-aware SSL status and post-HTTPS firewall hardening checks. When Cloudflare Origin CA is active and DNS returns Cloudflare IPs instead of the origin VM IP, `production-ssl-status` now treats that as expected instead of warning.
 
 v0.9.7 fixed and improved the Cloudflare Origin CA paste workflow. The installer now stops reading the certificate automatically at `-----END CERTIFICATE-----` and stops reading the private key automatically at `-----END PRIVATE KEY-----`, `-----END RSA PRIVATE KEY-----`, or `-----END EC PRIVATE KEY-----`. Artificial `END_CERT` and `END_KEY` markers are no longer required.
 
@@ -52,6 +68,12 @@ Run:
 ./install-erpnext-dev.sh production-ssl-plan
 ./install-erpnext-dev.sh production-firewall-plan
 ./install-erpnext-dev.sh firewall-hardening-status
+./install-erpnext-dev.sh vm-firewall-plan
+./install-erpnext-dev.sh configure-vm-firewall
+./install-erpnext-dev.sh vm-firewall-status
+./install-erpnext-dev.sh configure-fail2ban
+./install-erpnext-dev.sh fail2ban-status
+./install-erpnext-dev.sh security-hardening-wizard
 ./install-erpnext-dev.sh production-ssl-wizard
 ./install-erpnext-dev.sh configure-production-ssl
 ./install-erpnext-dev.sh configure-cloudflare-origin-ssl
@@ -71,7 +93,7 @@ Run:
 
 `production-firewall-plan` prints the intended Hetzner/edge firewall posture: SSH restricted, `80/443` public, `8000` temporary/restricted, and Redis/socket/internal ports closed publicly.
 
-`firewall-hardening-status` checks the current local listener exposure after HTTPS is working. It warns if `8000` or `9000` are still listening on public interfaces and confirms Redis ports are local-only or closed. It does not change firewall rules automatically.
+`firewall-hardening-status` checks local listeners after HTTPS is working and explains that the Hetzner Cloud Firewall controls external exposure. It confirms Redis ports are local-only or closed, marks backend `8000/9000` listeners as internal backend listeners to validate externally, and prints workstation-side curl tests for the origin IP. It does not change firewall rules automatically.
 
 ## v0.8.24 optional app compatibility
 

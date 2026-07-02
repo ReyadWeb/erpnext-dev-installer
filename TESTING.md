@@ -1,4 +1,4 @@
-# TESTING v0.9.8
+# TESTING v0.9.10
 
 ## Syntax
 
@@ -11,13 +11,13 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="0.9.8"
+SCRIPT_VERSION="0.9.10"
 ```
 
 ## Help command
 
 ```bash
-./install-erpnext-dev.sh help | grep -E "doctor --plain|doctor --json|support-bundle|app-compatibility|production-plan|production-domain-plan|public-vm-readiness|production-ssl-plan|production-firewall-plan|firewall-hardening-status|production-ssl-wizard|configure-production-ssl|configure-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|disable-production-ssl"
+./install-erpnext-dev.sh help | grep -E "doctor --plain|doctor --json|support-bundle|app-compatibility|production-plan|production-domain-plan|public-vm-readiness|production-ssl-plan|production-firewall-plan|firewall-hardening-status|production-ssl-wizard|configure-production-ssl|configure-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|disable-production-ssl|vm-firewall-plan|configure-vm-firewall|vm-firewall-status|configure-fail2ban|fail2ban-status|security-hardening-wizard"
 ```
 
 Expected:
@@ -39,6 +39,12 @@ Expected:
 - Help lists `cloudflare-origin-guide`.
 - Help lists `production-ssl-status`.
 - Help lists `disable-production-ssl`.
+- Help lists `vm-firewall-plan`.
+- Help lists `configure-vm-firewall`.
+- Help lists `vm-firewall-status`.
+- Help lists `configure-fail2ban`.
+- Help lists `fail2ban-status`.
+- Help lists `security-hardening-wizard`.
 
 
 
@@ -74,7 +80,9 @@ Expected:
 - `public-vm-readiness` reports DNS match/mismatch, install/runtime/service state, Nginx, SSL, backups, HTTP `:8000` checks, and listener summary.
 - `production-ssl-plan` prints the planning-only SSL path and distinguishes local/dev SSL from production SSL.
 - `production-firewall-plan` prints the temporary test exposure and long-term production exposure recommendations.
-- `firewall-hardening-status` prints listener exposure and warns when `8000/9000` remain public after HTTPS is working.
+- `firewall-hardening-status` explains that rows are local VM listeners and that cloud firewall rules control external exposure.
+- It provides workstation-side validation commands for HTTPS and origin `8000/9000`.
+- It describes `8000/9000` as backend listeners to block externally after HTTPS is working.
 - `firewall-status` and `hardening-status` work as aliases.
 - New aliases run the same corresponding commands.
 
@@ -455,7 +463,7 @@ python3 -m json.tool /tmp/doctor.json
 ```
 
 
-## v0.9.8 Cloudflare/firewall validation
+## v0.9.9 Cloudflare/firewall validation
 
 On a Cloudflare Origin CA deployment where DNS returns Cloudflare IPs instead of the origin VM IP:
 
@@ -469,6 +477,45 @@ Expected:
 
 - `production-ssl-status` does not warn merely because DNS returns Cloudflare IPs while Cloudflare Origin CA is active.
 - `cloudflare-origin-ssl-status` reports Cloudflare proxy as likely active.
-- `firewall-hardening-status` warns if `8000` or `9000` are still listening on public interfaces after HTTPS is OK.
+- `firewall-hardening-status` should label listener rows as local VM listeners.
+- It should not imply Hetzner firewall is bypassed when `8000/9000` are locally bound.
+- It should print external tests to run from the workstation: `curl -I https://erp.flowmaya.com`, `curl -I --connect-timeout 10 http://ORIGIN_IP:8000`, and `curl -I --connect-timeout 10 http://ORIGIN_IP:9000`.
 - Redis ports `11000/13000` are reported as OK when local-only or closed.
 - No command changes firewall rules automatically.
+
+
+## VM firewall / Fail2Ban hardening
+
+```bash
+./install-erpnext-dev.sh vm-firewall-plan
+./install-erpnext-dev.sh vm-firewall-status
+./install-erpnext-dev.sh fail2ban-status
+./install-erpnext-dev.sh security-hardening-wizard
+```
+
+Expected:
+
+- `vm-firewall-plan` explains the safe UFW defaults.
+- `vm-firewall-status` reports whether UFW is installed/active and whether expected port rules exist.
+- `fail2ban-status` reports whether Fail2Ban and the `sshd` jail are active.
+- `security-hardening-wizard` shows options for UFW and Fail2Ban and exits cleanly when choosing Back.
+
+Manual destructive/configuration tests on a disposable VM:
+
+```bash
+./install-erpnext-dev.sh configure-vm-firewall
+./install-erpnext-dev.sh configure-fail2ban
+./install-erpnext-dev.sh vm-firewall-status
+./install-erpnext-dev.sh fail2ban-status
+```
+
+Expected after configuration:
+
+- UFW is active.
+- Incoming default is deny.
+- Outgoing default is allow.
+- UFW allows `22/tcp`, `80/tcp`, and `443/tcp`.
+- UFW has no explicit allow rules for `8000`, `9000`, `11000`, or `13000`.
+- Fail2Ban service is running.
+- The `sshd` jail is active.
+- SSH remains open at the UFW layer by default; admin-IP SSH restriction is handled in Hetzner Cloud Firewall unless the advanced `ufw-ssh-admin-only` command is intentionally used.

@@ -1,5 +1,39 @@
 # CHANGELOG
 
+## v0.9.10
+
+### Added
+
+- Added `vm-firewall-plan` / `ufw-plan` to explain the VM-level UFW hardening model.
+- Added `configure-vm-firewall` to install and enable safe UFW defaults.
+- Added `vm-firewall-status` / `ufw-status` to inspect UFW status and expected ERPNext public-VM port policy.
+- Added `configure-fail2ban` to install Fail2Ban and enable the `sshd` jail.
+- Added `fail2ban-status` to inspect Fail2Ban and the `sshd` jail.
+- Added `security-hardening-wizard` / `vm-firewall-wizard` to guide UFW and Fail2Ban setup.
+- Added advanced `ufw-ssh-admin-only` for users who intentionally want UFW to restrict SSH to a specific admin IP.
+
+### Safety
+
+- `configure-vm-firewall` keeps SSH open at the UFW layer by default to avoid lockout from dynamic admin IPs.
+- SSH source restriction remains recommended at the Hetzner Cloud Firewall layer.
+- UFW does not allow `8000`, `9000`, `11000`, or `13000` by default.
+- The advanced UFW SSH restriction requires explicit confirmation and warns about lockout risk.
+
+## v0.9.9
+
+### Improved
+
+- Improved `firewall-hardening-status` wording after real Hetzner firewall validation.
+- The command now separates **local listeners inside the VM** from **external public exposure controlled by the cloud firewall**.
+- Backend ports `8000` and `9000` are now described as local backend listeners that must be blocked externally, rather than automatically implying they are publicly reachable.
+- Added explicit workstation-side validation commands for checking `https://<domain>`, `http://<origin-ip>:8000`, and `http://<origin-ip>:9000`.
+- Clarified that `80/443` listeners are expected Nginx entrypoints and may later be restricted to Cloudflare IP ranges when staying proxied.
+
+### Safety
+
+- No firewall rules are changed automatically.
+- The command remains inspection/planning only and avoids implying that a local listener bypasses the Hetzner Cloud Firewall.
+
 ## v0.9.8
 
 ### Added

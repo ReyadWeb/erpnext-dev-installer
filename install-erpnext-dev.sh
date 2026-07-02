@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.9.8"
+SCRIPT_VERSION="0.9.10"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -109,7 +109,7 @@ acquire_installer_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+    ""|menu|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
       return 0
       ;;
     *)
@@ -3078,7 +3078,9 @@ show_firewall_hardening_status() {
   status_line "HTTPS entrypoint" "$ssl_status" "$ssl_detail"
   status_line "Cloudflare proxy" "$proxy_status" "$proxy_detail"
   echo
-  echo "Local listener exposure:"
+  echo "Local listeners inside the VM:"
+  echo "  These rows show what services are bound on the server itself."
+  echo "  A service may still be blocked externally by the Hetzner Cloud Firewall."
   for port in 22 80 443 8000 9000 11000 13000; do
     pair="$(production_listener_exposure_label "$port")"
     status="${pair%%|*}"
@@ -3086,7 +3088,8 @@ show_firewall_hardening_status() {
     case "$port" in
       22)
         if [[ "$status" == "WARN" ]]; then
-          message="${detail}; restrict SSH to your admin IP/VPN at the Hetzner firewall"
+          status="INFO"
+          message="${detail}; local SSH listener exists. Verify Hetzner firewall allows only admin IP/VPN."
         else
           message="$detail"
         fi
@@ -3094,9 +3097,9 @@ show_firewall_hardening_status() {
       80|443)
         if [[ "$status" == "WARN" || "$status" == "INFO" ]]; then
           if [[ "$provider" == "Cloudflare Origin CA" ]]; then
-            message="${detail}; acceptable for now, later restrict to Cloudflare IP ranges if desired"
+            message="${detail}; expected local Nginx listener. Hetzner firewall should allow Cloudflare/public on this port."
           else
-            message="${detail}; public entrypoint for HTTP/HTTPS"
+            message="${detail}; expected public HTTP/HTTPS entrypoint."
           fi
           status="OK"
         else
@@ -3105,9 +3108,11 @@ show_firewall_hardening_status() {
         ;;
       8000|9000)
         if [[ "$status" == "WARN" && "$ssl_status" == "OK" ]]; then
-          message="${detail}; safe to close/restrict now because HTTPS is working"
+          status="INFO"
+          message="${detail}; backend listener exists for Nginx/ERPNext. Verify Hetzner firewall blocks public access."
         elif [[ "$status" == "WARN" ]]; then
-          message="${detail}; temporary only, close after HTTPS works"
+          status="INFO"
+          message="${detail}; temporary backend listener. Close/restrict externally after HTTPS works."
         else
           message="$detail"
         fi
@@ -3115,7 +3120,7 @@ show_firewall_hardening_status() {
       11000|13000)
         if [[ "$status" == "WARN" ]]; then
           status="FAIL"
-          message="${detail}; Redis must never be public"
+          message="${detail}; Redis must never be publicly reachable. Bind to localhost and block at firewall."
         else
           message="$detail"
         fi
@@ -3125,20 +3130,350 @@ show_firewall_hardening_status() {
     status_line "Port ${port}" "$status" "$message"
   done
   echo
-  echo "Recommended Hetzner firewall after HTTPS is confirmed:"
+  echo "Recommended Hetzner inbound firewall:"
   echo "  22/tcp     allow only your admin IP or VPN"
   echo "  80/tcp     allow public, or Cloudflare IP ranges if staying proxied"
   echo "  443/tcp    allow public, or Cloudflare IP ranges if staying proxied"
-  echo "  8000/tcp   block public access"
-  echo "  9000/tcp   block public access"
-  echo "  11000/tcp  block public access"
-  echo "  13000/tcp  block public access"
+  echo "  8000/tcp   no allow rule; block public access"
+  echo "  9000/tcp   no allow rule; block public access"
+  echo "  11000/tcp  no allow rule; block public access"
+  echo "  13000/tcp  no allow rule; block public access"
   echo
-  echo "Validation after firewall changes:"
+  echo "External validation from your workstation, not from inside the VM:"
   echo "  curl -I https://${domain}"
+  echo "  curl -I --connect-timeout 10 http://${vm_ip}:8000"
+  echo "  curl -I --connect-timeout 10 http://${vm_ip}:9000"
+  echo "Expected: HTTPS returns 200/redirect through Cloudflare/Nginx; 8000/9000 time out or are blocked."
+  echo
+  echo "Internal validation from this VM:"
   echo "  ./install-erpnext-dev.sh firewall-hardening-status"
   echo "  ./install-erpnext-dev.sh public-vm-readiness"
   echo "============================================================"
+}
+
+
+vm_firewall_plan() {
+  local vm_ip domain
+
+  require_sudo
+  vm_ip="$(get_vm_ip)"
+  domain="${PRODUCTION_DOMAIN:-$SITE_NAME}"
+
+  echo
+  echo "============================================================"
+  echo "VM Firewall / UFW Plan"
+  echo "============================================================"
+  status_line "Mode" "INFO" "planning only; no firewall changes are applied"
+  status_line "VM IP" "INFO" "$vm_ip"
+  status_line "Domain" "INFO" "$domain"
+  echo
+  echo "Safe default UFW profile:"
+  echo "  - Default incoming: deny"
+  echo "  - Default outgoing: allow"
+  echo "  - Allow 22/tcp from any source at UFW layer to avoid dynamic-IP lockout"
+  echo "  - Allow 80/tcp for Nginx / Cloudflare / redirects"
+  echo "  - Allow 443/tcp for Nginx / Cloudflare HTTPS"
+  echo "  - Do not allow 8000, 9000, 11000, or 13000"
+  echo
+  echo "Why SSH stays open in UFW by default:"
+  echo "  - Your admin IP may change. Restrict SSH at the Hetzner Cloud Firewall first."
+  echo "  - UFW can be made stricter later with: ./install-erpnext-dev.sh ufw-ssh-admin-only"
+  echo "  - That advanced SSH restriction can lock you out if the wrong IP is used."
+  echo
+  echo "Recommended layering:"
+  echo "  Layer 1: ERPNext/Nginx service listeners"
+  echo "  Layer 2: UFW inside this VM"
+  echo "  Layer 3: Hetzner Cloud Firewall"
+  echo "  Layer 4: Cloudflare proxy/WAF/CDN"
+  echo
+  echo "Commands:"
+  echo "  ./install-erpnext-dev.sh configure-vm-firewall"
+  echo "  ./install-erpnext-dev.sh configure-fail2ban"
+  echo "  ./install-erpnext-dev.sh vm-firewall-status"
+  echo "  ./install-erpnext-dev.sh fail2ban-status"
+  echo "  ./install-erpnext-dev.sh security-hardening-wizard"
+  echo "============================================================"
+}
+
+ufw_status_raw() {
+  if ! command -v ufw >/dev/null 2>&1; then
+    return 1
+  fi
+  $SUDO ufw status verbose 2>/dev/null || true
+}
+
+ufw_is_active() {
+  command -v ufw >/dev/null 2>&1 || return 1
+  $SUDO ufw status 2>/dev/null | grep -qi '^Status:[[:space:]]*active'
+}
+
+ufw_port_allow_lines() {
+  local port="$1"
+  command -v ufw >/dev/null 2>&1 || return 0
+  $SUDO ufw status 2>/dev/null | grep -E "(^|[[:space:]])${port}(/tcp)?([[:space:]]|$)" || true
+}
+
+ufw_port_has_allow() {
+  [[ -n "$(ufw_port_allow_lines "$1")" ]]
+}
+
+show_vm_firewall_status() {
+  local status default_line port lines state detail
+
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "VM Firewall / UFW Status"
+  echo "============================================================"
+  if ! command -v ufw >/dev/null 2>&1; then
+    status_line "UFW" "WARN" "not installed"
+    echo "Run: ./install-erpnext-dev.sh configure-vm-firewall"
+    echo "============================================================"
+    return 0
+  fi
+
+  status="inactive"
+  ufw_is_active && status="active"
+  status_line "UFW" "$([[ "$status" == active ]] && echo OK || echo WARN)" "$status"
+  default_line="$(ufw_status_raw | awk '/^Default:/ {print; exit}')"
+  status_line "Default policy" "INFO" "${default_line:-unknown}"
+  echo
+  echo "Expected safe default UFW rules:"
+  for port in 22 80 443 8000 9000 11000 13000; do
+    lines="$(ufw_port_allow_lines "$port" | paste -sd ';' -)"
+    case "$port" in
+      22)
+        if ufw_port_has_allow 22; then
+          state="OK"
+          detail="allowed at UFW layer to avoid lockout; restrict SSH at Hetzner firewall"
+        else
+          state="WARN"
+          detail="no UFW allow rule detected; SSH could be blocked if UFW is active"
+        fi
+        ;;
+      80|443)
+        if ufw_port_has_allow "$port"; then
+          state="OK"
+          detail="allowed for Nginx/Cloudflare HTTPS path"
+        else
+          state="WARN"
+          detail="no UFW allow rule detected; Cloudflare/Nginx may be blocked"
+        fi
+        ;;
+      8000|9000|11000|13000)
+        if ufw_port_has_allow "$port"; then
+          state="WARN"
+          detail="explicit UFW allow rule found; remove it unless you intentionally need this"
+        else
+          state="OK"
+          detail="no explicit UFW allow rule; should be blocked externally by UFW"
+        fi
+        ;;
+    esac
+    [[ -n "$lines" ]] && detail+="; rule(s): ${lines}"
+    status_line "Port ${port}" "$state" "$detail"
+  done
+  echo
+  echo "Raw UFW status:"
+  ufw_status_raw | sed 's/^/  /'
+  echo
+  echo "Note: UFW protects the VM itself. Hetzner Cloud Firewall should still restrict SSH and block backend ports at the edge."
+  echo "============================================================"
+}
+
+configure_vm_firewall() {
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "Configure VM Firewall / UFW"
+  echo "============================================================"
+  echo "This applies safe UFW defaults inside the VM:"
+  echo "  - deny incoming by default"
+  echo "  - allow outgoing by default"
+  echo "  - allow 22/tcp from any source at UFW layer to avoid lockout"
+  echo "  - allow 80/tcp and 443/tcp"
+  echo "  - no allow rules for 8000, 9000, 11000, or 13000"
+  echo
+  echo "SSH restriction should stay in Hetzner Cloud Firewall unless you intentionally run ufw-ssh-admin-only."
+  confirm "Configure safe UFW defaults now?" || return 1
+
+  log "Installing UFW"
+  $SUDO apt-get update
+  $SUDO apt-get install -y ufw
+
+  log "Applying safe UFW defaults"
+  $SUDO ufw default deny incoming
+  $SUDO ufw default allow outgoing
+  $SUDO ufw allow 22/tcp
+  $SUDO ufw allow 80/tcp
+  $SUDO ufw allow 443/tcp
+
+  # Remove common accidental backend allow rules when possible.
+  for port in 8000 9000 11000 13000; do
+    $SUDO ufw delete allow "${port}/tcp" >/dev/null 2>&1 || true
+    $SUDO ufw delete allow "$port" >/dev/null 2>&1 || true
+  done
+
+  $SUDO ufw --force enable
+  ok "UFW enabled with safe ERPNext public-VM defaults"
+  show_vm_firewall_status
+}
+
+configure_ufw_ssh_admin_only() {
+  local detected_ip admin_ip
+
+  require_sudo
+  command -v ufw >/dev/null 2>&1 || fail "UFW is not installed. Run configure-vm-firewall first."
+
+  detected_ip="${ADMIN_SSH_SOURCE_IP:-}"
+  if [[ -z "$detected_ip" && -n "${SSH_CLIENT:-}" ]]; then
+    detected_ip="${SSH_CLIENT%% *}"
+  fi
+
+  echo
+  echo "============================================================"
+  echo "Advanced UFW SSH Restriction"
+  echo "============================================================"
+  warn "This can lock you out if your IP changes or is entered incorrectly."
+  echo "Recommended default: restrict SSH in Hetzner Cloud Firewall, not in UFW."
+  echo "Keep a second SSH session open and confirm Hetzner console/rescue access before continuing."
+  echo
+  echo "Detected current SSH client IP: ${detected_ip:-unknown}"
+  if [[ -n "${ADMIN_SSH_SOURCE_IP:-}" ]]; then
+    admin_ip="$ADMIN_SSH_SOURCE_IP"
+  else
+    read -r -p "Admin public IPv4 to allow for SSH [${detected_ip:-}]: " admin_ip
+    admin_ip="${admin_ip:-$detected_ip}"
+  fi
+
+  [[ -n "$admin_ip" ]] || fail "Admin IP is required."
+  if ! [[ "$admin_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
+    fail "Only IPv4/CIDR is supported by this helper. Example: 68.144.2.171/32"
+  fi
+  [[ "$admin_ip" == */* ]] || admin_ip="${admin_ip}/32"
+
+  status_line "New SSH source" "INFO" "$admin_ip"
+  confirm "Apply UFW SSH restriction to ${admin_ip}?" || return 1
+  confirm "Final confirmation: keep a second SSH session open. Continue?" || return 1
+
+  log "Restricting UFW SSH to ${admin_ip}"
+  $SUDO ufw allow from "$admin_ip" to any port 22 proto tcp
+  $SUDO ufw delete allow 22/tcp >/dev/null 2>&1 || true
+  $SUDO ufw delete allow ssh >/dev/null 2>&1 || true
+  $SUDO ufw --force enable
+  ok "UFW SSH restriction applied. Test a second SSH session before closing this one."
+  show_vm_firewall_status
+}
+
+show_fail2ban_status() {
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "Fail2Ban Status"
+  echo "============================================================"
+  if ! command -v fail2ban-client >/dev/null 2>&1; then
+    status_line "Fail2Ban" "WARN" "not installed"
+    echo "Run: ./install-erpnext-dev.sh configure-fail2ban"
+    echo "============================================================"
+    return 0
+  fi
+
+  if $SUDO systemctl is-active --quiet fail2ban; then
+    status_line "Fail2Ban service" "OK" "running"
+  else
+    status_line "Fail2Ban service" "WARN" "not running"
+  fi
+
+  if $SUDO fail2ban-client status sshd >/tmp/erpnext-dev-fail2ban-sshd-status.$$ 2>/dev/null; then
+    status_line "sshd jail" "OK" "enabled"
+    sed 's/^/  /' /tmp/erpnext-dev-fail2ban-sshd-status.$$ || true
+    rm -f /tmp/erpnext-dev-fail2ban-sshd-status.$$
+  else
+    rm -f /tmp/erpnext-dev-fail2ban-sshd-status.$$
+    status_line "sshd jail" "WARN" "not active or not found"
+  fi
+  echo "============================================================"
+}
+
+configure_fail2ban() {
+  local bantime findtime maxretry jail_file
+
+  require_sudo
+  bantime="${FAIL2BAN_SSH_BANTIME:-1h}"
+  findtime="${FAIL2BAN_SSH_FINDTIME:-10m}"
+  maxretry="${FAIL2BAN_SSH_MAXRETRY:-5}"
+  jail_file="/etc/fail2ban/jail.d/erpnext-dev-sshd.conf"
+
+  echo
+  echo "============================================================"
+  echo "Configure Fail2Ban for SSH"
+  echo "============================================================"
+  status_line "bantime" "INFO" "$bantime"
+  status_line "findtime" "INFO" "$findtime"
+  status_line "maxretry" "INFO" "$maxretry"
+  echo
+  echo "This enables the sshd jail to reduce repeated unauthorized SSH login attempts."
+  confirm "Install/configure Fail2Ban sshd jail now?" || return 1
+
+  log "Installing Fail2Ban"
+  $SUDO apt-get update
+  $SUDO apt-get install -y fail2ban
+
+  log "Writing Fail2Ban sshd jail"
+  $SUDO mkdir -p /etc/fail2ban/jail.d
+  $SUDO tee "$jail_file" >/dev/null <<EOF
+[sshd]
+enabled = true
+backend = systemd
+port = ssh
+filter = sshd
+bantime = ${bantime}
+findtime = ${findtime}
+maxretry = ${maxretry}
+EOF
+
+  $SUDO systemctl enable --now fail2ban
+  $SUDO systemctl restart fail2ban
+  ok "Fail2Ban sshd jail configured"
+  show_fail2ban_status
+}
+
+security_hardening_wizard() {
+  local choice
+
+  require_sudo
+  while true; do
+    echo
+    echo "============================================================"
+    echo "Security Hardening Wizard"
+    echo "============================================================"
+    echo "1) Show VM firewall / UFW plan"
+    echo "2) Configure safe UFW defaults"
+    echo "3) Show VM firewall / UFW status"
+    echo "4) Configure Fail2Ban for SSH"
+    echo "5) Show Fail2Ban status"
+    echo "6) Show public firewall hardening status"
+    echo "7) Advanced: restrict SSH in UFW to admin IP"
+    echo "8) Back"
+    echo
+    echo "Default recommendation: run options 2 and 4. Keep SSH IP restriction in Hetzner firewall unless you understand the lockout risk."
+    echo
+    read -r -p "Choose an option: " choice
+    case "$choice" in
+      1) vm_firewall_plan ;;
+      2) configure_vm_firewall ;;
+      3) show_vm_firewall_status ;;
+      4) configure_fail2ban ;;
+      5) show_fail2ban_status ;;
+      6) show_firewall_hardening_status ;;
+      7) configure_ufw_ssh_admin_only ;;
+      8|q|Q) return 0 ;;
+      *) warn "Invalid option." ;;
+    esac
+  done
 }
 
 
@@ -8998,6 +9333,12 @@ Advanced actions:
   production-ssl-plan Show production SSL readiness and recommended path
   production-firewall-plan Show public VM firewall exposure plan
   firewall-hardening-status Show post-HTTPS backend port hardening status
+  vm-firewall-plan   Show safe UFW VM firewall plan
+  configure-vm-firewall Configure safe UFW defaults inside the VM
+  vm-firewall-status Show UFW status and expected port policy
+  configure-fail2ban Configure Fail2Ban sshd jail
+  fail2ban-status    Show Fail2Ban sshd jail status
+  security-hardening-wizard Guided UFW + Fail2Ban hardening
   production-ssl-wizard Choose Let's Encrypt or Cloudflare Origin CA HTTPS
   configure-production-ssl Configure Nginx + Let's Encrypt for production HTTPS
   configure-cloudflare-origin-ssl Configure Nginx + Cloudflare Origin CA HTTPS
@@ -9019,6 +9360,10 @@ Environment overrides:
   PRODUCTION_DOMAIN=erp.company.com # production planning / SSL hostname
   LETSENCRYPT_EMAIL=admin@example.com # optional for configure-production-ssl
   LETSENCRYPT_STAGING=true|false      # optional dry-run against Let's Encrypt staging
+  ADMIN_SSH_SOURCE_IP=68.144.2.171/32 # optional for advanced UFW SSH restriction
+  FAIL2BAN_SSH_BANTIME=1h       # optional Fail2Ban sshd jail setting
+  FAIL2BAN_SSH_FINDTIME=10m     # optional Fail2Ban sshd jail setting
+  FAIL2BAN_SSH_MAXRETRY=5       # optional Fail2Ban sshd jail setting
   FRAPPE_USER=frappe
   ADMIN_PASSWORD='YourPassword'
   DB_ADMIN_PASSWORD='YourDbAdminPassword'
@@ -9137,7 +9482,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -9252,6 +9597,13 @@ main() {
     production-ssl-plan|prod-ssl-plan) show_production_ssl_plan ;;
     production-firewall-plan|prod-firewall-plan) show_production_firewall_plan ;;
     firewall-hardening-status|firewall-status|hardening-status) show_firewall_hardening_status ;;
+    vm-firewall-plan|ufw-plan) vm_firewall_plan ;;
+    configure-vm-firewall) configure_vm_firewall ;;
+    vm-firewall-status|ufw-status) show_vm_firewall_status ;;
+    configure-fail2ban) configure_fail2ban ;;
+    fail2ban-status) show_fail2ban_status ;;
+    security-hardening-wizard|vm-firewall-wizard) security_hardening_wizard ;;
+    ufw-ssh-admin-only) configure_ufw_ssh_admin_only ;;
     production-ssl-wizard|ssl-provider-wizard) production_ssl_wizard ;;
     configure-production-ssl) configure_production_ssl ;;
     configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl) configure_cloudflare_origin_ssl ;;
