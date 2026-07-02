@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.9.2"
+SCRIPT_VERSION="0.9.3"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -2736,6 +2736,259 @@ Current local SSL remains separate:
 EOF_PROD_SSL
 }
 
+
+is_private_ipv4() {
+  local ip="$1"
+
+  [[ -n "$ip" ]] || return 1
+  case "$ip" in
+    10.*|192.168.*|127.*|169.254.*) return 0 ;;
+    172.16.*|172.17.*|172.18.*|172.19.*|172.20.*|172.21.*|172.22.*|172.23.*|172.24.*|172.25.*|172.26.*|172.27.*|172.28.*|172.29.*|172.30.*|172.31.*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+resolve_ipv4_first() {
+  local host="$1"
+
+  if command -v getent >/dev/null 2>&1; then
+    getent ahostsv4 "$host" 2>/dev/null | awk '{print $1; exit}'
+    return 0
+  fi
+
+  if command -v dig >/dev/null 2>&1; then
+    dig +short A "$host" 2>/dev/null | awk '/^[0-9.]+$/ {print; exit}'
+    return 0
+  fi
+
+  echo ""
+}
+
+production_listener_detail() {
+  local port="$1"
+
+  if command -v ss >/dev/null 2>&1; then
+    ss -lntH "sport = :${port}" 2>/dev/null | awk 'NR==1 {print $4; found=1} END {if (!found) print "not listening"}'
+    return 0
+  fi
+
+  if port_listens "$port"; then
+    echo "listening"
+  else
+    echo "not listening"
+  fi
+}
+
+production_http_status() {
+  local url="$1"
+  curl -fsSI --max-time 8 "$url" 2>/dev/null | awk 'NR==1 {print; exit}' || true
+}
+
+show_public_vm_readiness() {
+  local vm_ip domain dns_ip install_quick runtime service auto nginx_state ssl_pair ssl_status ssl_detail backup_count
+  local http_ip http_domain public_note dns_status dns_detail
+
+  require_sudo
+
+  vm_ip="$(get_vm_ip)"
+  domain="${PRODUCTION_DOMAIN:-$SITE_NAME}"
+  dns_ip=""
+  dns_status="WARN"
+  dns_detail="set PRODUCTION_DOMAIN or SITE_NAME to the public hostname"
+  public_note="private/NAT IP detected; this does not look like a public VM"
+
+  if ! is_private_ipv4 "$vm_ip"; then
+    public_note="public-looking IPv4 detected; confirm this is the intended cloud VM IP"
+  fi
+
+  if validate_production_domain_value "$domain" >/dev/null 2>&1; then
+    dns_ip="$(resolve_ipv4_first "$domain")"
+    if [[ -n "$dns_ip" && "$dns_ip" == "$vm_ip" ]]; then
+      dns_status="OK"
+      dns_detail="${domain} resolves to ${dns_ip}"
+    elif [[ -n "$dns_ip" ]]; then
+      dns_status="WARN"
+      dns_detail="${domain} resolves to ${dns_ip}, expected ${vm_ip}"
+    else
+      dns_status="WARN"
+      dns_detail="could not resolve ${domain}; check DNS propagation"
+    fi
+  fi
+
+  install_quick="$(production_quick_install_state)"
+  runtime="$(runtime_state 2>/dev/null || echo unknown)"
+  service="$(service_state 2>/dev/null || echo unknown)"
+  auto="$(autostart_state 2>/dev/null || echo unknown)"
+  nginx_state="not installed"
+  command -v nginx >/dev/null 2>&1 && nginx_state="installed"
+  ssl_pair="$(production_ssl_readiness_detail)"
+  ssl_status="${ssl_pair%%|*}"
+  ssl_detail="${ssl_pair#*|}"
+  backup_count="$(production_backup_count)"
+  http_ip="$(production_http_status "http://${vm_ip}:8000")"
+  http_domain="$(production_http_status "http://${domain}:8000")"
+
+  echo
+  echo "============================================================"
+  echo "Public VM Readiness"
+  echo "============================================================"
+  status_line "Mode" "INFO" "planning/check only; no firewall or SSL changes are applied"
+  status_line "VM IP" "INFO" "${vm_ip}"
+  status_line "Network" "INFO" "$public_note"
+  status_line "Domain" "$dns_status" "$dns_detail"
+  status_line "Install state" "$([[ "$install_quick" == Installed* ]] && echo OK || echo WARN)" "$install_quick"
+  status_line "Runtime" "$([[ "$runtime" == Running* ]] && echo OK || echo WARN)" "$runtime"
+  status_line "Service" "INFO" "${service}; autostart=${auto}"
+  status_line "Nginx" "$([[ "$nginx_state" == installed ]] && echo OK || echo WARN)" "$nginx_state"
+  status_line "Production SSL" "$ssl_status" "$ssl_detail"
+  if [[ "$backup_count" =~ ^[0-9]+$ && "$backup_count" -gt 0 ]]; then
+    status_line "Backup readiness" "OK" "${backup_count} local backup file(s); off-VM copy still required"
+  else
+    status_line "Backup readiness" "WARN" "no local backup files detected"
+  fi
+
+  echo
+  echo "HTTP checks:"
+  status_line "Public IP :8000" "$([[ "$http_ip" == HTTP/* ]] && echo OK || echo WARN)" "${http_ip:-no response}"
+  status_line "Domain :8000" "$([[ "$http_domain" == HTTP/* ]] && echo OK || echo WARN)" "${http_domain:-no response}"
+
+  echo
+  echo "Listener summary:"
+  for port in 22 80 443 8000 9000 11000 13000; do
+    status_line "Port ${port}" "INFO" "$(production_listener_detail "$port")"
+  done
+
+  echo
+  echo "Recommended next commands:"
+  echo "  ./install-erpnext-dev.sh backup-files"
+  echo "  ./install-erpnext-dev.sh production-ssl-plan"
+  echo "  ./install-erpnext-dev.sh production-firewall-plan"
+  echo "  ./install-erpnext-dev.sh support-bundle"
+  echo "============================================================"
+}
+
+show_production_ssl_plan() {
+  local vm_ip domain dns_ip dns_state dns_detail nginx_state local_ssl_pair local_ssl_status local_ssl_detail port80 port443
+
+  require_sudo
+
+  vm_ip="$(get_vm_ip)"
+  domain="${PRODUCTION_DOMAIN:-$SITE_NAME}"
+  dns_ip=""
+  dns_state="WARN"
+  dns_detail="set PRODUCTION_DOMAIN=erp.company.com before production SSL planning"
+
+  if ! validate_production_domain_value "$domain" >/dev/null 2>&1; then
+    domain="erp.company.com"
+  else
+    dns_ip="$(resolve_ipv4_first "$domain")"
+    if [[ -n "$dns_ip" && "$dns_ip" == "$vm_ip" ]]; then
+      dns_state="OK"
+      dns_detail="${domain} resolves to ${vm_ip}"
+    elif [[ -n "$dns_ip" ]]; then
+      dns_detail="${domain} resolves to ${dns_ip}, expected ${vm_ip}"
+    else
+      dns_detail="${domain} did not resolve yet from this VM"
+    fi
+  fi
+
+  nginx_state="not installed"
+  command -v nginx >/dev/null 2>&1 && nginx_state="installed"
+  local_ssl_pair="$(production_ssl_readiness_detail)"
+  local_ssl_status="${local_ssl_pair%%|*}"
+  local_ssl_detail="${local_ssl_pair#*|}"
+  port80="$(production_listener_detail 80)"
+  port443="$(production_listener_detail 443)"
+
+  echo
+  echo "============================================================"
+  echo "Production SSL Plan"
+  echo "============================================================"
+  status_line "Mode" "INFO" "planning only; no certificate or Nginx changes are applied"
+  status_line "Domain" "$dns_state" "$dns_detail"
+  status_line "VM IP" "INFO" "$vm_ip"
+  status_line "Nginx" "$([[ "$nginx_state" == installed ]] && echo OK || echo WARN)" "$nginx_state"
+  status_line "Port 80" "INFO" "$port80"
+  status_line "Port 443" "INFO" "$port443"
+  status_line "Current SSL" "$local_ssl_status" "$local_ssl_detail"
+  echo
+  echo "Recommended SSL path for this public VM:"
+  echo "  1) Keep Cloudflare DNS-only while issuing/testing the certificate."
+  echo "  2) Point A record ${domain} -> ${vm_ip}."
+  echo "  3) Use Let's Encrypt for https://${domain}."
+  echo "  4) Put ERPNext behind Nginx on ports 80/443."
+  echo "  5) After HTTPS is working, close/restrict public :8000."
+  echo
+  echo "Do not use for final production SSL:"
+  echo "  - mkcert certificates"
+  echo "  - self-signed local certificates"
+  echo "  - browser-trusted dev certificates copied from your workstation"
+  echo
+  echo "Cloudflare choices:"
+  echo "  - DNS-only: best for first Let's Encrypt HTTP-01 test."
+  echo "  - Proxied/orange-cloud: useful later; requires SSL mode planning."
+  echo "  - Cloudflare Origin CA: only valid when Cloudflare proxy stays enabled."
+  echo
+  echo "Manual validation commands:"
+  echo "  curl -I http://${domain}:8000"
+  echo "  curl -I http://${domain}"
+  echo "  curl -Ik https://${domain}"
+  echo
+  echo "Related commands:"
+  echo "  ./install-erpnext-dev.sh production-firewall-plan"
+  echo "  ./install-erpnext-dev.sh public-vm-readiness"
+  echo "  ./install-erpnext-dev.sh production-ssl-guide"
+  echo "============================================================"
+}
+
+show_production_firewall_plan() {
+  local vm_ip domain
+
+  require_sudo
+
+  vm_ip="$(get_vm_ip)"
+  domain="${PRODUCTION_DOMAIN:-$SITE_NAME}"
+
+  echo
+  echo "============================================================"
+  echo "Production Firewall Plan"
+  echo "============================================================"
+  status_line "Mode" "INFO" "planning only; no firewall changes are applied"
+  status_line "VM IP" "INFO" "$vm_ip"
+  status_line "Domain" "INFO" "$domain"
+  echo
+  echo "Current listener summary:"
+  for port in 22 80 443 8000 9000 11000 13000; do
+    status_line "Port ${port}" "INFO" "$(production_listener_detail "$port")"
+  done
+  echo
+  echo "Recommended Hetzner/edge firewall for first public test:"
+  echo "  22/tcp    allow only your admin IP if possible"
+  echo "  80/tcp    allow public, needed for HTTP and Let's Encrypt HTTP-01"
+  echo "  443/tcp   allow public, needed for HTTPS"
+  echo "  8000/tcp  temporary only; restrict to your admin IP while testing"
+  echo
+  echo "Recommended long-term production exposure:"
+  echo "  22/tcp    restricted to admin IP/VPN"
+  echo "  80/tcp    public, redirect/ACME use"
+  echo "  443/tcp   public"
+  echo "  8000/tcp  closed publicly after Nginx/HTTPS works"
+  echo "  9000/tcp  closed publicly"
+  echo "  11000/tcp closed publicly"
+  echo "  13000/tcp closed publicly"
+  echo
+  echo "Why:"
+  echo "  - 8000 is the Bench web port and should not be the final public entry point."
+  echo "  - 9000 is socket.io and should be proxied through Nginx, not opened directly."
+  echo "  - 11000/13000 are Redis services and must never be public."
+  echo
+  echo "Safe check commands:"
+  echo "  ss -lntp"
+  echo "  ./install-erpnext-dev.sh public-vm-readiness"
+  echo "  ./install-erpnext-dev.sh production-ssl-plan"
+  echo "============================================================"
+}
+
 production_cpu_count() {
   nproc 2>/dev/null || echo 0
 }
@@ -2943,8 +3196,9 @@ show_production_readiness() {
   echo "Recommended next commands:"
   echo "  ./install-erpnext-dev.sh production-plan"
   echo "  ./install-erpnext-dev.sh production-domain-plan"
-  echo "  ./install-erpnext-dev.sh production-domain-guide"
-  echo "  ./install-erpnext-dev.sh production-ssl-guide"
+  echo "  ./install-erpnext-dev.sh public-vm-readiness"
+  echo "  ./install-erpnext-dev.sh production-ssl-plan"
+  echo "  ./install-erpnext-dev.sh production-firewall-plan"
   echo "============================================================"
 }
 
@@ -2991,8 +3245,9 @@ show_production_plan() {
   echo "Useful commands now:"
   echo "  ./install-erpnext-dev.sh production-readiness"
   echo "  ./install-erpnext-dev.sh production-domain-plan"
-  echo "  ./install-erpnext-dev.sh production-domain-guide"
-  echo "  ./install-erpnext-dev.sh production-ssl-guide"
+  echo "  ./install-erpnext-dev.sh public-vm-readiness"
+  echo "  ./install-erpnext-dev.sh production-ssl-plan"
+  echo "  ./install-erpnext-dev.sh production-firewall-plan"
   echo "  ./install-erpnext-dev.sh backup-files"
   echo "  ./install-erpnext-dev.sh support-bundle"
   echo "============================================================"
@@ -7510,14 +7765,17 @@ show_advanced_menu() {
     echo "29) Production Readiness Preview"
     echo "30) Production Domain Guide"
     echo "31) Production SSL Guide"
-    echo "32) Start Bench in Foreground"
-    echo "33) Show Service Logs"
-    echo "34) Access Submenu"
-    echo "35) Next Step"
-    echo "36) Verify ERPNext HTTP Access"
-    echo "37) App Install Wizard"
-    echo "38) App Rollback Guide"
-    echo "39) Back"
+    echo "32) Public VM Readiness"
+    echo "33) Production SSL Plan"
+    echo "34) Production Firewall Plan"
+    echo "35) Start Bench in Foreground"
+    echo "36) Show Service Logs"
+    echo "37) Access Submenu"
+    echo "38) Next Step"
+    echo "39) Verify ERPNext HTTP Access"
+    echo "40) App Install Wizard"
+    echo "41) App Rollback Guide"
+    echo "42) Back"
     echo
     read -r -p "Choose an option: " advanced_choice
 
@@ -7553,14 +7811,17 @@ show_advanced_menu() {
       29) show_production_readiness ;;
       30) show_production_domain_guide ;;
       31) show_production_ssl_guide ;;
-      32) run_foreground_start ;;
-      33) show_erpnext_service_logs ;;
-      34) show_access_menu ;;
-      35) show_next_step ;;
-      36) verify_access ;;
-      37) run_app_install_wizard ;;
-      38) show_app_rollback_guide ;;
-      39) return 0 ;;
+      32) show_public_vm_readiness ;;
+      33) show_production_ssl_plan ;;
+      34) show_production_firewall_plan ;;
+      35) run_foreground_start ;;
+      36) show_erpnext_service_logs ;;
+      37) show_access_menu ;;
+      38) show_next_step ;;
+      39) verify_access ;;
+      40) run_app_install_wizard ;;
+      41) show_app_rollback_guide ;;
+      42) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -7684,6 +7945,9 @@ Advanced actions:
   production-readiness Show production readiness/planning classification
   production-plan      Show production planning checklist
   production-domain-plan Show structured production DNS/domain plan
+  public-vm-readiness Show public VM DNS/access/listener readiness
+  production-ssl-plan Show production SSL readiness and recommended path
+  production-firewall-plan Show public VM firewall exposure plan
   production-domain-guide Show production domain planning guide
   production-ssl-guide Show production SSL planning guide
   configure-local-ssl Configure Nginx local HTTPS reverse proxy
@@ -7744,6 +8008,9 @@ Examples:
   ./install-erpnext-dev.sh production-readiness
   ./install-erpnext-dev.sh production-plan
   ./install-erpnext-dev.sh production-domain-plan
+  ./install-erpnext-dev.sh public-vm-readiness
+  ./install-erpnext-dev.sh production-ssl-plan
+  ./install-erpnext-dev.sh production-firewall-plan
   ./install-erpnext-dev.sh doctor
   ./install-erpnext-dev.sh doctor --plain
   ./install-erpnext-dev.sh doctor --json
@@ -7807,7 +8074,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -7918,6 +8185,9 @@ main() {
     production-readiness) show_production_readiness ;;
     production-plan|prod-plan) show_production_plan ;;
     production-domain-plan|prod-domain-plan) show_production_domain_plan ;;
+    public-vm-readiness|public-readiness) show_public_vm_readiness ;;
+    production-ssl-plan|prod-ssl-plan) show_production_ssl_plan ;;
+    production-firewall-plan|prod-firewall-plan) show_production_firewall_plan ;;
     production-domain-guide) show_production_domain_guide ;;
     production-ssl-guide) show_production_ssl_guide ;;
     repair-site-config) repair_site_config ;;

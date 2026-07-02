@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## v0.9.3
+
+### Added
+
+- Added `public-vm-readiness` command and `public-readiness` alias.
+- Added `production-ssl-plan` command and `prod-ssl-plan` alias.
+- Added `production-firewall-plan` command and `prod-firewall-plan` alias.
+- Added public VM listener summaries for ports `22`, `80`, `443`, `8000`, `9000`, `11000`, and `13000`.
+- Added DNS resolution checks comparing the production domain to the detected VM IP.
+
+### Improved
+
+- Production planning now gives a clearer next step after a successful public cloud VM install.
+- `production-readiness` and `production-plan` now point to public VM, SSL, and firewall planning commands.
+- Help text and advanced menu now include the new production planning commands.
+
+### Safety
+
+- The new production commands are planning/check-only. They do not issue certificates, change DNS, or alter firewall rules.
+- Firewall guidance explicitly keeps Redis ports private and treats public `:8000` as temporary testing exposure only.
+
 ## v0.9.2
 
 ### Fixed

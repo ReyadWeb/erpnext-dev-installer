@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.9.2
+# ERPNext Developer Installer v0.9.3
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -28,9 +28,11 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh next-step
 ```
 
-## v0.9.2 focus
+## v0.9.3 focus
 
-v0.9.2 is a first-public-VM hotfix. It fixes root-run guided setup on fresh cloud VMs where the installer previously stopped at the Frappe/Bench installation phase with `-H: command not found`. It keeps the production planning/domain features from v0.9.1 and does not convert the developer VM into production.
+v0.9.3 adds public VM hardening and production SSL planning commands after the first successful Hetzner public VM install test. It is still planning/check-only: it does not issue certificates, change DNS, or alter firewall rules automatically.
+
+It keeps the v0.9.2 root-run guided setup hotfix for fresh cloud VMs.
 
 Run:
 
@@ -38,6 +40,9 @@ Run:
 ./install-erpnext-dev.sh production-readiness
 ./install-erpnext-dev.sh production-plan
 ./install-erpnext-dev.sh production-domain-plan
+./install-erpnext-dev.sh public-vm-readiness
+./install-erpnext-dev.sh production-ssl-plan
+./install-erpnext-dev.sh production-firewall-plan
 ```
 
 `production-readiness` checks CPU, RAM, disk, install/runtime/service state, production domain configuration, local SSL assumptions, and backup readiness. It classifies the VM as dev-only, production candidate, or not recommended.
@@ -45,6 +50,12 @@ Run:
 `production-plan` prints the planning checklist for architecture, domain, DNS/network path, SSL, backups, and hardening.
 
 `production-domain-plan` prints a structured DNS/domain plan, including the local `.test` site, planned production domain, recommended A record, provider notes, and warnings when the current VM IP is private/NAT.
+
+`public-vm-readiness` checks the public VM shape: domain resolution, install/runtime state, service/autostart state, Nginx, SSL readiness, backups, HTTP reachability on `:8000`, and current listeners.
+
+`production-ssl-plan` separates development SSL from production SSL and explains the recommended path for a public VM: DNS-only first, Let's Encrypt for the real domain, Nginx on `80/443`, then closing or restricting public `:8000`.
+
+`production-firewall-plan` prints the intended Hetzner/edge firewall posture: SSH restricted, `80/443` public, `8000` temporary/restricted, and Redis/socket/internal ports closed publicly.
 
 ## v0.8.24 optional app compatibility
 

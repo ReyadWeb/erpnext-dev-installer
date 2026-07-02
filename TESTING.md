@@ -1,4 +1,4 @@
-# TESTING v0.9.2
+# TESTING v0.9.3
 
 ## Syntax
 
@@ -11,13 +11,13 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="0.9.2"
+SCRIPT_VERSION="0.9.3"
 ```
 
 ## Help command
 
 ```bash
-./install-erpnext-dev.sh help | grep -E "doctor --plain|doctor --json|support-bundle|app-compatibility|production-plan|production-domain-plan"
+./install-erpnext-dev.sh help | grep -E "doctor --plain|doctor --json|support-bundle|app-compatibility|production-plan|production-domain-plan|public-vm-readiness|production-ssl-plan|production-firewall-plan"
 ```
 
 Expected:
@@ -28,6 +28,9 @@ Expected:
 - Help lists `app-compatibility`.
 - Help lists `production-plan`.
 - Help lists `production-domain-plan`.
+- Help lists `public-vm-readiness`.
+- Help lists `production-ssl-plan`.
+- Help lists `production-firewall-plan`.
 
 
 
@@ -39,6 +42,12 @@ Expected:
 ./install-erpnext-dev.sh prod-plan
 ./install-erpnext-dev.sh production-domain-plan
 ./install-erpnext-dev.sh prod-domain-plan
+./install-erpnext-dev.sh public-vm-readiness
+./install-erpnext-dev.sh public-readiness
+./install-erpnext-dev.sh production-ssl-plan
+./install-erpnext-dev.sh prod-ssl-plan
+./install-erpnext-dev.sh production-firewall-plan
+./install-erpnext-dev.sh prod-firewall-plan
 ```
 
 Expected:
@@ -51,6 +60,10 @@ Expected:
 - `production-domain-plan` prints structured DNS/domain planning output.
 - `prod-domain-plan` works as an alias.
 - On an installed/running VM, `production-readiness` should not falsely report `Install state WARN Incomplete`.
+- `public-vm-readiness` reports DNS match/mismatch, install/runtime/service state, Nginx, SSL, backups, HTTP `:8000` checks, and listener summary.
+- `production-ssl-plan` prints the planning-only SSL path and distinguishes local/dev SSL from production SSL.
+- `production-firewall-plan` prints the temporary test exposure and long-term production exposure recommendations.
+- New aliases run the same corresponding commands.
 
 ## Optional app compatibility
 

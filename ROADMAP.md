@@ -1,8 +1,8 @@
 # ROADMAP
 
-## Current: v0.9.2
+## Current: v0.9.3
 
-Stable developer installer baseline with production readiness/planning classification, structured production domain planning, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
+Stable developer installer baseline with production readiness/planning classification, structured production domain planning, public VM readiness checks, production SSL/firewall planning, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
 
 Completed:
 
@@ -19,6 +19,9 @@ Completed:
 - `production-plan` planning checklist
 - `production-domain-plan` structured DNS/domain planning
 - root-run guided setup hotfix for fresh public/cloud VMs
+- `public-vm-readiness` public DNS/access/listener readiness
+- `production-ssl-plan` production SSL path planning
+- `production-firewall-plan` public VM firewall exposure planning
 - root storage expansion
 - corrected post-expansion storage decision logic
 - guided setup flow
@@ -29,12 +32,6 @@ Completed:
 - private installer logs and safer credential handling
 
 ## Next recommended work
-
-### v0.9.3
-
-- production SSL planning
-- distinguish mkcert, self-signed, Let's Encrypt, Cloudflare Origin Cert, and commercial cert use cases
-- detect common production SSL mistakes
 
 ### v0.9.4
 
