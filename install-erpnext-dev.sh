@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.9.12"
+SCRIPT_VERSION="0.9.13"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -154,6 +154,17 @@ ui_note() {
   echo
   echo "Note:"
   printf '  %s\n' "$@"
+}
+
+menu_invalid_choice() {
+  local choice="${1:-}" exit_hint="${2:-type the menu number}"
+  if [[ "$choice" == *install-erpnext-dev.sh* || "$choice" == ./* || "$choice" == sudo\ * || "$choice" == curl\ * ]]; then
+    warn "A shell command was pasted into an interactive menu."
+    echo "This menu expects a number only. ${exit_hint}, then run commands at the shell prompt."
+    return 2
+  fi
+  warn "Invalid option. Type a menu number only."
+  return 1
 }
 
 validate_site_name_value() {
@@ -307,6 +318,15 @@ load_future_domain_config_if_available() {
 
   if saved="$(read_saved_config_value DEPLOYMENT_MODE 2>/dev/null)" && [[ -n "$saved" && "${DEPLOYMENT_MODE}" == "development" ]]; then
     DEPLOYMENT_MODE="$saved"
+  fi
+
+  # Older installs may have been created before public-vm onboarding existed.
+  # If a real production domain is saved, treat the current session as a
+  # public VM workflow even if the saved mode still says development.
+  if [[ "${DEPLOYMENT_MODE}" == "development" ]] \
+    && [[ -n "${PRODUCTION_DOMAIN:-}" ]] \
+    && validate_production_domain_value "$PRODUCTION_DOMAIN" >/dev/null 2>&1; then
+    DEPLOYMENT_MODE="public-vm"
   fi
 
   if saved="$(read_saved_config_value PRODUCTION_SSL_MODE 2>/dev/null)" && [[ -n "$saved" && "${PRODUCTION_SSL_MODE}" == "planned" ]]; then
@@ -2628,7 +2648,11 @@ run_public_vm_quickstart() {
         ui_next "./install-erpnext-dev.sh support-bundle" "Take a cloud snapshot after validation."
         ;;
       7) return 0 ;;
-      *) warn "Invalid option" ;;
+      *)
+        if menu_invalid_choice "$choice" "type 7 to exit"; then :; else
+          [[ $? -eq 2 ]] && return 0
+        fi
+        ;;
     esac
   done
 }
@@ -2658,7 +2682,11 @@ run_first_run_wizard() {
       3) show_menu ;;
       4) show_config_summary ;;
       5) return 0 ;;
-      *) warn "Invalid option" ;;
+      *)
+        if menu_invalid_choice "$choice" "type 5 to exit"; then :; else
+          [[ $? -eq 2 ]] && return 0
+        fi
+        ;;
     esac
   done
 }
@@ -3845,6 +3873,16 @@ production_ssl_provider_from_cert_path() {
     "") echo "not configured" ;;
     *) echo "custom/origin certificate" ;;
   esac
+}
+
+active_production_ssl_provider() {
+  local active_cert
+  active_cert="$(production_nginx_active_cert_path 2>/dev/null || true)"
+  production_ssl_provider_from_cert_path "$active_cert"
+}
+
+production_ssl_overall_status() {
+  production_ssl_runtime_detail
 }
 
 certificate_issuer_for_file() {

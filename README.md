@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.9.12
+# ERPNext Developer Installer v0.9.13
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -51,9 +51,9 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh next-step
 ```
 
-## v0.9.12 focus
+## v0.9.13 focus
 
-v0.9.12 adds first-run onboarding and one-command quickstarts. Users can now start from GitHub with a single command that opens a guided wizard. Public VM setup prompts for the real ERPNext domain, saves it to `/etc/erpnext-dev-installer/config.env`, then guides the user through DNS planning, install, HTTPS provider selection, and security hardening. Local VM setup stays separate and uses `erp.test` defaults to reduce prompts.
+v0.9.13 adds first-run onboarding and one-command quickstarts. Users can now start from GitHub with a single command that opens a guided wizard. Public VM setup prompts for the real ERPNext domain, saves it to `/etc/erpnext-dev-installer/config.env`, then guides the user through DNS planning, install, HTTPS provider selection, and security hardening. Local VM setup stays separate and uses `erp.test` defaults to reduce prompts.
 
 New commands:
 
@@ -381,3 +381,9 @@ Use the checkpoint workflow:
 ```
 
 The wizard shows a preflight, a compatibility snapshot, backup checkpoint prompts, one-app-at-a-time installation, and post-app validation.
+
+## Quickstart status notes
+
+For public VM setups, the quickstart reads the saved config from `/etc/erpnext-dev-installer/config.env`. If an older install saved `DEPLOYMENT_MODE=development` but also has a valid `PRODUCTION_DOMAIN`, the script treats the current session as a public VM workflow. This avoids confusing status cards on upgraded installations.
+
+Interactive wizards expect menu numbers only. If a shell command is pasted into a wizard prompt by mistake, the wizard exits so the command can be run normally at the shell.

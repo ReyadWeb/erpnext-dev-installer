@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## v0.9.13
+
+### Fixed
+
+- Fixed public VM quickstart HTTPS summary so existing Cloudflare Origin CA installs show HTTPS as OK instead of not configured.
+- Fixed public VM quickstart domain summary so Cloudflare proxied DNS is treated as expected when Cloudflare Origin CA is active.
+- Fixed existing public-domain installs that still had `DEPLOYMENT_MODE=development` in older config files by inferring `public-vm` when a valid production domain is saved.
+- Added missing SSL summary helper functions used by the quickstart status card.
+
+### Improved
+
+- Improved interactive menu invalid input handling. If a shell command is pasted into a wizard prompt, the script now explains that the menu expects a number and exits back to the shell instead of repeatedly printing invalid option messages.
+
 ## v0.9.12
 
 ### Added
