@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="1.0.0-rc4"
+SCRIPT_VERSION="1.0.0-rc5"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -62,6 +62,7 @@ DOCTOR_FORMAT="human"
 LOG_DIR="${LOG_DIR:-/tmp}"
 LOG_FILE="${LOG_FILE:-${LOG_DIR}/erpnext-dev-installer-$(date +%Y%m%d-%H%M%S).log}"
 LOCK_FILE="${LOCK_FILE:-/tmp/erpnext-dev-installer.lock}"
+INSTALLER_CANONICAL_PATH="${INSTALLER_CANONICAL_PATH:-/root/install-erpnext-dev.sh}"
 
 if [[ -t 1 ]]; then
   BOLD="\033[1m"
@@ -145,15 +146,46 @@ ui_box_end() {
 }
 
 ui_next() {
+  local item
   echo
   echo "Next:"
-  printf '  %s\n' "$@"
+  for item in "$@"; do
+    printf '  %s\n' "$(installer_display_item "$item")"
+  done
 }
 
 ui_note() {
   echo
   echo "Note:"
   printf '  %s\n' "$@"
+}
+
+install_self_for_reuse() {
+  # One-command quickstart often runs from /tmp. Copy the active script to a
+  # stable root path so later printed commands remain usable after the wizard exits.
+  local src dest
+  dest="${INSTALLER_CANONICAL_PATH:-/root/install-erpnext-dev.sh}"
+  src="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || true)"
+  [[ -n "$src" && -f "$src" ]] || return 0
+  [[ "$src" == "$dest" ]] && return 0
+  mkdir -p "$(dirname "$dest")" 2>/dev/null || true
+  if cp "$src" "$dest" 2>/dev/null; then
+    chmod +x "$dest" 2>/dev/null || true
+  fi
+}
+
+is_public_vm_workflow() {
+  [[ "${DEPLOYMENT_MODE:-}" == "public-vm" ]] && return 0
+  [[ -n "${PRODUCTION_DOMAIN:-}" ]] && return 0
+  return 1
+}
+
+installer_display_item() {
+  local item="$1"
+  if [[ -x "${INSTALLER_CANONICAL_PATH:-}" && "$item" == .\/install-erpnext-dev.sh* ]]; then
+    item="${item/#.\/install-erpnext-dev.sh/${INSTALLER_CANONICAL_PATH}}"
+  fi
+  printf '%s' "$item"
 }
 
 menu_invalid_choice() {
@@ -2300,17 +2332,30 @@ verify_access() {
   fi
 
   echo
-  echo "Open from the HOST after /etc/hosts is set:"
-  echo "  http://${vm_ip}:8000"
-  echo "  http://${SITE_NAME}:8000"
-  echo
-  echo "HOST /etc/hosts command:"
-  echo "  sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts"
-  echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
-  echo
-  echo "HOST tests:"
-  echo "  curl -I http://${vm_ip}:8000"
-  echo "  curl -I http://${SITE_NAME}:8000"
+  if is_public_vm_workflow; then
+    echo "Production URL:"
+    echo "  https://${PRODUCTION_DOMAIN:-$SITE_NAME}"
+    echo
+    echo "Backend port note:"
+    echo "  8000 and 9000 may listen inside the VM, but should be blocked publicly."
+    echo
+    echo "Workstation tests:"
+    echo "  curl -I https://${PRODUCTION_DOMAIN:-$SITE_NAME}"
+    echo "  curl -I --connect-timeout 10 http://${vm_ip}:8000"
+    echo "  curl -I --connect-timeout 10 http://${vm_ip}:9000"
+  else
+    echo "Open from the HOST after /etc/hosts is set:"
+    echo "  http://${vm_ip}:8000"
+    echo "  http://${SITE_NAME}:8000"
+    echo
+    echo "HOST /etc/hosts command:"
+    echo "  sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts"
+    echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
+    echo
+    echo "HOST tests:"
+    echo "  curl -I http://${vm_ip}:8000"
+    echo "  curl -I http://${SITE_NAME}:8000"
+  fi
   echo "============================================================"
 }
 
@@ -2336,6 +2381,57 @@ show_next_step() {
 
   if ssl_is_configured 2>/dev/null; then
     ssl_state="configured"
+  fi
+
+  if is_public_vm_workflow; then
+    local prod_ssl_pair prod_ssl_status prod_ssl_detail backup_lines backup_complete
+    prod_ssl_pair="$(production_ssl_overall_status 2>/dev/null || echo 'WARN|not configured for production')"
+    prod_ssl_status="${prod_ssl_pair%%|*}"
+    prod_ssl_detail="${prod_ssl_pair#*|}"
+    backup_lines="$(backup_latest_set_paths 2>/dev/null || true)"
+    backup_complete="$(printf '%s\n' "$backup_lines" | sed -n '6p')"
+
+    echo
+    echo "============================================================"
+    echo "Next Step"
+    echo "============================================================"
+    status_line "Storage" "INFO" "${storage_state}${storage_reason:+ - ${storage_reason}}"
+    status_line "Install" "INFO" "$installed"
+    status_line "Runtime" "INFO" "$runtime"
+    status_line "Autostart" "INFO" "$auto"
+    status_line "Production SSL" "$prod_ssl_status" "$prod_ssl_detail"
+    status_line "Latest backup" "$([[ "$backup_complete" == complete ]] && echo OK || echo WARN)" "${backup_complete:-none}"
+    echo
+
+    if [[ "${can_expand:-no}" == "yes" ]]; then
+      next_label="expand root storage"
+      next_command="./install-erpnext-dev.sh expand-root-storage"
+    elif [[ "$installed" != "Installed" ]]; then
+      next_label="run public quickstart install"
+      next_command="./install-erpnext-dev.sh public-vm-quickstart"
+    elif [[ "$runtime" != Running* ]]; then
+      next_label="start ERPNext"
+      next_command="./install-erpnext-dev.sh start"
+    elif [[ "$prod_ssl_status" != "OK" ]]; then
+      next_label="configure production HTTPS"
+      next_command="./install-erpnext-dev.sh production-ssl-wizard"
+    elif [[ "$backup_complete" != "complete" ]]; then
+      next_label="create initial backup"
+      next_command="./install-erpnext-dev.sh backup-files"
+    else
+      next_label="run release readiness"
+      next_command="./install-erpnext-dev.sh release-readiness"
+    fi
+
+    echo "Recommended next step: ${next_label}."
+    echo "  $(installer_display_item "$next_command")"
+    echo
+    echo "Production URL:"
+    echo "  https://${PRODUCTION_DOMAIN:-$SITE_NAME}"
+    echo
+    echo "Backend ports 8000/9000 should be blocked publicly after hardening."
+    echo "============================================================"
+    return 0
   fi
 
   echo
@@ -2381,7 +2477,7 @@ show_next_step() {
   fi
 
   echo "Recommended next step: ${next_label}."
-  echo "  ${next_command}"
+  echo "  $(installer_display_item "$next_command")"
   echo
   echo "Useful checks:"
   echo "  ./install-erpnext-dev.sh verify-access"
@@ -2554,6 +2650,7 @@ set_local_dev_defaults() {
 
 run_local_dev_quickstart() {
   require_sudo
+  install_self_for_reuse
 
   ui_box_start "Local VM Quickstart"
   echo "This path uses local development defaults and keeps inputs minimal."
@@ -2616,8 +2713,36 @@ ensure_public_domain_configured() {
   return 1
 }
 
+public_quickstart_maybe_initial_backup() {
+  local latest_lines completeness
+  latest_lines="$(backup_latest_set_paths 2>/dev/null || true)"
+  completeness="$(printf '%s\n' "$latest_lines" | sed -n '6p')"
+  if [[ "$completeness" == "complete" ]]; then
+    status_line "Initial backup" "OK" "complete backup set exists"
+    return 0
+  fi
+
+  status_line "Initial backup" "WARN" "no complete backup set yet"
+  if confirm "Create initial database + files backup now?"; then
+    create_site_backup true || return 1
+    verify_latest_backup_set || true
+  else
+    ui_next "./install-erpnext-dev.sh backup-files" "./install-erpnext-dev.sh backup-verify"
+  fi
+}
+
+public_quickstart_final_status() {
+  show_production_readiness
+  show_production_ssl_status
+  show_firewall_hardening_status
+  public_quickstart_maybe_initial_backup || true
+  show_release_readiness
+  ui_next "./install-erpnext-dev.sh support-bundle" "Take a cloud snapshot after validation."
+}
+
 run_public_vm_quickstart() {
   require_sudo
+  install_self_for_reuse
 
   while true; do
     ui_box_start "Public VM Quickstart"
@@ -2642,12 +2767,7 @@ run_public_vm_quickstart() {
       3) ensure_public_domain_configured && run_guided_setup ;;
       4) ensure_public_domain_configured && production_ssl_wizard ;;
       5) security_hardening_wizard ;;
-      6)
-        show_production_readiness
-        show_production_ssl_status
-        show_firewall_hardening_status
-        ui_next "./install-erpnext-dev.sh support-bundle" "Take a cloud snapshot after validation."
-        ;;
+      6) public_quickstart_final_status ;;
       7) show_ssl_mode_status; show_setup_effort_guide ;;
       8) return 0 ;;
       *)

@@ -1,6 +1,6 @@
 # TESTING
 
-## v1.0.0-rc4 validation
+## v1.0.0-rc5 validation
 
 ```bash
 chmod +x install-erpnext-dev.sh
@@ -11,16 +11,18 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="1.0.0-rc4"
+SCRIPT_VERSION="1.0.0-rc5"
 ```
 
-Final QA commands:
+Quickstart/final QA commands:
 
 ```bash
 ./install-erpnext-dev.sh help | grep -E "release-readiness|final-qa|command-audit"
 ./install-erpnext-dev.sh release-readiness
 ./install-erpnext-dev.sh command-audit
 ./install-erpnext-dev.sh release-notes-guide
+./install-erpnext-dev.sh verify-access
+/tmp/install-erpnext-dev.sh public-vm-quickstart   # should copy itself to /root on real quickstart runs
 printf '7\n' | ./install-erpnext-dev.sh final-qa
 ```
 
@@ -30,6 +32,8 @@ Expected:
 - `command-audit` lists the major command groups without making changes.
 - `release-notes-guide` prints a compact v1.0.0 release-notes draft.
 - `final-qa` opens and exits cleanly.
+- In public VM mode, `verify-access` shows HTTPS and backend-port blocking tests.
+- After a one-command quickstart run, `/root/install-erpnext-dev.sh` exists and is executable.
 
 ## v1.0.0-rc2 validation
 

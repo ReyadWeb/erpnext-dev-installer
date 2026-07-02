@@ -1,11 +1,15 @@
 # ROADMAP
 
-## Current: v1.0.0-rc4
+## Current: v1.0.0-rc5
 
-Final QA release candidate with release-readiness summary, command audit, final QA wizard, release-notes guide, complete backup-set verification, Cloudflare-aware production checklist, and backup/restore hardening, production checklist, SSL mode guidance, setup effort/step-count reporting, first-run onboarding, quickstart status hotfixes, one-command GitHub quickstarts, terminal UX cleanup, compact menus/help, production readiness/planning classification, structured production domain planning, public VM readiness checks, production SSL/firewall planning, conservative Nginx/Let's Encrypt HTTPS implementation, staging-to-production certificate replacement hotfix, Cloudflare Origin CA SSL provider workflow, Cloudflare PEM paste UX hotfix, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
+Quickstart finalization release candidate with stable `/root/install-erpnext-dev.sh` reuse after one-command setup, initial backup prompt in public VM final status, production-mode access guidance, public-aware next-step recommendations, release-readiness summary, command audit, final QA wizard, release-notes guide, complete backup-set verification, Cloudflare-aware production checklist, and backup/restore hardening, production checklist, SSL mode guidance, setup effort/step-count reporting, first-run onboarding, quickstart status hotfixes, one-command GitHub quickstarts, terminal UX cleanup, compact menus/help, production readiness/planning classification, structured production domain planning, public VM readiness checks, production SSL/firewall planning, conservative Nginx/Let's Encrypt HTTPS implementation, staging-to-production certificate replacement hotfix, Cloudflare Origin CA SSL provider workflow, Cloudflare PEM paste UX hotfix, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
 
 Completed:
 
+- stable reusable installer copy at `/root/install-erpnext-dev.sh` during quickstart
+- public VM final status initial-backup prompt
+- production-mode `verify-access` guidance using HTTPS and backend port-blocking tests
+- public-aware `next-step` recommendations
 - release-readiness final QA summary
 - final QA wizard
 - command audit of major workflows

@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## v1.0.0-rc5
+
+### Improved
+
+- Public/local quickstart now copies the active script to `/root/install-erpnext-dev.sh` so follow-up commands work after one-command installs from `/tmp`.
+- `Next:` command rendering now prefers the stable installer path when available.
+- Public VM final status can offer an initial database + files backup and immediately run backup verification/release readiness.
+- `verify-access` now presents production-mode access guidance with `https://domain` and backend-port blocking tests instead of only local `:8000` host instructions.
+- `next-step` now understands public VM workflows and recommends production SSL, initial backup, or release readiness instead of local HTTPS.
+
+### Notes
+
+- This is a quickstart polish patch. Core install, SSL, firewall, UFW, Fail2Ban, app install, and backup behavior are unchanged except for the optional initial-backup prompt.
+
 ## v1.0.0-rc4
 
 ### Improved
