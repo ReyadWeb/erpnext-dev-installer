@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v1.0.0-rc2
+# ERPNext Developer Installer v1.0.0-rc3
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -50,6 +50,8 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh off-vm-backup-guide
 ./install-erpnext-dev.sh restore-rehearsal-guide
 ./install-erpnext-dev.sh production-checklist
+./install-erpnext-dev.sh release-readiness
+./install-erpnext-dev.sh final-qa
 ./install-erpnext-dev.sh security-hardening-wizard
 ./install-erpnext-dev.sh vm-firewall-status
 ./install-erpnext-dev.sh fail2ban-status
@@ -58,6 +60,19 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh doctor --json
 ./install-erpnext-dev.sh support-bundle
 ./install-erpnext-dev.sh next-step
+```
+
+## v1.0.0-rc3 focus
+
+v1.0.0-rc3 is the final QA polish release before v1.0.0. It adds compact release-readiness checks, a command audit, a final QA wizard, and a release-notes guide. It keeps the rc2 backup verification fixes and production checklist behavior.
+
+New final QA commands:
+
+```bash
+./install-erpnext-dev.sh release-readiness
+./install-erpnext-dev.sh final-qa
+./install-erpnext-dev.sh command-audit
+./install-erpnext-dev.sh release-notes-guide
 ```
 
 ## v1.0.0-rc2 focus
@@ -184,6 +199,8 @@ Run:
 ./install-erpnext-dev.sh off-vm-backup-guide
 ./install-erpnext-dev.sh restore-rehearsal-guide
 ./install-erpnext-dev.sh production-checklist
+./install-erpnext-dev.sh release-readiness
+./install-erpnext-dev.sh final-qa
 ./install-erpnext-dev.sh security-hardening-wizard
 ./install-erpnext-dev.sh vm-firewall-status
 ./install-erpnext-dev.sh fail2ban-status

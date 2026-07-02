@@ -1,11 +1,15 @@
 # ROADMAP
 
-## Current: v1.0.0-rc2
+## Current: v1.0.0-rc3
 
-Release-candidate hotfix with complete backup-set verification, Cloudflare-aware production checklist, and backup/restore hardening, production checklist, SSL mode guidance, setup effort/step-count reporting, first-run onboarding, quickstart status hotfixes, one-command GitHub quickstarts, terminal UX cleanup, compact menus/help, production readiness/planning classification, structured production domain planning, public VM readiness checks, production SSL/firewall planning, conservative Nginx/Let's Encrypt HTTPS implementation, staging-to-production certificate replacement hotfix, Cloudflare Origin CA SSL provider workflow, Cloudflare PEM paste UX hotfix, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
+Final QA release candidate with release-readiness summary, command audit, final QA wizard, release-notes guide, complete backup-set verification, Cloudflare-aware production checklist, and backup/restore hardening, production checklist, SSL mode guidance, setup effort/step-count reporting, first-run onboarding, quickstart status hotfixes, one-command GitHub quickstarts, terminal UX cleanup, compact menus/help, production readiness/planning classification, structured production domain planning, public VM readiness checks, production SSL/firewall planning, conservative Nginx/Let's Encrypt HTTPS implementation, staging-to-production certificate replacement hotfix, Cloudflare Origin CA SSL provider workflow, Cloudflare PEM paste UX hotfix, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
 
 Completed:
 
+- release-readiness final QA summary
+- final QA wizard
+- command audit of major workflows
+- v1.0.0 release-notes guide
 - latest complete backup-set selection
 - `.tar` and `.tar.gz` public/private file backup verification
 - Cloudflare-aware HTTPS status in production checklist
@@ -73,7 +77,12 @@ Completed:
 
 ### v1.0.0
 
-- final QA pass on local VM and public VM quickstarts
+- final local VM smoke test
+- final public VM smoke test
+- GitHub release/tag workflow
+
+### Post-v1.0.0
+
 - backup retention policy helper
-- final documentation cleanup
-- release checklist and GitHub tag workflow
+- scheduled backup helper
+- restore automation improvements after additional rehearsal testing

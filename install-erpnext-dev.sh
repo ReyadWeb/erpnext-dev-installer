@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="1.0.0-rc2"
+SCRIPT_VERSION="1.0.0-rc3"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -109,7 +109,7 @@ acquire_installer_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|backup-hardening-wizard|backup-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
       return 0
       ;;
     *)
@@ -9681,6 +9681,141 @@ show_production_checklist() {
   ui_box_end
 }
 
+
+show_release_readiness() {
+  require_sudo
+
+  local syntax_status syntax_detail installed runtime ssl_pair ssl_status ssl_detail
+  local ufw_status fail2ban_status latest_lines completeness release_state
+
+  if bash -n "$0" >/dev/null 2>&1; then
+    syntax_status="OK"; syntax_detail="bash syntax valid"
+  else
+    syntax_status="FAIL"; syntax_detail="bash syntax check failed"
+  fi
+
+  installed="$(install_state 2>/dev/null || echo "Unknown")"
+  runtime="$(runtime_state 2>/dev/null || echo "Unknown")"
+  ssl_pair="$(production_ssl_overall_status 2>/dev/null || echo "WARN|not confirmed")"
+  ssl_status="${ssl_pair%%|*}"
+  ssl_detail="${ssl_pair#*|}"
+
+  if ufw_is_active; then
+    ufw_status="OK|active"
+  else
+    ufw_status="WARN|not active"
+  fi
+
+  if command -v fail2ban-client >/dev/null 2>&1 && $SUDO fail2ban-client status sshd >/dev/null 2>&1; then
+    fail2ban_status="OK|sshd jail enabled"
+  else
+    fail2ban_status="WARN|sshd jail not confirmed"
+  fi
+
+  latest_lines="$(backup_latest_set_paths 2>/dev/null || true)"
+  if [[ -n "$latest_lines" ]]; then
+    completeness="$(printf '%s\n' "$latest_lines" | sed -n '6p')"
+  else
+    completeness="none"
+  fi
+
+  release_state="OK"
+  [[ "$syntax_status" == "OK" ]] || release_state="WARN"
+  [[ "$installed" == "Installed" ]] || release_state="WARN"
+  [[ "$runtime" == Running* ]] || release_state="WARN"
+  [[ "$ssl_status" == "OK" ]] || release_state="WARN"
+  [[ "${ufw_status%%|*}" == "OK" ]] || release_state="WARN"
+  [[ "${fail2ban_status%%|*}" == "OK" ]] || release_state="WARN"
+  [[ "$completeness" == "complete" ]] || release_state="WARN"
+
+  ui_box_start "Release Readiness / Final QA"
+  status_line "Script version" "INFO" "${SCRIPT_VERSION}"
+  status_line "Syntax" "$syntax_status" "$syntax_detail"
+  status_line "Site" "INFO" "${SITE_NAME} (${SITE_NAME_SOURCE})"
+  status_line "Deployment mode" "INFO" "${DEPLOYMENT_MODE:-unknown}"
+  status_line "Install" "$([[ "$installed" == "Installed" ]] && echo OK || echo WARN)" "$installed"
+  status_line "Runtime" "$([[ "$runtime" == Running* ]] && echo OK || echo WARN)" "$runtime"
+  status_line "HTTPS" "$ssl_status" "$ssl_detail"
+  status_line "UFW" "${ufw_status%%|*}" "${ufw_status#*|}"
+  status_line "Fail2Ban" "${fail2ban_status%%|*}" "${fail2ban_status#*|}"
+  status_line "Latest backup" "$([[ "$completeness" == "complete" ]] && echo OK || echo WARN)" "${completeness:-none}"
+  status_line "Release state" "$release_state" "$([[ "$release_state" == OK ]] && echo "ready for final QA review" || echo "review WARN rows before v1.0.0")"
+  ui_box_end
+
+  ui_next "./install-erpnext-dev.sh production-checklist" "./install-erpnext-dev.sh support-bundle"
+}
+
+show_command_audit() {
+  ui_box_start "Command Audit / Key Workflows"
+  status_line "Start here" "OK" "first-run, public-vm-quickstart, local-dev-quickstart"
+  status_line "Config" "OK" "set-domain, show-config, setup-effort-guide"
+  status_line "Install/status" "OK" "guided-setup, status, doctor, support-bundle"
+  status_line "Production SSL" "OK" "production-ssl-wizard, production-ssl-status, ssl-mode-status"
+  status_line "Cloudflare" "OK" "cloudflare-origin-guide, configure-cloudflare-origin-ssl"
+  status_line "Security" "OK" "security-hardening-wizard, vm-firewall-status, fail2ban-status"
+  status_line "Firewall" "OK" "firewall-hardening-status, production-firewall-plan"
+  status_line "Backups" "OK" "backup-files, backup-status, backup-verify, backup-hardening-wizard"
+  status_line "Restore safety" "OK" "restore-rehearsal-guide, restore-db, restore-full"
+  status_line "Optional apps" "OK" "app-install-wizard, app-status, app-compatibility"
+  ui_box_end
+  ui_next "./install-erpnext-dev.sh release-readiness" "./install-erpnext-dev.sh help"
+}
+
+show_release_notes_guide() {
+  ui_box_start "v1.0.0 Release Notes Draft"
+  echo "Release focus: guided ERPNext VM setup with production-candidate hardening."
+  echo
+  echo "Validated paths:"
+  echo "  - Local VM quickstart path"
+  echo "  - Public VM quickstart path"
+  echo "  - Let's Encrypt production HTTPS path"
+  echo "  - Cloudflare Origin CA / Full strict path"
+  echo "  - Hetzner firewall + UFW + Fail2Ban hardening"
+  echo "  - Backup inventory and readable-file verification"
+  echo
+  echo "Known production responsibility:"
+  echo "  - Copy backups off the VM"
+  echo "  - Rehearse restore on a disposable VM"
+  echo "  - Keep cloud snapshots named and current"
+  echo "  - Confirm cloud firewall rules after IP/admin changes"
+  ui_box_end
+  ui_next "./install-erpnext-dev.sh release-readiness" "./install-erpnext-dev.sh production-checklist"
+}
+
+final_qa_wizard() {
+  require_sudo
+
+  while true; do
+    ui_box_start "Final QA / Release Readiness"
+    echo "Compact checks before tagging v1.0.0."
+    echo
+    echo "1) Release readiness summary"
+    echo "2) Command audit"
+    echo "3) Production checklist"
+    echo "4) Backup verify"
+    echo "5) Release notes draft"
+    echo "6) Create support bundle"
+    echo "7) Back"
+    echo
+    read -r -p "Choose an option: " choice
+
+    case "$choice" in
+      1) show_release_readiness; pause_after_screen "Press Enter to return to Final QA..." ;;
+      2) show_command_audit; pause_after_screen "Press Enter to return to Final QA..." ;;
+      3) show_production_checklist; pause_after_screen "Press Enter to return to Final QA..." ;;
+      4) verify_latest_backup_set; pause_after_screen "Press Enter to return to Final QA..." ;;
+      5) show_release_notes_guide; pause_after_screen "Press Enter to return to Final QA..." ;;
+      6) create_support_bundle; pause_after_screen "Press Enter to return to Final QA..." ;;
+      7) return 0 ;;
+      *)
+        if menu_invalid_choice "$choice" "type 7 to exit"; then :; else
+          [[ $? -eq 2 ]] && return 0
+        fi
+        ;;
+    esac
+  done
+}
+
 backup_hardening_wizard() {
   while true; do
     ui_box_start "Backup / Restore Hardening"
@@ -10140,6 +10275,8 @@ Backup / Restore:
 
 Production checklist:
   production-checklist  Go-live readiness checklist
+  release-readiness    Compact final QA readiness summary
+  final-qa             Final QA / release-readiness wizard
 
 Apps:
   app-install-wizard  Optional Frappe app installer
@@ -10163,6 +10300,7 @@ Examples:
   ./install-erpnext-dev.sh local-dev-quickstart
   ./install-erpnext-dev.sh production-ssl-wizard
   ./install-erpnext-dev.sh security-hardening-wizard
+  ./install-erpnext-dev.sh final-qa
 
 Options:
   -y, --yes  Assume yes for supported confirmations
@@ -10205,8 +10343,9 @@ show_menu() {
     echo "10) Backup / maintenance"
     echo "11) Optional apps"
     echo "12) Advanced"
-    echo "13) Help"
-    echo "14) Exit"
+    echo "13) Final QA"
+    echo "14) Help"
+    echo "15) Exit"
     echo
     read -r -p "Choose an option: " choice
 
@@ -10223,8 +10362,9 @@ show_menu() {
       10) run_backup_maintenance_menu ;;
       11) show_app_library_menu ;;
       12) show_advanced_menu ;;
-      13) show_help ;;
-      14) exit 0 ;;
+      13) final_qa_wizard ;;
+      14) show_help ;;
+      15) exit 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -10245,7 +10385,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|backup-hardening-wizard|backup-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -10321,6 +10461,10 @@ main() {
     off-vm-backup-guide) show_off_vm_backup_guide ;;
     restore-rehearsal-guide) show_restore_rehearsal_guide ;;
     production-checklist) show_production_checklist ;;
+    release-readiness) show_release_readiness ;;
+    command-audit) show_command_audit ;;
+    release-notes-guide) show_release_notes_guide ;;
+    final-qa|final-qa-wizard) final_qa_wizard ;;
     backup-hardening-wizard|backup-wizard) backup_hardening_wizard ;;
     list-backups|backups) list_site_backups ;;
     restore-db) restore_site_database ;;

@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## v1.0.0-rc3
+
+### Added
+
+- Added `release-readiness` for a compact final QA summary before tagging v1.0.0.
+- Added `final-qa` / `final-qa-wizard` to group release readiness, command audit, production checklist, backup verification, release notes draft, and support bundle creation.
+- Added `command-audit` to summarize the major command groups and validate the user-facing workflow map.
+- Added `release-notes-guide` as a compact v1.0.0 release-notes draft.
+
+### Improved
+
+- Added Final QA to the main menu.
+- Updated help output with release-readiness commands and final QA workflow.
+- Prepared documentation for the final v1.0.0 QA pass.
+
 ## v1.0.0-rc2
 
 ### Fixed

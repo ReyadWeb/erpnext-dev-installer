@@ -1,5 +1,36 @@
 # TESTING
 
+## v1.0.0-rc3 validation
+
+```bash
+chmod +x install-erpnext-dev.sh
+bash -n install-erpnext-dev.sh
+grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
+```
+
+Expected:
+
+```text
+SCRIPT_VERSION="1.0.0-rc3"
+```
+
+Final QA commands:
+
+```bash
+./install-erpnext-dev.sh help | grep -E "release-readiness|final-qa|command-audit"
+./install-erpnext-dev.sh release-readiness
+./install-erpnext-dev.sh command-audit
+./install-erpnext-dev.sh release-notes-guide
+printf '7\n' | ./install-erpnext-dev.sh final-qa
+```
+
+Expected:
+
+- `release-readiness` gives a compact final QA status across syntax, install, runtime, HTTPS, UFW, Fail2Ban, and latest backup completeness.
+- `command-audit` lists the major command groups without making changes.
+- `release-notes-guide` prints a compact v1.0.0 release-notes draft.
+- `final-qa` opens and exits cleanly.
+
 ## v1.0.0-rc2 validation
 
 ```bash
@@ -11,7 +42,7 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="1.0.0-rc1"
+SCRIPT_VERSION="1.0.0-rc2"
 ```
 
 Backup/restore hardening commands:
