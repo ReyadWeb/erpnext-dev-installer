@@ -1,4 +1,4 @@
-# TESTING v0.9.6
+# TESTING v0.9.7
 
 ## Syntax
 
@@ -11,7 +11,7 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="0.9.6"
+SCRIPT_VERSION="0.9.7"
 ```
 
 ## Help command
@@ -112,9 +112,26 @@ SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-
 Expected:
 
 - The command asks whether the Cloudflare Origin CA certificate/private key have been generated.
-- The command prompts for the certificate and private key using `END_CERT` and `END_KEY` markers.
+- The command prompts for the certificate and private key using the real PEM boundaries, not artificial markers.
+- Certificate input stops at `-----END CERTIFICATE-----`.
+- Private key input stops at `-----END PRIVATE KEY-----`, `-----END RSA PRIVATE KEY-----`, or `-----END EC PRIVATE KEY-----`.
 - Input is hidden and not printed into the installer log.
 - Invalid or mismatched key material fails before Nginx is changed.
+
+
+Manual paste UX check:
+
+```text
+Paste the Cloudflare Origin Certificate PEM block now.
+Expected start pattern: ^-----BEGIN CERTIFICATE-----$
+Expected end pattern:   ^-----END CERTIFICATE-----$
+```
+
+Expected:
+
+- No `END_CERT` marker is required.
+- The prompt advances automatically after `-----END CERTIFICATE-----`.
+- The key prompt advances automatically after the matching private-key end line.
 
 ## Production HTTPS implementation
 

@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.9.6"
+SCRIPT_VERSION="0.9.7"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -3147,13 +3147,74 @@ read_multiline_secret_to_file() {
   fi
   while IFS= read -r line; do
     [[ "$line" == "$end_marker" ]] && break
-    printf '%s\n' "$line" >> "$output_file"
+    printf '%s
+' "$line" >> "$output_file"
   done
   if [[ "$had_tty" -eq 1 ]]; then
     stty echo 2>/dev/null || true
     echo
   fi
 }
+
+read_pem_block_to_file() {
+  local label="$1" begin_regex="$2" end_regex="$3" output_file="$4" begin_hint="${5:-$2}" end_hint="${6:-$3}"
+  local line had_tty=0 in_block=0 found_begin=0 found_end=0
+
+  echo
+  echo "Paste the ${label} PEM block now."
+  echo "The installer will stop reading automatically when it sees the real PEM ending line."
+  echo "Input is hidden while you paste. Nothing is printed to the installer log."
+  echo
+  echo "Expected first line: ${begin_hint}"
+  echo "Expected ending:     ${end_hint}"
+
+  : > "$output_file"
+  chmod 600 "$output_file" 2>/dev/null || true
+
+  if [[ -t 0 ]]; then
+    had_tty=1
+    stty -echo 2>/dev/null || true
+  fi
+
+  while IFS= read -r line; do
+    line="${line%$'
+'}"
+
+    if [[ "$in_block" -eq 0 ]]; then
+      if [[ "$line" =~ $begin_regex ]]; then
+        in_block=1
+        found_begin=1
+        printf '%s
+' "$line" >> "$output_file"
+      fi
+      continue
+    fi
+
+    printf '%s
+' "$line" >> "$output_file"
+
+    if [[ "$line" =~ $end_regex ]]; then
+      found_end=1
+      break
+    fi
+  done
+
+  if [[ "$had_tty" -eq 1 ]]; then
+    stty echo 2>/dev/null || true
+    echo
+  fi
+
+  if [[ "$found_begin" -ne 1 ]]; then
+    rm -f "$output_file"
+    fail "Did not detect the beginning of the ${label} PEM block."
+  fi
+
+  if [[ "$found_end" -ne 1 ]]; then
+    rm -f "$output_file"
+    fail "Did not detect the ending line of the ${label} PEM block."
+  fi
+}
+
 
 production_https_status() {
   local domain="$1"
@@ -3573,6 +3634,8 @@ show_cloudflare_origin_guide() {
   echo "  2) Hostname: ${domain}"
   echo "  3) Key type: RSA or ECC."
   echo "  4) Save both the Origin Certificate and Private Key. Cloudflare shows the private key only once."
+  echo "     Certificate must include -----BEGIN CERTIFICATE----- through -----END CERTIFICATE-----."
+  echo "     Private key must include -----BEGIN PRIVATE KEY----- through -----END PRIVATE KEY-----."
   echo "  5) Keep DNS record ${domain} pointed to ${vm_ip}."
   echo "  6) After installing the origin cert here, turn proxy ON/orange-cloud."
   echo "  7) Set SSL/TLS encryption mode to Full (strict)."
@@ -3608,8 +3671,8 @@ install_cloudflare_origin_material() {
     echo "  - Private Key"
     echo
     confirm "Have you generated and copied both values from Cloudflare Origin Server?" || return 1
-    read_multiline_secret_to_file "Cloudflare Origin Certificate" "END_CERT" "$tmp_cert"
-    read_multiline_secret_to_file "Cloudflare Origin Private Key" "END_KEY" "$tmp_key"
+    read_pem_block_to_file "Cloudflare Origin Certificate" '^-----BEGIN CERTIFICATE-----$' '^-----END CERTIFICATE-----$' "$tmp_cert" '-----BEGIN CERTIFICATE-----' '-----END CERTIFICATE-----'
+    read_pem_block_to_file "Cloudflare Origin Private Key" '^-----BEGIN (RSA |EC )?PRIVATE KEY-----$' '^-----END (RSA |EC )?PRIVATE KEY-----$' "$tmp_key" '-----BEGIN PRIVATE KEY-----' '-----END PRIVATE KEY-----'
   fi
 
   validate_certificate_and_key_pair "$tmp_cert" "$tmp_key" || fail "Cloudflare origin certificate/key validation failed. Confirm the private key matches the certificate."

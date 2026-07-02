@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.9.6
+# ERPNext Developer Installer v0.9.7
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -28,11 +28,13 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh next-step
 ```
 
-## v0.9.6 focus
+## v0.9.7 focus
 
-v0.9.6 adds a guided production SSL provider workflow. The installer can now help choose between direct Let's Encrypt HTTPS and Cloudflare Origin CA for Cloudflare Full (strict).
+v0.9.7 fixes and improves the Cloudflare Origin CA paste workflow. The installer now stops reading the certificate automatically at `-----END CERTIFICATE-----` and stops reading the private key automatically at `-----END PRIVATE KEY-----`, `-----END RSA PRIVATE KEY-----`, or `-----END EC PRIVATE KEY-----`. Artificial `END_CERT` and `END_KEY` markers are no longer required.
 
-The new Cloudflare Origin CA path can prompt for the Origin Certificate and Private Key, validate that they match, install them safely under `/etc/ssl/cloudflare-origin`, back up the existing managed Nginx production config, and switch Nginx to the Cloudflare origin certificate.
+v0.9.6 added the guided production SSL provider workflow. The installer can help choose between direct Let's Encrypt HTTPS and Cloudflare Origin CA for Cloudflare Full (strict).
+
+The Cloudflare Origin CA path can prompt for the Origin Certificate and Private Key, validate that they match, install them safely under `/etc/ssl/cloudflare-origin`, back up the existing managed Nginx production config, and switch Nginx to the Cloudflare origin certificate.
 
 v0.9.5 remains included as the Let's Encrypt staging-to-production hotfix. It detects installed Let's Encrypt staging certificates and forces replacement with a real production certificate when `LETSENCRYPT_STAGING` is not enabled.
 
@@ -128,7 +130,25 @@ Then run:
 SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh configure-cloudflare-origin-ssl
 ```
 
-The script will ask you to confirm that the certificate has been generated, then prompts you to paste the certificate and private key. The pasted input is not printed to the installer log. End each paste with the marker shown by the script, such as `END_CERT` or `END_KEY`.
+The script will ask you to confirm that the certificate has been generated, then prompts you to paste the certificate and private key. The pasted input is not printed to the installer log.
+
+For paste input, paste the exact PEM blocks from Cloudflare:
+
+```text
+-----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----
+```
+
+and:
+
+```text
+-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----
+```
+
+The installer detects the real PEM ending lines automatically. Do not add `END_CERT` or `END_KEY`.
 
 For file-based input instead of paste prompts:
 

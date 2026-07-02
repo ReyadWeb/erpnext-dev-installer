@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## v0.9.7
+
+### Fixed
+
+- Fixed the Cloudflare Origin CA paste workflow so it no longer requires artificial `END_CERT` and `END_KEY` markers.
+- Certificate paste input now stops automatically at the real PEM ending line: `-----END CERTIFICATE-----`.
+- Private key paste input now stops automatically at the real PEM ending line: `-----END PRIVATE KEY-----`, `-----END RSA PRIVATE KEY-----`, or `-----END EC PRIVATE KEY-----`.
+
+### Improved
+
+- Cloudflare Origin CA prompts now clearly explain the expected PEM start and end patterns.
+- The input reader skips leading non-PEM text and starts recording only when the real PEM begin line is detected.
+- Windows CRLF paste endings are normalized before validation.
+- The Cloudflare Origin CA guide now explicitly shows the required certificate and private key endings.
+
+### Safety
+
+- Certificate and key contents are still hidden during paste input and are not printed into the installer log.
+- File-based inputs via `CLOUDFLARE_ORIGIN_CERT_FILE` and `CLOUDFLARE_ORIGIN_KEY_FILE` remain supported and are still recommended for repeatable production work.
+
 ## v0.9.6
 
 ### Added
