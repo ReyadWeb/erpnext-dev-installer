@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.9.14"
+SCRIPT_VERSION="1.0.0-rc1"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -109,7 +109,7 @@ acquire_installer_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|backup-hardening-wizard|backup-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
       return 0
       ;;
     *)
@@ -9289,6 +9289,312 @@ run_maintenance_menu() {
   done
 }
 
+
+# ============================================================
+# Backup / Restore Hardening
+# ============================================================
+
+backup_find_latest() {
+  local pattern="$1"
+  local backup_dir
+  backup_dir="$(site_backup_dir)"
+  if ! path_is_dir "$backup_dir"; then
+    return 1
+  fi
+  $SUDO find "$backup_dir" -maxdepth 1 -type f -name "$pattern" -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-
+}
+
+backup_file_size_human() {
+  local file="$1"
+  if [[ -f "$file" ]]; then
+    du -h "$file" 2>/dev/null | awk '{print $1}'
+  else
+    echo "missing"
+  fi
+}
+
+backup_latest_prefix_from_db() {
+  local db_file="$1"
+  local base
+  base="$(basename "$db_file")"
+  base="${base%-database.sql.gz}"
+  base="${base%.sql.gz}"
+  echo "$base"
+}
+
+backup_latest_set_paths() {
+  local db_file prefix backup_dir public_file private_file config_file
+  backup_dir="$(site_backup_dir)"
+  db_file="$(backup_find_latest '*-database.sql.gz' || backup_find_latest '*.sql.gz' || true)"
+  [[ -n "$db_file" ]] || return 1
+  prefix="$(backup_latest_prefix_from_db "$db_file")"
+  public_file="${backup_dir}/${prefix}-files.tar"
+  [[ -f "$public_file" ]] || public_file="${backup_dir}/${prefix}-files.tar.gz"
+  private_file="${backup_dir}/${prefix}-private-files.tar"
+  [[ -f "$private_file" ]] || private_file="${backup_dir}/${prefix}-private-files.tar.gz"
+  config_file="${backup_dir}/${prefix}-site_config_backup.json"
+  printf '%s\n%s\n%s\n%s\n%s\n' "$prefix" "$db_file" "$public_file" "$private_file" "$config_file"
+}
+
+show_backup_status() {
+  require_sudo
+  local bench_dir backup_dir count_all count_db count_public count_private latest_lines prefix db_file public_file private_file config_file backup_total
+  bench_dir="$(require_site_environment)" || return 1
+  backup_dir="$(site_backup_dir)"
+
+  ui_box_start "Backup Status"
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "Backup folder" "INFO" "$backup_dir"
+
+  if ! path_is_dir "$backup_dir"; then
+    status_line "Backup folder" "WARN" "not found; create a backup first"
+    ui_next "./install-erpnext-dev.sh backup-files"
+    ui_box_end
+    return 0
+  fi
+
+  count_all="$($SUDO find "$backup_dir" -maxdepth 1 -type f 2>/dev/null | wc -l | awk '{print $1+0}')"
+  count_db="$($SUDO find "$backup_dir" -maxdepth 1 -type f \( -name '*-database.sql.gz' -o -name '*.sql.gz' \) 2>/dev/null | wc -l | awk '{print $1+0}')"
+  count_public="$($SUDO find "$backup_dir" -maxdepth 1 -type f \( -name '*-files.tar' -o -name '*-files.tar.gz' \) ! -name '*-private-files.tar' ! -name '*-private-files.tar.gz' 2>/dev/null | wc -l | awk '{print $1+0}')"
+  count_private="$($SUDO find "$backup_dir" -maxdepth 1 -type f \( -name '*-private-files.tar' -o -name '*-private-files.tar.gz' \) 2>/dev/null | wc -l | awk '{print $1+0}')"
+  backup_total="$($SUDO du -sh "$backup_dir" 2>/dev/null | awk '{print $1}' || echo unknown)"
+
+  status_line "Backup files" "INFO" "${count_all} file(s), ${backup_total} total"
+  status_line "Database backups" "$([[ "$count_db" -gt 0 ]] && echo OK || echo WARN)" "${count_db} found"
+  status_line "Public file backups" "$([[ "$count_public" -gt 0 ]] && echo OK || echo WARN)" "${count_public} found"
+  status_line "Private file backups" "$([[ "$count_private" -gt 0 ]] && echo OK || echo WARN)" "${count_private} found"
+
+  latest_lines="$(backup_latest_set_paths || true)"
+  if [[ -n "$latest_lines" ]]; then
+    prefix="$(printf '%s\n' "$latest_lines" | sed -n '1p')"
+    db_file="$(printf '%s\n' "$latest_lines" | sed -n '2p')"
+    public_file="$(printf '%s\n' "$latest_lines" | sed -n '3p')"
+    private_file="$(printf '%s\n' "$latest_lines" | sed -n '4p')"
+    config_file="$(printf '%s\n' "$latest_lines" | sed -n '5p')"
+    status_line "Latest set" "INFO" "$prefix"
+    status_line "Latest database" "$([[ -f "$db_file" ]] && echo OK || echo FAIL)" "$(basename "$db_file") ($(backup_file_size_human "$db_file"))"
+    status_line "Latest public files" "$([[ -f "$public_file" ]] && echo OK || echo WARN)" "$(basename "$public_file") ($(backup_file_size_human "$public_file"))"
+    status_line "Latest private files" "$([[ -f "$private_file" ]] && echo OK || echo WARN)" "$(basename "$private_file") ($(backup_file_size_human "$private_file"))"
+    status_line "Latest site config" "$([[ -f "$config_file" ]] && echo OK || echo WARN)" "$(basename "$config_file") ($(backup_file_size_human "$config_file"))"
+  else
+    status_line "Latest set" "WARN" "no database backup found"
+  fi
+
+  echo
+  echo "Off-VM copy: still required for production readiness."
+  ui_next "./install-erpnext-dev.sh backup-verify" "./install-erpnext-dev.sh off-vm-backup-guide"
+  ui_box_end
+}
+
+verify_backup_file() {
+  local label="$1"
+  local file="$2"
+  local kind="$3"
+  if [[ ! -f "$file" ]]; then
+    status_line "$label" "WARN" "missing"
+    return 1
+  fi
+  case "$kind" in
+    gzip)
+      if gzip -t "$file" >/dev/null 2>&1; then
+        status_line "$label" "OK" "gzip readable; $(backup_file_size_human "$file")"
+        return 0
+      fi
+      status_line "$label" "FAIL" "gzip test failed"
+      return 1
+      ;;
+    tar)
+      if tar -tf "$file" >/dev/null 2>&1; then
+        status_line "$label" "OK" "tar readable; $(backup_file_size_human "$file")"
+        return 0
+      fi
+      status_line "$label" "FAIL" "tar list failed"
+      return 1
+      ;;
+    json)
+      if python3 -m json.tool "$file" >/dev/null 2>&1; then
+        status_line "$label" "OK" "json readable; $(backup_file_size_human "$file")"
+        return 0
+      fi
+      status_line "$label" "WARN" "json validation failed or python unavailable"
+      return 1
+      ;;
+  esac
+}
+
+verify_latest_backup_set() {
+  require_sudo
+  local latest_lines prefix db_file public_file private_file config_file ok_count fail_count
+  require_site_environment >/dev/null || return 1
+
+  ui_box_start "Backup Verification"
+  status_line "Mode" "INFO" "checks latest files only; no restore is performed"
+  status_line "Site" "INFO" "$SITE_NAME"
+
+  latest_lines="$(backup_latest_set_paths || true)"
+  if [[ -z "$latest_lines" ]]; then
+    status_line "Latest backup" "FAIL" "no database backup found"
+    ui_next "./install-erpnext-dev.sh backup-files"
+    ui_box_end
+    return 1
+  fi
+
+  prefix="$(printf '%s\n' "$latest_lines" | sed -n '1p')"
+  db_file="$(printf '%s\n' "$latest_lines" | sed -n '2p')"
+  public_file="$(printf '%s\n' "$latest_lines" | sed -n '3p')"
+  private_file="$(printf '%s\n' "$latest_lines" | sed -n '4p')"
+  config_file="$(printf '%s\n' "$latest_lines" | sed -n '5p')"
+
+  status_line "Latest set" "INFO" "$prefix"
+  ok_count=0
+  fail_count=0
+
+  if verify_backup_file "Database" "$db_file" gzip; then ok_count=$((ok_count+1)); else fail_count=$((fail_count+1)); fi
+  if verify_backup_file "Public files" "$public_file" tar; then ok_count=$((ok_count+1)); else fail_count=$((fail_count+1)); fi
+  if verify_backup_file "Private files" "$private_file" tar; then ok_count=$((ok_count+1)); else fail_count=$((fail_count+1)); fi
+  if verify_backup_file "Site config" "$config_file" json; then ok_count=$((ok_count+1)); else true; fi
+
+  if [[ "$fail_count" -eq 0 ]]; then
+    status_line "Verification" "OK" "backup files are readable; restore still must be tested separately"
+  else
+    status_line "Verification" "WARN" "${fail_count} required component(s) missing or unreadable"
+  fi
+
+  echo
+  echo "This is not a restore test. For production, rehearse restore on a disposable VM."
+  ui_next "./install-erpnext-dev.sh restore-rehearsal-guide" "./install-erpnext-dev.sh off-vm-backup-guide"
+  ui_box_end
+}
+
+show_off_vm_backup_guide() {
+  require_sudo
+  local backup_dir host_name
+  require_site_environment >/dev/null || return 1
+  backup_dir="$(site_backup_dir)"
+  host_name="$(hostname -f 2>/dev/null || hostname)"
+
+  ui_box_start "Off-VM Backup Guide"
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "Backup folder" "INFO" "$backup_dir"
+  status_line "Server" "INFO" "$host_name"
+  echo
+  echo "Run from your workstation, not inside the VM:"
+  echo
+  echo "  mkdir -p ~/erpnext-backups/${SITE_NAME}"
+  echo "  rsync -avz root@${CURRENT_VM_IP:-65.109.221.4}:${backup_dir}/ ~/erpnext-backups/${SITE_NAME}/"
+  echo
+  echo "Or copy one archive with scp:"
+  echo
+  echo "  scp root@${CURRENT_VM_IP:-65.109.221.4}:${backup_dir}/FILE_NAME ~/erpnext-backups/${SITE_NAME}/"
+  echo
+  echo "Recommended after copy:"
+  echo "  sha256sum ~/erpnext-backups/${SITE_NAME}/* > ~/erpnext-backups/${SITE_NAME}/SHA256SUMS"
+  echo
+  ui_next "./install-erpnext-dev.sh backup-verify" "Take/confirm a cloud snapshot after off-VM copy."
+  ui_box_end
+}
+
+show_restore_rehearsal_guide() {
+  ui_box_start "Restore Rehearsal Guide"
+  status_line "Mode" "INFO" "planning only; no restore is performed"
+  status_line "Site" "INFO" "$SITE_NAME"
+  echo
+  echo "Safe restore test workflow:"
+  echo "  1) Take a cloud snapshot of the current VM."
+  echo "  2) Create a disposable test VM with similar OS/resources."
+  echo "  3) Install the same script version and ERPNext stack."
+  echo "  4) Copy the database, public files, and private files backups to the test VM."
+  echo "  5) Run restore on the test VM only."
+  echo "  6) Run migrate/build/clear-cache and verify login."
+  echo "  7) Destroy the disposable VM after validation."
+  echo
+  echo "Restore commands on the test VM:"
+  echo "  ./install-erpnext-dev.sh list-backups"
+  echo "  ./install-erpnext-dev.sh restore-full"
+  echo "  ./install-erpnext-dev.sh production-readiness"
+  echo
+  echo "Never use the first restore rehearsal on the live VM."
+  ui_next "./install-erpnext-dev.sh backup-status" "./install-erpnext-dev.sh off-vm-backup-guide"
+  ui_box_end
+}
+
+show_production_checklist() {
+  require_sudo
+  ui_box_start "Production Checklist"
+  local install_quick runtime_quick
+  status_line "Site" "INFO" "$SITE_NAME"
+  install_quick="$(production_quick_install_state)"
+  runtime_quick="$(runtime_state 2>/dev/null || echo Stopped)"
+  if [[ "$install_quick" == "Installed" ]]; then
+    status_line "Install" "OK" "$install_quick"
+  else
+    status_line "Install" "WARN" "$install_quick"
+  fi
+  if [[ "$runtime_quick" == Running* ]]; then
+    status_line "Runtime" "OK" "$runtime_quick"
+  else
+    status_line "Runtime" "WARN" "$runtime_quick"
+  fi
+  if production_ssl_ok_detail >/dev/null 2>&1; then
+    status_line "HTTPS" "OK" "$(production_ssl_ok_detail)"
+  else
+    status_line "HTTPS" "WARN" "not confirmed"
+  fi
+  if command -v ufw >/dev/null 2>&1 && $SUDO ufw status 2>/dev/null | grep -qi '^Status: active'; then
+    status_line "UFW" "OK" "active"
+  else
+    status_line "UFW" "WARN" "not active"
+  fi
+  if command -v fail2ban-client >/dev/null 2>&1 && $SUDO fail2ban-client status sshd >/dev/null 2>&1; then
+    status_line "Fail2Ban" "OK" "sshd jail enabled"
+  else
+    status_line "Fail2Ban" "WARN" "sshd jail not confirmed"
+  fi
+  local bcount
+  bcount="$(production_backup_count)"
+  if [[ "$bcount" =~ ^[0-9]+$ && "$bcount" -gt 0 ]]; then
+    status_line "Local backups" "OK" "${bcount} backup file(s); off-VM copy required"
+  else
+    status_line "Local backups" "WARN" "no local backup files detected"
+  fi
+  status_line "Snapshot" "INFO" "take/verify cloud snapshot before go-live"
+  echo
+  echo "Remaining production decisions:"
+  echo "  - Confirm off-VM backup location and restore rehearsal."
+  echo "  - Confirm Hetzner firewall: 22 admin IP, 80/443 allowed, 8000/9000 blocked."
+  echo "  - Confirm Cloudflare SSL mode and DNS proxy state."
+  echo "  - Create named cloud snapshot after final validation."
+  ui_next "./install-erpnext-dev.sh backup-status" "./install-erpnext-dev.sh backup-verify" "./install-erpnext-dev.sh support-bundle"
+  ui_box_end
+}
+
+backup_hardening_wizard() {
+  while true; do
+    ui_box_start "Backup / Restore Hardening"
+    echo "1) Create database + files backup"
+    echo "2) Backup status"
+    echo "3) Verify latest backup"
+    echo "4) Off-VM backup guide"
+    echo "5) Restore rehearsal guide"
+    echo "6) Production checklist"
+    echo "7) List backups"
+    echo "8) Back"
+    echo
+    read -r -p "Choose an option: " backup_harden_choice
+    case "$backup_harden_choice" in
+      1) create_site_backup true; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
+      2) show_backup_status; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
+      3) verify_latest_backup_set; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
+      4) show_off_vm_backup_guide; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
+      5) show_restore_rehearsal_guide; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
+      6) show_production_checklist; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
+      7) list_site_backups; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
+      8) return 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
+}
+
 run_backup_maintenance_menu() {
   while true; do
     echo
@@ -9297,22 +9603,30 @@ run_backup_maintenance_menu() {
     echo "============================================================"
     echo "1) Create database backup"
     echo "2) Create database + files backup"
-    echo "3) List backups"
-    echo "4) Restore database backup"
-    echo "5) Restore database + files backup"
-    echo "6) Maintenance tasks"
-    echo "7) Back"
+    echo "3) Backup status"
+    echo "4) Verify latest backup"
+    echo "5) Off-VM backup guide"
+    echo "6) Restore rehearsal guide"
+    echo "7) List backups"
+    echo "8) Restore database backup"
+    echo "9) Restore database + files backup"
+    echo "10) Maintenance tasks"
+    echo "11) Back"
     echo
     read -r -p "Choose an option: " backup_choice
 
     case "$backup_choice" in
       1) create_site_backup false; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
       2) create_site_backup true; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
-      3) list_site_backups; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
-      4) restore_site_database; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
-      5) restore_site_full; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
-      6) run_maintenance_menu ;;
-      7) return 0 ;;
+      3) show_backup_status; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      4) verify_latest_backup_set; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      5) show_off_vm_backup_guide; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      6) show_restore_rehearsal_guide; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      7) list_site_backups; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      8) restore_site_database; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      9) restore_site_full; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
+      10) run_maintenance_menu ;;
+      11) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -9703,9 +10017,18 @@ Security:
   vm-firewall-status         UFW status
   fail2ban-status            SSH jail status
 
-Backup / Apps:
+Backup / Restore:
   backup-files        Database + files backup
-  list-backups        List site backups
+  backup-status       Backup inventory and latest-set status
+  backup-verify       Verify latest backup files without restoring
+  off-vm-backup-guide Commands to copy backups off this VM
+  restore-rehearsal-guide Safe restore test plan
+  backup-hardening-wizard Backup and restore readiness workflow
+
+Production checklist:
+  production-checklist  Go-live readiness checklist
+
+Apps:
   app-install-wizard  Optional Frappe app installer
   app-status          Optional app status
 
@@ -9809,7 +10132,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|backup-hardening-wizard|backup-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -9880,6 +10203,12 @@ main() {
     repair-app-registry) repair_app_registry ;;
     backup) create_site_backup false ;;
     backup-files) create_site_backup true ;;
+    backup-status) show_backup_status ;;
+    backup-verify|verify-backups) verify_latest_backup_set ;;
+    off-vm-backup-guide) show_off_vm_backup_guide ;;
+    restore-rehearsal-guide) show_restore_rehearsal_guide ;;
+    production-checklist) show_production_checklist ;;
+    backup-hardening-wizard|backup-wizard) backup_hardening_wizard ;;
     list-backups|backups) list_site_backups ;;
     restore-db) restore_site_database ;;
     restore-full) restore_site_full ;;

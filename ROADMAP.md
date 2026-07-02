@@ -1,10 +1,17 @@
 # ROADMAP
 
-## Current: v0.9.14
+## Current: v1.0.0-rc1
 
-Stable developer installer baseline with SSL mode guidance, setup effort/step-count reporting, first-run onboarding, quickstart status hotfixes, one-command GitHub quickstarts, terminal UX cleanup, compact menus/help, production readiness/planning classification, structured production domain planning, public VM readiness checks, production SSL/firewall planning, conservative Nginx/Let's Encrypt HTTPS implementation, staging-to-production certificate replacement hotfix, Cloudflare Origin CA SSL provider workflow, Cloudflare PEM paste UX hotfix, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
+Release-candidate baseline with backup/restore hardening, production checklist, SSL mode guidance, setup effort/step-count reporting, first-run onboarding, quickstart status hotfixes, one-command GitHub quickstarts, terminal UX cleanup, compact menus/help, production readiness/planning classification, structured production domain planning, public VM readiness checks, production SSL/firewall planning, conservative Nginx/Let's Encrypt HTTPS implementation, staging-to-production certificate replacement hotfix, Cloudflare Origin CA SSL provider workflow, Cloudflare PEM paste UX hotfix, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
 
 Completed:
+
+- backup status inventory
+- latest backup file verification without restore
+- off-VM backup copy guidance
+- restore rehearsal guide for disposable VMs
+- production checklist for go-live readiness
+- backup hardening wizard
 
 - SSL mode status and compatibility guide
 - setup effort / step-count guide for local VM, public Let’s Encrypt, public Cloudflare, and existing installs
@@ -60,13 +67,9 @@ Completed:
 
 ## Next recommended work
 
-### v1.0.0-rc1
-
-- backup/restore hardening
-- backup verification, restore warnings, off-VM backup guidance, and retention planning
-
 ### v1.0.0
 
-- final QA pass
-- documentation cleanup
+- final QA pass on local VM and public VM quickstarts
+- backup retention policy helper
+- final documentation cleanup
 - release checklist and GitHub tag workflow

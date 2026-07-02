@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.9.14
+# ERPNext Developer Installer v1.0.0-rc1
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -44,6 +44,12 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh ssl-mode-status
 ./install-erpnext-dev.sh ssl-mode-guide
 ./install-erpnext-dev.sh setup-effort-guide
+./install-erpnext-dev.sh backup-hardening-wizard
+./install-erpnext-dev.sh backup-status
+./install-erpnext-dev.sh backup-verify
+./install-erpnext-dev.sh off-vm-backup-guide
+./install-erpnext-dev.sh restore-rehearsal-guide
+./install-erpnext-dev.sh production-checklist
 ./install-erpnext-dev.sh security-hardening-wizard
 ./install-erpnext-dev.sh vm-firewall-status
 ./install-erpnext-dev.sh fail2ban-status
@@ -53,6 +59,29 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh support-bundle
 ./install-erpnext-dev.sh next-step
 ```
+
+## v1.0.0-rc1 focus
+
+v1.0.0-rc1 adds backup/restore hardening and production checklist commands. It does not make restore automatic or silent; it verifies latest backup files, explains off-VM backup copying, and provides a safe restore rehearsal workflow for disposable test VMs.
+
+New commands:
+
+```bash
+./install-erpnext-dev.sh backup-status
+./install-erpnext-dev.sh backup-verify
+./install-erpnext-dev.sh off-vm-backup-guide
+./install-erpnext-dev.sh restore-rehearsal-guide
+./install-erpnext-dev.sh production-checklist
+./install-erpnext-dev.sh backup-hardening-wizard
+```
+
+Production backup model:
+
+- Create database + public/private files backup.
+- Verify latest backup files are readable.
+- Copy backups off the VM.
+- Rehearse restore on a disposable VM before trusting backups.
+- Keep cloud snapshots as infrastructure rollback points.
 
 ## v0.9.14 focus
 
@@ -143,6 +172,12 @@ Run:
 ./install-erpnext-dev.sh ssl-mode-status
 ./install-erpnext-dev.sh ssl-mode-guide
 ./install-erpnext-dev.sh setup-effort-guide
+./install-erpnext-dev.sh backup-hardening-wizard
+./install-erpnext-dev.sh backup-status
+./install-erpnext-dev.sh backup-verify
+./install-erpnext-dev.sh off-vm-backup-guide
+./install-erpnext-dev.sh restore-rehearsal-guide
+./install-erpnext-dev.sh production-checklist
 ./install-erpnext-dev.sh security-hardening-wizard
 ./install-erpnext-dev.sh vm-firewall-status
 ./install-erpnext-dev.sh fail2ban-status

@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## v1.0.0-rc1
+
+### Added
+
+- Added `backup-status` to show backup folder, counts, latest backup set, and local backup size summary.
+- Added `backup-verify` / `verify-backups` to verify the latest database gzip, public files archive, private files archive, and site config JSON without performing a restore.
+- Added `off-vm-backup-guide` with workstation-side `rsync` / `scp` examples and checksum guidance.
+- Added `restore-rehearsal-guide` with a safe restore test workflow for disposable VMs.
+- Added `production-checklist` for go-live readiness across install/runtime, HTTPS, UFW, Fail2Ban, backups, off-VM copy, and snapshots.
+- Added `backup-hardening-wizard` / `backup-wizard` to group backup creation, verification, off-VM guidance, restore rehearsal, and production checklist in one compact menu.
+
+### Improved
+
+- Expanded Backup / Restore / Maintenance menu with backup status, verification, off-VM backup guidance, and restore rehearsal steps.
+- Kept restore commands destructive and explicit; no automatic restore is performed by status or verification commands.
+
+### Safety
+
+- Backup verification checks file readability only; it clearly states that a real restore rehearsal is still required.
+- Restore rehearsal guidance recommends testing on a disposable VM, not the live production VM.
+
+
 ## v0.9.14
 
 ### Added

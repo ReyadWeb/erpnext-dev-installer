@@ -1,5 +1,41 @@
 # TESTING
 
+## v1.0.0-rc1 validation
+
+```bash
+chmod +x install-erpnext-dev.sh
+bash -n install-erpnext-dev.sh
+grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
+```
+
+Expected:
+
+```text
+SCRIPT_VERSION="1.0.0-rc1"
+```
+
+Backup/restore hardening commands:
+
+```bash
+./install-erpnext-dev.sh help | grep -E "backup-status|backup-verify|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|backup-hardening-wizard"
+./install-erpnext-dev.sh backup-status
+./install-erpnext-dev.sh backup-verify
+./install-erpnext-dev.sh off-vm-backup-guide
+./install-erpnext-dev.sh restore-rehearsal-guide
+./install-erpnext-dev.sh production-checklist
+printf '8\n' | ./install-erpnext-dev.sh backup-hardening-wizard
+```
+
+Expected:
+
+- `backup-status` reports backup folder, counts, latest set, and off-VM copy reminder.
+- `backup-verify` checks latest database gzip and public/private tar files without restoring.
+- `off-vm-backup-guide` prints workstation-side `rsync` and `scp` examples.
+- `restore-rehearsal-guide` explicitly recommends a disposable test VM.
+- `production-checklist` summarizes install/runtime, HTTPS, UFW, Fail2Ban, backups, and snapshot requirements.
+
+
+
 ## v0.9.14 validation
 
 ```bash
