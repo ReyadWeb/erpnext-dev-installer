@@ -1,107 +1,383 @@
-# ERPNext Developer Installer v0.8.13
+# ERPNext Developer Installer v0.9.12
 
-Local ERPNext/Frappe developer VM installer for Ubuntu 24.04/26.04.
+Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
-## Quick start
+## One-command start
 
-Run inside the ERPNext VM:
+Public VM / production-candidate setup:
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=$(date +%s)" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh public-vm-quickstart
+```
+
+Local development VM setup:
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=$(date +%s)" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh local-dev-quickstart
+```
+
+Manual workflow:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh -o install-erpnext-dev.sh
 chmod +x install-erpnext-dev.sh
-./install-erpnext-dev.sh setup
+./install-erpnext-dev.sh first-run
 ```
 
-During setup, choose a local site name:
-
-```text
-Local site name [erp.test]:
-```
-
-Press Enter for `erp.test`, or enter a custom local name such as `erp08.test`.
-
-## v0.8.13 highlights
-
-- Generic root storage detection and expansion.
-- Improved Ubuntu LVM root detection for `/dev/mapper/*`, `/dev/<vg>/<lv>`, and `/dev/dm-*` aliases.
-- Setup can detect when a cloned VM disk is larger than the Ubuntu root filesystem.
-- Supports common Ubuntu layouts:
-  - LVM + ext4 root
-  - direct ext4 partition root
-  - direct XFS partition root
-- Adds clear storage commands:
+## Important commands
 
 ```bash
+./install-erpnext-dev.sh first-run
+./install-erpnext-dev.sh public-vm-quickstart
+./install-erpnext-dev.sh local-dev-quickstart
+./install-erpnext-dev.sh set-domain
+./install-erpnext-dev.sh show-config
 ./install-erpnext-dev.sh storage-status
 ./install-erpnext-dev.sh expand-root-storage
-./install-erpnext-dev.sh verify-storage
+./install-erpnext-dev.sh verify-access
+./install-erpnext-dev.sh local-ssl-wizard
+./install-erpnext-dev.sh app-install-wizard
+./install-erpnext-dev.sh app-compatibility
+./install-erpnext-dev.sh production-readiness
+./install-erpnext-dev.sh production-plan
+./install-erpnext-dev.sh production-ssl-wizard
+./install-erpnext-dev.sh security-hardening-wizard
+./install-erpnext-dev.sh vm-firewall-status
+./install-erpnext-dev.sh fail2ban-status
+./install-erpnext-dev.sh doctor
+./install-erpnext-dev.sh doctor --plain
+./install-erpnext-dev.sh doctor --json
+./install-erpnext-dev.sh support-bundle
+./install-erpnext-dev.sh next-step
 ```
 
-## Local domain flow
+## v0.9.12 focus
 
-After setup, run the shown `/etc/hosts` command on the HOST machine, not inside the VM.
+v0.9.12 adds first-run onboarding and one-command quickstarts. Users can now start from GitHub with a single command that opens a guided wizard. Public VM setup prompts for the real ERPNext domain, saves it to `/etc/erpnext-dev-installer/config.env`, then guides the user through DNS planning, install, HTTPS provider selection, and security hardening. Local VM setup stays separate and uses `erp.test` defaults to reduce prompts.
 
-Example:
+New commands:
 
 ```bash
-sudo sed -i '/[[:space:]]erp08\.test$/d' /etc/hosts
-echo "192.168.122.181 erp08.test" | sudo tee -a /etc/hosts
+./install-erpnext-dev.sh first-run
+./install-erpnext-dev.sh public-vm-quickstart
+./install-erpnext-dev.sh local-dev-quickstart
+./install-erpnext-dev.sh set-domain
+./install-erpnext-dev.sh show-config
 ```
 
-Then test from the host:
+## v0.9.11 focus
+
+v0.9.11 improves terminal UX for small default terminal windows. It adds a compact categorized help screen, a shorter main menu, quieter production-domain workflows, and bottom-of-command result summaries for UFW and Fail2Ban actions so users do not need to scroll upward to confirm what happened.
+
+UX principles now used by the installer:
+
+- important result summaries appear at the bottom after actions complete
+- menus stay short and grouped by task
+- long explanations stay in guide/status commands
+- production-domain commands do not repeatedly warn that `.test` is recommended for local development
+- security/status commands distinguish local VM listeners from external cloud-firewall exposure
+
+Important UX/status commands:
 
 ```bash
-curl -I http://erp08.test:8000
+./install-erpnext-dev.sh help
+./install-erpnext-dev.sh menu
+./install-erpnext-dev.sh security-hardening-wizard
+./install-erpnext-dev.sh vm-firewall-status
+./install-erpnext-dev.sh firewall-hardening-status
 ```
 
-## Local SSL flow
+## v0.9.10 focus
 
-Inside the VM:
+v0.9.10 adds optional VM-level hardening with UFW and Fail2Ban. The new safe default UFW profile denies incoming traffic by default, allows outgoing traffic, allows `22/80/443`, and does not allow backend ports `8000/9000/11000/13000`. SSH remains open at the UFW layer by default to avoid lockout caused by dynamic admin IPs; SSH IP restriction should normally be enforced in the Hetzner Cloud Firewall. Fail2Ban can be enabled for the `sshd` jail to reduce repeated unauthorized SSH login attempts.
+
+New commands:
 
 ```bash
-./install-erpnext-dev.sh create-self-signed-local-cert
-./install-erpnext-dev.sh configure-local-ssl
-./install-erpnext-dev.sh verify-local-ssl
+./install-erpnext-dev.sh vm-firewall-plan
+./install-erpnext-dev.sh configure-vm-firewall
+./install-erpnext-dev.sh vm-firewall-status
+./install-erpnext-dev.sh configure-fail2ban
+./install-erpnext-dev.sh fail2ban-status
+./install-erpnext-dev.sh security-hardening-wizard
+./install-erpnext-dev.sh ufw-ssh-admin-only   # advanced, lockout risk
 ```
 
-Host tests:
+v0.9.9 improves firewall hardening output after the first real Hetzner + Cloudflare production test. `firewall-hardening-status` now clearly separates **local listeners inside the VM** from **external exposure controlled by the Hetzner Cloud Firewall**. It no longer implies that `8000/9000` are publicly reachable just because Bench and Socket.io are bound locally; instead it gives workstation-side validation commands to confirm those ports are blocked externally.
+
+v0.9.8 added Cloudflare-aware SSL status and post-HTTPS firewall hardening checks. When Cloudflare Origin CA is active and DNS returns Cloudflare IPs instead of the origin VM IP, `production-ssl-status` now treats that as expected instead of warning.
+
+v0.9.7 fixed and improved the Cloudflare Origin CA paste workflow. The installer now stops reading the certificate automatically at `-----END CERTIFICATE-----` and stops reading the private key automatically at `-----END PRIVATE KEY-----`, `-----END RSA PRIVATE KEY-----`, or `-----END EC PRIVATE KEY-----`. Artificial `END_CERT` and `END_KEY` markers are no longer required.
+
+v0.9.6 added the guided production SSL provider workflow. The installer can help choose between direct Let's Encrypt HTTPS and Cloudflare Origin CA for Cloudflare Full (strict).
+
+The Cloudflare Origin CA path can prompt for the Origin Certificate and Private Key, validate that they match, install them safely under `/etc/ssl/cloudflare-origin`, back up the existing managed Nginx production config, and switch Nginx to the Cloudflare origin certificate.
+
+v0.9.5 remains included as the Let's Encrypt staging-to-production hotfix. It detects installed Let's Encrypt staging certificates and forces replacement with a real production certificate when `LETSENCRYPT_STAGING` is not enabled.
+
+It still does **not** change DNS or firewall rules automatically. Keep Hetzner firewall changes manual: allow `80/443`, then restrict/close public `8000/9000` only after HTTPS is verified.
+
+Run:
 
 ```bash
-curl -I http://erp08.test
-curl -kI https://erp08.test
-curl -I http://erp08.test:8000
+./install-erpnext-dev.sh production-readiness
+./install-erpnext-dev.sh production-plan
+./install-erpnext-dev.sh production-ssl-wizard
+./install-erpnext-dev.sh security-hardening-wizard
+./install-erpnext-dev.sh vm-firewall-status
+./install-erpnext-dev.sh fail2ban-status
+./install-erpnext-dev.sh production-domain-plan
+./install-erpnext-dev.sh public-vm-readiness
+./install-erpnext-dev.sh production-ssl-plan
+./install-erpnext-dev.sh production-firewall-plan
+./install-erpnext-dev.sh firewall-hardening-status
+./install-erpnext-dev.sh vm-firewall-plan
+./install-erpnext-dev.sh configure-vm-firewall
+./install-erpnext-dev.sh vm-firewall-status
+./install-erpnext-dev.sh configure-fail2ban
+./install-erpnext-dev.sh fail2ban-status
+./install-erpnext-dev.sh security-hardening-wizard
+./install-erpnext-dev.sh production-ssl-wizard
+./install-erpnext-dev.sh configure-production-ssl
+./install-erpnext-dev.sh configure-cloudflare-origin-ssl
+./install-erpnext-dev.sh cloudflare-origin-ssl-status
+./install-erpnext-dev.sh production-ssl-status
 ```
 
-For browser-trusted local SSL, use:
+`production-readiness` checks CPU, RAM, disk, install/runtime/service state, production domain configuration, local SSL assumptions, and backup readiness. It classifies the VM as dev-only, production candidate, or not recommended.
+
+`production-plan` prints the planning checklist for architecture, domain, DNS/network path, SSL, backups, and hardening.
+
+`production-domain-plan` prints a structured DNS/domain plan, including the local `.test` site, planned production domain, recommended A record, provider notes, and warnings when the current VM IP is private/NAT.
+
+`public-vm-readiness` checks the public VM shape: domain resolution, install/runtime state, service/autostart state, Nginx, SSL readiness, backups, HTTP reachability on `:8000`, and current listeners.
+
+`production-ssl-plan` separates development SSL from production SSL and explains the recommended path for a public VM: DNS-only first, Let's Encrypt for the real domain, Nginx on `80/443`, then closing or restricting public `:8000`.
+
+`production-firewall-plan` prints the intended Hetzner/edge firewall posture: SSH restricted, `80/443` public, `8000` temporary/restricted, and Redis/socket/internal ports closed publicly.
+
+`firewall-hardening-status` checks local listeners after HTTPS is working and explains that the Hetzner Cloud Firewall controls external exposure. It confirms Redis ports are local-only or closed, marks backend `8000/9000` listeners as internal backend listeners to validate externally, and prints workstation-side curl tests for the origin IP. It does not change firewall rules automatically.
+
+## v0.8.24 optional app compatibility
+
+Check the optional app matrix with:
 
 ```bash
-./install-erpnext-dev.sh mkcert-guide
-./install-erpnext-dev.sh browser-trust-guide
+./install-erpnext-dev.sh app-compatibility
 ```
+
+The compatibility check shows:
+
+- detected Frappe branch
+- detected ERPNext branch
+- target optional app branch
+- current app install/download state
+- compatibility status and recommendation
+
+The app install wizard also shows a compact compatibility snapshot before the menu, and each app install shows a detailed preflight card before confirmation. Moving branches such as `main` and experimental branches such as `develop` are clearly marked with warnings.
+
+Branch overrides remain available:
+
+```bash
+CRM_BRANCH=main
+HRMS_BRANCH=version-16
+HELPDESK_BRANCH=main
+TELEPHONY_BRANCH=develop
+INSIGHTS_BRANCH=main
+```
+
+
+## Production SSL provider wizard
+
+Use the provider wizard when you want a smooth SSL choice instead of remembering separate commands:
+
+```bash
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh production-ssl-wizard
+```
+
+Options:
+
+1. Let's Encrypt directly on the VM. Best when `erp.flowmaya.com` is DNS-only while issuing the certificate.
+2. Cloudflare Origin CA. Best when Cloudflare will stay proxied/orange-cloud and Cloudflare SSL/TLS mode will be `Full (strict)`.
+
+### Cloudflare Origin CA path
+
+First create an Origin CA certificate in Cloudflare:
+
+```text
+Cloudflare dashboard -> SSL/TLS -> Origin Server -> Create Certificate
+Hostname: erp.flowmaya.com
+```
+
+Cloudflare shows two values:
+
+- Origin Certificate
+- Private Key
+
+Then run:
+
+```bash
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh configure-cloudflare-origin-ssl
+```
+
+The script will ask you to confirm that the certificate has been generated, then prompts you to paste the certificate and private key. The pasted input is not printed to the installer log.
+
+For paste input, paste the exact PEM blocks from Cloudflare:
+
+```text
+-----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----
+```
+
+and:
+
+```text
+-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----
+```
+
+The installer detects the real PEM ending lines automatically. Do not add `END_CERT` or `END_KEY`.
+
+For file-based input instead of paste prompts:
+
+```bash
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com CLOUDFLARE_ORIGIN_CERT_FILE=/root/cf-origin.pem CLOUDFLARE_ORIGIN_KEY_FILE=/root/cf-origin.key ./install-erpnext-dev.sh configure-cloudflare-origin-ssl
+```
+
+After installation, set Cloudflare:
+
+```text
+DNS record: erp.flowmaya.com -> Proxied / orange-cloud
+SSL/TLS mode: Full (strict)
+```
+
+Check with:
+
+```bash
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh cloudflare-origin-ssl-status
+```
+
+Cloudflare Origin CA certificates are not meant to be trusted directly by browsers. Direct DNS-only access to the origin may show a certificate warning; browser traffic should go through Cloudflare.
+
+## Production HTTPS on a public VM
+
+After the public VM is installed, DNS points to the VM, backups are created, and a provider snapshot exists, configure HTTPS with:
+
+```bash
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh configure-production-ssl
+```
+
+Optional environment variables:
+
+```bash
+LETSENCRYPT_EMAIL=admin@example.com
+LETSENCRYPT_STAGING=true   # dry-run/staging certificate test
+```
+
+
+### Staging-to-production certificate replacement
+
+If you first tested with:
+
+```bash
+LETSENCRYPT_STAGING=true SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh configure-production-ssl
+```
+
+then switch to the real certificate with:
+
+```bash
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com LETSENCRYPT_EMAIL=admin@example.com ./install-erpnext-dev.sh configure-production-ssl
+```
+
+v0.9.5 detects the installed staging issuer and adds `--force-renewal` automatically so Certbot replaces the staging certificate with a trusted production certificate.
+
+Check status with:
+
+```bash
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh production-ssl-status
+```
+
+Rollback the managed Nginx site without deleting certificates or stopping ERPNext:
+
+```bash
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh disable-production-ssl
+```
+
+After `https://erp.flowmaya.com` works, restrict or close public access to `8000` and `9000` at the Hetzner firewall.
+
+## Support bundle
+
+Create a redacted support archive with:
+
+```bash
+./install-erpnext-dev.sh support-bundle
+```
+
+The command creates an archive like:
+
+```text
+erpnext-dev-support-bundle-YYYYMMDD-HHMMSS.tar.gz
+```
+
+The bundle includes `doctor-plain.txt`, `doctor.json`, JSON validation, system/service/port/storage/SSL/Bench status, recent errors, and a manifest.
+
+The support bundle intentionally excludes credential files, private keys, raw `site_config.json` secrets, tokens, and passwords. Bundle text files are also passed through a redaction step before packaging.
+
+## Diagnostics
+
+The regular `doctor` command shows the existing full health report:
+
+```bash
+./install-erpnext-dev.sh doctor
+```
+
+For copy/paste support output without ANSI colors, use:
+
+```bash
+./install-erpnext-dev.sh doctor --plain
+```
+
+For structured tooling and support-bundle generation, use:
+
+```bash
+./install-erpnext-dev.sh doctor --json
+```
+
+The plain and JSON diagnostic modes intentionally exclude secrets, passwords, tokens, private keys, and credential file contents. They report paths and presence checks only.
+
+## Local SSL
+
+For quick local HTTPS:
+
+```bash
+./install-erpnext-dev.sh local-ssl-wizard
+```
+
+Self-signed certificates are useful for testing. For trusted browser SSL, use `mkcert` on the host and install the generated cert/key into the VM.
+
+Typical trusted replacement flow:
+
+```bash
+# on the HOST
+mkcert -install
+mkcert -cert-file erp.test.crt -key-file erp.test.key erp.test VM_IP localhost 127.0.0.1
+scp erp.test.crt erp.test.key USER@VM_IP:/tmp/
+
+# inside the VM
+./install-erpnext-dev.sh local-ssl-wizard
+```
+
+Existing VM cert/key files are backed up before replacement.
 
 ## Optional apps
 
-Install optional apps only after the base install and access are verified:
+Use the checkpoint workflow:
 
 ```bash
-./install-erpnext-dev.sh app-library
+./install-erpnext-dev.sh app-compatibility
+./install-erpnext-dev.sh app-install-wizard
 ```
 
-Available app commands include:
-
-```bash
-./install-erpnext-dev.sh install-crm
-./install-erpnext-dev.sh install-hrms
-./install-erpnext-dev.sh install-helpdesk
-./install-erpnext-dev.sh install-insights
-```
-
-## Health checks
-
-```bash
-./install-erpnext-dev.sh site-config
-./install-erpnext-dev.sh storage-status
-./install-erpnext-dev.sh runtime-status
-./install-erpnext-dev.sh ssl-status
-./install-erpnext-dev.sh doctor
-```
+The wizard shows a preflight, a compatibility snapshot, backup checkpoint prompts, one-app-at-a-time installation, and post-app validation.

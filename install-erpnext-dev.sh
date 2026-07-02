@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.8.13"
+SCRIPT_VERSION="0.9.12"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -29,6 +29,7 @@ PRODUCTION_DOMAIN="${PRODUCTION_DOMAIN:-}"
 PRODUCTION_SSL_MODE="${PRODUCTION_SSL_MODE:-planned}"
 AUTO_START="${AUTO_START:-prompt}"
 ENABLE_AUTOSTART="${ENABLE_AUTOSTART:-prompt}"
+APP_BACKUP_BEFORE_INSTALL="${APP_BACKUP_BEFORE_INSTALL:-prompt}"
 ERPNEXT_SERVICE_NAME="${ERPNEXT_SERVICE_NAME:-erpnext-dev.service}"
 READY_TIMEOUT="${READY_TIMEOUT:-90}"
 READY_INTERVAL="${READY_INTERVAL:-5}"
@@ -38,6 +39,12 @@ LEGACY_CONFIG_FILE="${LEGACY_CONFIG_FILE:-${FRAPPE_HOME}/erpnext-dev-config.env}
 SSL_CERT_DIR="${SSL_CERT_DIR:-/etc/erpnext-dev-ssl}"
 SSL_NGINX_CONF_DIR="${SSL_NGINX_CONF_DIR:-/etc/nginx}"
 SSL_REDIRECT_HTTP="${SSL_REDIRECT_HTTP:-true}"
+LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
+LETSENCRYPT_STAGING="${LETSENCRYPT_STAGING:-false}"
+PRODUCTION_SSL_WEBROOT="${PRODUCTION_SSL_WEBROOT:-/var/www/erpnext-production-acme}"
+CLOUDFLARE_ORIGIN_DIR="${CLOUDFLARE_ORIGIN_DIR:-/etc/ssl/cloudflare-origin}"
+CLOUDFLARE_ORIGIN_CERT_FILE="${CLOUDFLARE_ORIGIN_CERT_FILE:-}"
+CLOUDFLARE_ORIGIN_KEY_FILE="${CLOUDFLARE_ORIGIN_KEY_FILE:-}"
 
 FRAPPE_BRANCH="${FRAPPE_BRANCH:-version-16}"
 ERPNEXT_BRANCH="${ERPNEXT_BRANCH:-version-16}"
@@ -51,7 +58,10 @@ ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 
 ASSUME_YES=0
 ACTION=""
-LOG_FILE="/tmp/erpnext-dev-installer-$(date +%Y%m%d-%H%M%S).log"
+DOCTOR_FORMAT="human"
+LOG_DIR="${LOG_DIR:-/tmp}"
+LOG_FILE="${LOG_FILE:-${LOG_DIR}/erpnext-dev-installer-$(date +%Y%m%d-%H%M%S).log}"
+LOCK_FILE="${LOCK_FILE:-/tmp/erpnext-dev-installer.lock}"
 
 if [[ -t 1 ]]; then
   BOLD="\033[1m"
@@ -71,6 +81,11 @@ else
   RESET=""
 fi
 
+# Keep logs private because install output may include sensitive operational details.
+mkdir -p "$LOG_DIR" 2>/dev/null || true
+: > "$LOG_FILE" || { echo "ERROR: Cannot write log file: $LOG_FILE" >&2; exit 1; }
+chmod 600 "$LOG_FILE" 2>/dev/null || true
+
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 log() { echo -e "\n${BLUE}==>${RESET} ${BOLD}$*${RESET}"; }
@@ -78,6 +93,30 @@ ok() { echo -e "${GREEN}OK:${RESET} $*"; }
 warn() { echo -e "${YELLOW}WARN:${RESET} $*"; }
 err() { echo -e "${RED}ERROR:${RESET} $*" >&2; }
 fail() { err "$*"; echo "Log file: $LOG_FILE" >&2; exit 1; }
+
+acquire_installer_lock() {
+  # Prevent two setup/repair/service commands from changing the same VM at once.
+  exec 200>"$LOCK_FILE"
+  chmod 600 "$LOCK_FILE" 2>/dev/null || true
+  if ! flock -n 200; then
+    err "Another installer task is already running."
+    echo "Lock file: $LOCK_FILE" >&2
+    echo "Wait for it to finish, or remove the lock only if you are sure no installer is running." >&2
+    exit 1
+  fi
+}
+
+action_requires_lock() {
+  local action="${1:-menu}"
+  case "$action" in
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
 
 status_line() {
@@ -92,6 +131,29 @@ status_line() {
     INFO) printf "  %-28s ${BLUE}%-7s${RESET} %s\n" "$label" "$state" "$message" ;;
     *) printf "  %-28s %-7s %s\n" "$label" "$state" "$message" ;;
   esac
+}
+
+ui_box_start() {
+  echo
+  echo "============================================================"
+  echo "$1"
+  echo "============================================================"
+}
+
+ui_box_end() {
+  echo "============================================================"
+}
+
+ui_next() {
+  echo
+  echo "Next:"
+  printf '  %s\n' "$@"
+}
+
+ui_note() {
+  echo
+  echo "Note:"
+  printf '  %s\n' "$@"
 }
 
 validate_site_name_value() {
@@ -128,7 +190,14 @@ validate_site_name_value() {
 
 maybe_warn_site_name() {
   local name="$1"
+
+  # Public/production-domain workflows intentionally use real hostnames.
+  # Keep this quiet there so small terminals are not filled with repeated
+  # local-development warnings.
   if [[ "$name" != *.test ]]; then
+    if [[ -n "${PRODUCTION_DOMAIN:-}" || "${DEPLOYMENT_MODE:-development}" != "development" ]]; then
+      return 0
+    fi
     warn "For local development, .test is recommended. Current site name: ${name}"
   fi
 }
@@ -989,6 +1058,18 @@ export PATH="$HOME/.local/bin:$PATH"; export NVM_DIR="$HOME/.nvm"; if [ -s "$NVM
 EOF_PREFIX
 }
 
+frappe_login_bash() {
+  # Read a Bash script from stdin and execute it as the frappe user.
+  # This must work both when the installer is run as root and when it is run
+  # by a sudo-capable non-root user. Do not prefix sudo options with an empty
+  # $SUDO value; root would otherwise try to execute "-H" as a command.
+  if [[ "${EUID}" -eq 0 ]]; then
+    su - "$FRAPPE_USER" -s /bin/bash
+  else
+    sudo -H -u "$FRAPPE_USER" bash
+  fi
+}
+
 run_as_frappe() {
   local cmd="$1"
   local prefix
@@ -1083,14 +1164,12 @@ check_resources() {
 
 bytes_to_gib() {
   local bytes="${1:-0}"
-  python3 - "$bytes" <<'PY_GIB'
-import sys
-try:
-    b = int(float(sys.argv[1]))
-except Exception:
-    b = 0
-print(f"{round(b / (1024 ** 3))}G")
-PY_GIB
+
+  if [[ "$bytes" =~ ^[0-9]+$ ]]; then
+    awk -v b="$bytes" 'BEGIN { printf "%.0fG\n", b / 1073741824 }'
+  else
+    echo "0G"
+  fi
 }
 
 storage_part_number() {
@@ -1119,6 +1198,50 @@ storage_parent_disk() {
 }
 
 
+
+
+storage_partition_tail_free_bytes() {
+  local disk_dev="$1"
+  local part_dev="$2"
+  local disk_name part_name sector_size disk_sectors part_start part_sectors part_end tail_sectors
+
+  [[ -n "$disk_dev" && -n "$part_dev" ]] || { echo 0; return 0; }
+
+  disk_name="$(basename "$disk_dev")"
+  part_name="$(basename "$part_dev")"
+
+  [[ -r "/sys/class/block/${disk_name}/size" && -r "/sys/class/block/${part_name}/start" && -r "/sys/class/block/${part_name}/size" ]] || {
+    echo 0
+    return 0
+  }
+
+  sector_size="$(cat "/sys/class/block/${disk_name}/queue/logical_block_size" 2>/dev/null || echo 512)"
+  disk_sectors="$(cat "/sys/class/block/${disk_name}/size" 2>/dev/null || echo 0)"
+  part_start="$(cat "/sys/class/block/${part_name}/start" 2>/dev/null || echo 0)"
+  part_sectors="$(cat "/sys/class/block/${part_name}/size" 2>/dev/null || echo 0)"
+
+  [[ "$sector_size" =~ ^[0-9]+$ && "$disk_sectors" =~ ^[0-9]+$ && "$part_start" =~ ^[0-9]+$ && "$part_sectors" =~ ^[0-9]+$ ]] || {
+    echo 0
+    return 0
+  }
+
+  part_end=$((part_start + part_sectors))
+  if (( disk_sectors > part_end )); then
+    tail_sectors=$((disk_sectors - part_end))
+  else
+    tail_sectors=0
+  fi
+
+  echo $((tail_sectors * sector_size))
+}
+
+storage_partition_is_growable() {
+  local disk_dev="$1"
+  local part_dev="$2"
+  local tail_free
+  tail_free="$(storage_partition_tail_free_bytes "$disk_dev" "$part_dev")"
+  [[ "$tail_free" =~ ^[0-9]+$ ]] && (( tail_free > 1073741824 ))
+}
 
 storage_infer_disk_from_partition() {
   local part_dev="$1"
@@ -1149,106 +1272,191 @@ storage_root_lsblk_value() {
 }
 
 storage_detect_layout() {
-  local root_source root_source_real root_fstype root_type
-  local lv_path vg_name pv_lines pv_count pv_dev disk_dev part_num
-  local cand_lv cand_vg cand_real source_real pv_real pv_type root_pkname root_pkdev
+  # Generic root storage detector.
+  # This intentionally uses the exact proven Ubuntu/LVM repair path when it can
+  # derive it safely:
+  #   sgdisk -e <disk>; growpart <disk> <part>; pvresize <pv>; lvextend -r <lv>
+  # It must not hardcode /dev/vda3 or ubuntu-vg names.
+  python3 <<'PY_STORAGE_DETECT'
+import os
+import re
+import shlex
+import subprocess
+import sys
 
-  root_source="$(findmnt -n -o SOURCE / 2>/dev/null | head -n 1 || true)"
-  root_fstype="$(findmnt -n -o FSTYPE / 2>/dev/null | head -n 1 || true)"
-  [[ -n "$root_source" ]] || return 1
 
-  root_source_real="$(readlink -f "$root_source" 2>/dev/null || printf '%s\n' "$root_source")"
-  source_real="$root_source_real"
-  root_type="$(lsblk -no TYPE "$root_source" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
-  [[ -n "$root_type" ]] || root_type="$(lsblk -no TYPE "$root_source_real" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
+def run(cmd):
+    try:
+        return subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return ""
 
-  # Full-tree fallback: this is reliable for common Ubuntu LVM where root is a mapper
-  # device but the lsblk tree still shows the root LV parent as the PV partition.
-  root_pkname="$(lsblk -P -o NAME,TYPE,PKNAME,MOUNTPOINTS 2>/dev/null | awk 'index($0, "MOUNTPOINTS=\"/\"") {print; exit}' | sed -n 's/.*PKNAME="\([^"]*\)".*/\1/p')"
-  if [[ -n "$root_pkname" && -b "/dev/$root_pkname" ]]; then
-    root_pkdev="/dev/$root_pkname"
-  fi
 
-  if [[ "$root_type" == "lvm" || "$root_source" == /dev/mapper/* || "$root_source_real" == /dev/dm-* ]]; then
-    if ! command -v lvs >/dev/null 2>&1 || ! command -v pvs >/dev/null 2>&1; then
-      printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "LVM tools are not available"
-      return 0
-    fi
+def q(v):
+    return "" if v is None else str(v).strip()
 
-    # Resolve the mounted LV by comparing real device paths.
-    while IFS='|' read -r cand_lv cand_vg; do
-      cand_lv="$(printf '%s' "$cand_lv" | awk '{$1=$1; print}')"
-      cand_vg="$(printf '%s' "$cand_vg" | awk '{$1=$1; print}')"
-      [[ -n "$cand_lv" ]] || continue
-      cand_real="$(readlink -f "$cand_lv" 2>/dev/null || printf '%s\n' "$cand_lv")"
-      if [[ "$cand_lv" == "$root_source" || "$cand_lv" == "$root_source_real" || "$cand_real" == "$source_real" ]]; then
-        lv_path="$cand_lv"
-        vg_name="$cand_vg"
+
+def emit(**kv):
+    for k, v in kv.items():
+        if v is not None and str(v) != "":
+            print(f"{k}={v}")
+
+
+def parse_lsblk_p():
+    out = run(["lsblk", "-P", "-o", "NAME,KNAME,PATH,TYPE,PKNAME,PARTN,FSTYPE,MOUNTPOINTS,SIZE"])
+    rows = []
+    for line in out.splitlines():
+        try:
+            d = dict(re.findall(r'(\w+)="([^"]*)"', line))
+        except Exception:
+            d = {}
+        if d:
+            rows.append(d)
+    return rows
+
+
+def parent_disk_and_partnum(part_dev, rows):
+    part_dev = os.path.realpath(part_dev)
+    base = os.path.basename(part_dev)
+    row = None
+    for r in rows:
+        names = {r.get("NAME",""), r.get("KNAME",""), os.path.basename(r.get("PATH","") or "")}
+        if base in names or os.path.realpath(r.get("PATH","") or "/nonexistent") == part_dev:
+            row = r
+            break
+    partn = q(row.get("PARTN")) if row else ""
+    pk = q(row.get("PKNAME")) if row else ""
+    disk = f"/dev/{pk}" if pk else ""
+    if not partn:
+        m = re.search(r'p?(\d+)$', os.path.basename(part_dev))
+        if m:
+            partn = m.group(1)
+    if not disk:
+        # /dev/vda3, /dev/sda3, /dev/xvda3
+        m = re.match(r'^(/dev/[A-Za-z]+[A-Za-z0-9]*?)(\d+)$', part_dev)
+        if m:
+            disk = m.group(1)
+        # /dev/nvme0n1p3, /dev/mmcblk0p3
+        m = re.match(r'^(/dev/(?:nvme\d+n\d+|mmcblk\d+))p(\d+)$', part_dev)
+        if m:
+            disk = m.group(1)
+            partn = partn or m.group(2)
+    return disk, partn
+
+root_source = q(run(["findmnt", "-n", "-o", "SOURCE", "/"]).splitlines()[0] if run(["findmnt", "-n", "-o", "SOURCE", "/"]) else "")
+root_fs = q(run(["findmnt", "-n", "-o", "FSTYPE", "/"]).splitlines()[0] if run(["findmnt", "-n", "-o", "FSTYPE", "/"]) else "")
+if not root_source:
+    emit(LAYOUT="unknown", ROOT_SOURCE="unknown", ROOT_FS="unknown", REASON="could not read root mount source")
+    sys.exit(0)
+
+root_real = os.path.realpath(root_source)
+rows = parse_lsblk_p()
+root_row = None
+for r in rows:
+    mp = r.get("MOUNTPOINTS", "")
+    if mp == "/" or "/" in mp.split():
+        root_row = r
         break
-      fi
-    done < <(lvs --noheadings --separator '|' -o lv_path,vg_name 2>/dev/null || true)
 
-    [[ -n "$lv_path" ]] || lv_path="$root_source"
-    [[ -n "$vg_name" ]] || vg_name="$(lvs --noheadings -o vg_name "$lv_path" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
+root_type = q(root_row.get("TYPE")) if root_row else q(run(["lsblk", "-no", "TYPE", root_source]).splitlines()[0] if run(["lsblk", "-no", "TYPE", root_source]) else "")
 
-    if [[ -n "${root_pkdev:-}" ]]; then
-      pv_lines="$root_pkdev"
-    elif [[ -n "$vg_name" ]]; then
-      pv_lines="$(pvs --noheadings --separator '|' -o pv_name,vg_name 2>/dev/null \
-        | awk -F'|' -v vg="$vg_name" '{gsub(/^[ \t]+|[ \t]+$/, "", $1); gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($2 == vg) print $1}' \
-        | sed -E 's/\([0-9]+\)//g' | sort -u || true)"
-    fi
+is_lvm = root_type == "lvm" or root_source.startswith("/dev/mapper/") or root_real.startswith("/dev/dm-")
 
-    pv_count="$(printf '%s\n' "$pv_lines" | awk 'NF {c++} END {print c+0}')"
+if is_lvm:
+    if not run(["bash", "-lc", "command -v lvs && command -v pvs && command -v vgs"]):
+        emit(LAYOUT="unknown", ROOT_SOURCE=root_source, ROOT_FS=root_fs, REASON="LVM tools are not available")
+        sys.exit(0)
 
-    if [[ "$pv_count" -eq 1 ]]; then
-      pv_dev="$(printf '%s\n' "$pv_lines" | awk 'NF {print $1; exit}' | sed -E 's/\([0-9]+\)//g')"
-      pv_dev="$(readlink -f "$pv_dev" 2>/dev/null || printf '%s\n' "$pv_dev")"
+    # Read LVs, matching either /dev/mapper path, canonical /dev/VG/LV, or dm-* real path.
+    lv_out = run(["lvs", "--noheadings", "--separator", "|", "-o", "lv_path,vg_name,devices"])
+    lv_path = ""
+    vg_name = ""
+    devices = ""
+    first_lv = None
+    for line in lv_out.splitlines():
+        parts = [x.strip() for x in line.split("|", 2)]
+        if len(parts) < 2:
+            continue
+        cand_lv, cand_vg = parts[0], parts[1]
+        cand_devices = parts[2] if len(parts) > 2 else ""
+        if not first_lv:
+            first_lv = (cand_lv, cand_vg, cand_devices)
+        cand_real = os.path.realpath(cand_lv)
+        if cand_lv == root_source or cand_lv == root_real or cand_real == root_real:
+            lv_path, vg_name, devices = cand_lv, cand_vg, cand_devices
+            break
+    if not lv_path and first_lv:
+        # If there is only one LV on a simple dev VM, this is usually root.
+        lvs_count = len([x for x in lv_out.splitlines() if x.strip()])
+        if lvs_count == 1:
+            lv_path, vg_name, devices = first_lv
+    if not lv_path:
+        lv_path = root_source
+    if not vg_name:
+        vg_name = q(run(["lvs", "--noheadings", "-o", "vg_name", lv_path]).splitlines()[0] if run(["lvs", "--noheadings", "-o", "vg_name", lv_path]) else "")
 
-      pv_type="$(lsblk -no TYPE "$pv_dev" 2>/dev/null | head -n 1 | tr -d '[:space:]' || true)"
-      disk_dev="$(storage_parent_disk "$pv_dev" 2>/dev/null || true)"
-      part_num="$(lsblk -no PARTN "$pv_dev" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
-      [[ -n "$part_num" ]] || part_num="$(storage_part_number "$pv_dev" 2>/dev/null || true)"
-      [[ -n "$disk_dev" ]] || disk_dev="$(storage_infer_disk_from_partition "$pv_dev" 2>/dev/null || true)"
+    # Prefer the PV from LV devices, e.g. /dev/vda3(0). This is the exact value that
+    # proved correct manually on Ubuntu Server clones.
+    pv_dev = ""
+    m = re.search(r'(/dev/[^\s,()]+)(?:\(\d+\))?', devices or "")
+    if m:
+        pv_dev = m.group(1)
 
-      if [[ -n "$disk_dev" && -n "$part_num" && -b "$disk_dev" && -b "$pv_dev" ]]; then
-        printf 'LAYOUT=lvm\nROOT_SOURCE=%s\nROOT_FS=%s\nLV_PATH=%s\nVG_NAME=%s\nPV_DEV=%s\nPART_DEV=%s\nDISK_DEV=%s\nPART_NUM=%s\nPV_TYPE=%s\n' \
-          "$root_source" "$root_fstype" "$lv_path" "$vg_name" "$pv_dev" "$pv_dev" "$disk_dev" "$part_num" "${pv_type:-unknown}"
-        return 0
-      fi
+    # Fallback: root lsblk row often has PKNAME=vda3 for LVM roots.
+    if not pv_dev and root_row and q(root_row.get("PKNAME")):
+        maybe = "/dev/" + q(root_row.get("PKNAME"))
+        if os.path.exists(maybe):
+            pv_dev = maybe
 
-      # Return LVM even without a growable partition. lvextend can still use existing VG free extents.
-      printf 'LAYOUT=lvm\nROOT_SOURCE=%s\nROOT_FS=%s\nLV_PATH=%s\nVG_NAME=%s\nPV_DEV=%s\nREASON=%s\n' \
-        "$root_source" "$root_fstype" "$lv_path" "$vg_name" "$pv_dev" "LVM PV could not be tied to a disk partition; only existing VG free space can be used automatically"
-      return 0
-    fi
+    # Fallback: if the VG has exactly one PV, use it.
+    if not pv_dev and vg_name:
+        pv_out = run(["pvs", "--noheadings", "--separator", "|", "-o", "pv_name,vg_name"])
+        pvs = []
+        for line in pv_out.splitlines():
+            parts = [x.strip() for x in line.split("|")]
+            if len(parts) >= 2 and parts[1] == vg_name:
+                pvs.append(re.sub(r'\(\d+\)$', '', parts[0]))
+        if len(set(pvs)) == 1:
+            pv_dev = sorted(set(pvs))[0]
 
-    if [[ "$pv_count" -gt 1 ]]; then
-      printf 'LAYOUT=lvm\nROOT_SOURCE=%s\nROOT_FS=%s\nLV_PATH=%s\nVG_NAME=%s\nREASON=%s\n' "$root_source" "$root_fstype" "$lv_path" "$vg_name" "LVM has multiple PVs; only existing VG free space can be used automatically"
-    else
-      printf 'LAYOUT=lvm\nROOT_SOURCE=%s\nROOT_FS=%s\nLV_PATH=%s\nVG_NAME=%s\nREASON=%s\n' "$root_source" "$root_fstype" "$lv_path" "$vg_name" "could not trace LVM root to a physical partition; only existing VG free space can be used automatically"
-    fi
-    return 0
-  fi
+    disk_dev = ""
+    part_num = ""
+    if pv_dev:
+        pv_dev = os.path.realpath(pv_dev)
+        disk_dev, part_num = parent_disk_and_partnum(pv_dev, rows)
 
-  if [[ "$root_type" == "part" ]]; then
-    disk_dev="$(storage_parent_disk "$root_source_real" 2>/dev/null || true)"
-    part_num="$(lsblk -no PARTN "$root_source_real" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
-    [[ -n "$part_num" ]] || part_num="$(storage_part_number "$root_source_real" 2>/dev/null || true)"
-    [[ -n "$disk_dev" ]] || disk_dev="$(storage_infer_disk_from_partition "$root_source_real" 2>/dev/null || true)"
-    if [[ -n "$disk_dev" && -n "$part_num" ]]; then
-      printf 'LAYOUT=partition\nROOT_SOURCE=%s\nROOT_FS=%s\nPART_DEV=%s\nDISK_DEV=%s\nPART_NUM=%s\n' \
-        "$root_source_real" "$root_fstype" "$root_source_real" "$disk_dev" "$part_num"
-      return 0
-    fi
-  fi
+    # This is the supported automatic LVM path. Even if disk/part cannot be derived,
+    # lvextend can still consume existing VG free space safely.
+    emit(
+        LAYOUT="lvm",
+        ROOT_SOURCE=root_source,
+        ROOT_FS=root_fs,
+        LV_PATH=lv_path,
+        VG_NAME=vg_name,
+        PV_DEV=pv_dev,
+        PART_DEV=pv_dev,
+        DISK_DEV=disk_dev,
+        PART_NUM=part_num,
+        REASON="" if pv_dev else "could not identify LVM PV; only existing VG free space can be used automatically",
+    )
+    sys.exit(0)
 
-  printf 'LAYOUT=unknown\nROOT_SOURCE=%s\nROOT_FS=%s\nREASON=%s\n' "$root_source" "$root_fstype" "root device is not a supported partition or LVM layout"
+# Direct root partition case.
+part_dev = root_real
+if root_type == "part" or (root_row and root_row.get("TYPE") == "part"):
+    disk_dev, part_num = parent_disk_and_partnum(part_dev, rows)
+    emit(LAYOUT="partition", ROOT_SOURCE=part_dev, ROOT_FS=root_fs, PART_DEV=part_dev, DISK_DEV=disk_dev, PART_NUM=part_num)
+    sys.exit(0)
+
+emit(LAYOUT="unknown", ROOT_SOURCE=root_source, ROOT_FS=root_fs, REASON="root device is not a supported partition or LVM layout")
+PY_STORAGE_DETECT
   return 0
 }
 
 storage_eval() {
-  local data layout root_fs disk_dev part_dev lv_path vg_free_bytes disk_bytes part_bytes root_bytes can_expand reason
+  local data
+  local layout="" root_source="" root_fs="" disk_dev="" part_dev="" pv_dev="" lv_path="" vg_name="" reason=""
+  local root_bytes="0" disk_bytes="0" part_bytes="0" vg_free_bytes="0" tail_free_bytes="0" can_expand="no"
 
   data="$(storage_detect_layout 2>/dev/null || true)"
   [[ -n "$data" ]] || {
@@ -1256,51 +1464,77 @@ storage_eval() {
     return 0
   }
 
-  # shellcheck disable=SC2163
   while IFS='=' read -r k v; do
     case "$k" in
       LAYOUT) layout="$v" ;;
+      ROOT_SOURCE) root_source="$v" ;;
       ROOT_FS) root_fs="$v" ;;
       DISK_DEV) disk_dev="$v" ;;
       PART_DEV) part_dev="$v" ;;
+      PV_DEV) pv_dev="$v" ;;
       LV_PATH) lv_path="$v" ;;
+      VG_NAME) vg_name="$v" ;;
       REASON) reason="$v" ;;
     esac
   done <<< "$data"
 
   root_bytes="$(df -B1 / 2>/dev/null | awk 'NR==2 {print $2+0}' || echo 0)"
-  disk_bytes="0"
-  part_bytes="0"
-  vg_free_bytes="0"
-  can_expand="no"
 
-  if [[ -n "${disk_dev:-}" && -b "$disk_dev" ]]; then
-    disk_bytes="$(blockdev --getsize64 "$disk_dev" 2>/dev/null || echo 0)"
-  fi
-  if [[ -n "${part_dev:-}" && -b "$part_dev" ]]; then
-    part_bytes="$(blockdev --getsize64 "$part_dev" 2>/dev/null || echo 0)"
-  fi
-  if [[ "${layout:-}" == "lvm" && -n "${lv_path:-}" ]] && command -v vgs >/dev/null 2>&1; then
-    vg_free_bytes="$(vgs --noheadings --units b --nosuffix -o vg_free "$(lvs --noheadings -o vg_name "$lv_path" 2>/dev/null | awk 'NF {print $1; exit}')" 2>/dev/null | awk '{printf "%.0f", $1+0}' || echo 0)"
+  if [[ -n "$disk_dev" ]]; then
+    disk_bytes="$(lsblk -bndo SIZE "$disk_dev" 2>/dev/null | awk 'NR==1 {print $1+0}' || echo 0)"
   fi
 
-  # Recommend expansion if the backing disk is at least 4 GiB larger than the root partition,
-  # or if LVM already has at least 1 GiB free extents that can be assigned to root.
-  if [[ "$disk_bytes" =~ ^[0-9]+$ && "$part_bytes" =~ ^[0-9]+$ ]] && (( disk_bytes > part_bytes + 4294967296 )); then
-    can_expand="yes"
-  elif [[ "$vg_free_bytes" =~ ^[0-9]+$ ]] && (( vg_free_bytes > 1073741824 )); then
-    can_expand="yes"
-  elif [[ -z "${reason:-}" ]]; then
-    reason="root storage already appears to use the available disk"
+  if [[ -n "$part_dev" ]]; then
+    part_bytes="$(lsblk -bndo SIZE "$part_dev" 2>/dev/null | awk 'NR==1 {print $1+0}' || echo 0)"
+  fi
+
+  if [[ -n "$disk_dev" && -n "$part_dev" ]]; then
+    tail_free_bytes="$(storage_partition_tail_free_bytes "$disk_dev" "$part_dev")"
+  fi
+
+  if [[ "$layout" == "lvm" ]]; then
+    if [[ -z "$vg_name" && -n "$lv_path" ]]; then
+      vg_name="$(lvs --noheadings -o vg_name "$lv_path" 2>/dev/null | awk 'NF {print $1; exit}' || true)"
+    fi
+
+    if [[ -n "$vg_name" ]]; then
+      vg_free_bytes="$(vgs --noheadings --units b --nosuffix -o vg_free "$vg_name" 2>/dev/null | awk 'NF {printf "%.0f", $1+0; exit}' || echo 0)"
+    fi
+  fi
+
+  # Expansion is recommended only if there is usable free space:
+  # 1) LVM VG already has free extents, OR
+  # 2) the root partition/PV has free space after it at the end of the disk.
+  # Do not compare whole disk size to partition size. That falsely counts /boot,
+  # BIOS partitions, and earlier partition offsets as growable free space.
+  if [[ "$layout" == "lvm" ]]; then
+    if [[ "$vg_free_bytes" =~ ^[0-9]+$ ]] && (( vg_free_bytes > 1073741824 )); then
+      can_expand="yes"
+      reason="LVM has free space available"
+    elif [[ "$tail_free_bytes" =~ ^[0-9]+$ ]] && (( tail_free_bytes > 1073741824 )); then
+      can_expand="yes"
+      reason="LVM physical partition can grow into free disk space"
+    else
+      reason="root storage already appears to use available LVM/disk space"
+    fi
+  elif [[ "$layout" == "partition" ]]; then
+    if [[ "$tail_free_bytes" =~ ^[0-9]+$ ]] && (( tail_free_bytes > 1073741824 )); then
+      can_expand="yes"
+      reason="root partition can grow into free disk space"
+    else
+      reason="root partition already appears to use available disk space"
+    fi
+  else
+    can_expand="no"
+    reason="${reason:-storage layout is not supported for automatic expansion}"
   fi
 
   printf '%s\n' "$data"
-  printf 'ROOT_BYTES=%s\nDISK_BYTES=%s\nPART_BYTES=%s\nVG_FREE_BYTES=%s\nCAN_EXPAND=%s\nREASON=%s\n' \
-    "$root_bytes" "$disk_bytes" "$part_bytes" "$vg_free_bytes" "$can_expand" "${reason:-}"
+  printf 'ROOT_BYTES=%s\nDISK_BYTES=%s\nPART_BYTES=%s\nVG_FREE_BYTES=%s\nTAIL_FREE_BYTES=%s\nCAN_EXPAND=%s\nREASON=%s\n' \
+    "$root_bytes" "$disk_bytes" "$part_bytes" "$vg_free_bytes" "$tail_free_bytes" "$can_expand" "$reason"
 }
-
 show_storage_status() {
-  local data layout root_source root_fs disk_dev part_dev lv_path root_bytes disk_bytes vg_free_bytes can_expand reason
+  local data layout root_source root_fs disk_dev part_dev lv_path root_bytes disk_bytes vg_free_bytes tail_free_bytes can_expand reason
 
   data="$(storage_eval)"
   while IFS='=' read -r k v; do
@@ -1314,6 +1548,7 @@ show_storage_status() {
       ROOT_BYTES) root_bytes="$v" ;;
       DISK_BYTES) disk_bytes="$v" ;;
       VG_FREE_BYTES) vg_free_bytes="$v" ;;
+      TAIL_FREE_BYTES) tail_free_bytes="$v" ;;
       CAN_EXPAND) can_expand="$v" ;;
       REASON) reason="$v" ;;
     esac
@@ -1330,6 +1565,9 @@ show_storage_status() {
   [[ -n "${lv_path:-}" ]] && status_line "Root LV" "INFO" "${lv_path}"
   if [[ "${layout:-}" == "lvm" && "${vg_free_bytes:-0}" =~ ^[0-9]+$ && "${vg_free_bytes:-0}" -gt 0 ]]; then
     status_line "VG free" "INFO" "$(bytes_to_gib "${vg_free_bytes:-0}")"
+  fi
+  if [[ "${tail_free_bytes:-0}" =~ ^[0-9]+$ && "${tail_free_bytes:-0}" -gt 0 ]]; then
+    status_line "Growable disk tail" "INFO" "$(bytes_to_gib "${tail_free_bytes:-0}")"
   fi
   status_line "Root size" "INFO" "$(bytes_to_gib "${root_bytes:-0}")"
 
@@ -1362,7 +1600,7 @@ ensure_storage_tools() {
 expand_root_storage() {
   require_sudo
 
-  local data layout root_fs lv_path pv_dev part_dev disk_dev part_num vg_free_bytes can_expand reason
+  local data layout root_fs lv_path pv_dev part_dev disk_dev part_num vg_free_bytes tail_free_bytes can_expand reason
 
   data="$(storage_eval)"
   while IFS='=' read -r k v; do
@@ -1375,6 +1613,7 @@ expand_root_storage() {
       DISK_DEV) disk_dev="$v" ;;
       PART_NUM) part_num="$v" ;;
       VG_FREE_BYTES) vg_free_bytes="$v" ;;
+      TAIL_FREE_BYTES) tail_free_bytes="$v" ;;
       CAN_EXPAND) can_expand="$v" ;;
       REASON) reason="$v" ;;
     esac
@@ -1419,10 +1658,14 @@ expand_root_storage() {
   status_line "Layout" "INFO" "$layout"
 
   if [[ "${EXPAND_ROOT_CONFIRMED:-0}" != "1" && "$ASSUME_YES" -ne 1 ]]; then
-    if ! confirm "Expand root storage now?"; then
-      warn "Storage expansion skipped."
-      echo "============================================================"
-      return 0
+    if [[ -t 0 ]]; then
+      read -r -p "Expand root storage now? [Y/n]: " reply
+      reply="${reply:-Y}"
+      if ! [[ "$reply" =~ ^[Yy]$ ]]; then
+        warn "Storage expansion skipped."
+        echo "============================================================"
+        return 0
+      fi
     fi
   fi
 
@@ -1434,7 +1677,7 @@ expand_root_storage() {
       $SUDO apt-get install -y lvm2
     fi
 
-    if [[ -n "${disk_dev:-}" && -n "${part_num:-}" && -n "${part_dev:-}" ]]; then
+    if [[ -n "${disk_dev:-}" && -n "${part_num:-}" && -n "${part_dev:-}" && "${tail_free_bytes:-0}" =~ ^[0-9]+$ && "${tail_free_bytes:-0}" -gt 1073741824 ]]; then
       log "Growing partition ${part_dev}"
       if command -v sgdisk >/dev/null 2>&1; then
         $SUDO sgdisk -e "$disk_dev" >/dev/null 2>&1 || true
@@ -1446,6 +1689,8 @@ expand_root_storage() {
       $SUDO partprobe "$disk_dev" >/dev/null 2>&1 || true
       log "Growing LVM physical volume"
       $SUDO pvresize "${pv_dev:-$part_dev}"
+    elif [[ "${vg_free_bytes:-0}" =~ ^[0-9]+$ && "${vg_free_bytes:-0}" -gt 1073741824 ]]; then
+      warn "No growable disk tail detected. Using existing VG free space only."
     else
       warn "Could not safely grow the LVM physical partition. Using existing VG free space only."
     fi
@@ -1453,6 +1698,13 @@ expand_root_storage() {
     log "Extending root logical volume"
     $SUDO lvextend -r -l +100%FREE "$lv_path"
   else
+    if [[ ! "${tail_free_bytes:-0}" =~ ^[0-9]+$ || "${tail_free_bytes:-0}" -le 1073741824 ]]; then
+      status_line "Storage" "OK" "no partition growth needed"
+      echo "Root partition already appears to use available disk space."
+      echo "============================================================"
+      return 0
+    fi
+
     log "Growing partition ${part_dev}"
     if command -v sgdisk >/dev/null 2>&1; then
       $SUDO sgdisk -e "$disk_dev" >/dev/null 2>&1 || true
@@ -1481,6 +1733,34 @@ expand_root_storage() {
 
   ok "Root storage expansion completed"
   show_storage_status
+}
+
+storage_debug() {
+  echo
+  echo "============================================================"
+  echo "Storage Debug"
+  echo "============================================================"
+  echo "findmnt:"
+  findmnt -no SOURCE,FSTYPE,SIZE,AVAIL / || true
+  echo
+  echo "lsblk:"
+  lsblk -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINTS,PKNAME,PARTN || true
+  echo
+  echo "lvs:"
+  sudo lvs -o lv_path,vg_name,lv_size,devices 2>/dev/null || true
+  echo
+  echo "pvs:"
+  sudo pvs -o pv_name,vg_name,pv_size,pv_free 2>/dev/null || true
+  echo
+  echo "vgs:"
+  sudo vgs -o vg_name,vg_size,vg_free 2>/dev/null || true
+  echo
+  echo "detector:"
+  storage_detect_layout || true
+  echo
+  echo "evaluation:"
+  storage_eval || true
+  echo "============================================================"
 }
 
 verify_storage() {
@@ -1704,7 +1984,7 @@ EOF_HELPER
 install_frappe_stack_as_user() {
   log "Installing Node, Python, Bench, Frappe, and ERPNext as ${FRAPPE_USER}"
 
-  $SUDO -H -u "$FRAPPE_USER" bash <<EOF_USER
+  frappe_login_bash <<EOF_USER
 set -Eeuo pipefail
 
 export HOME="${FRAPPE_HOME}"
@@ -1945,6 +2225,176 @@ show_access_instructions() {
 
 
 
+
+verify_access() {
+  require_sudo
+
+  local vm_ip escaped_site direct_head friendly_head ip_head https_head
+  vm_ip="$(get_vm_ip)"
+  escaped_site="${SITE_NAME//./\\.}"
+
+  echo
+  echo "============================================================"
+  echo "Access Verification"
+  echo "============================================================"
+
+  if port_listens 8000; then
+    status_line "Bench web" "OK" "127.0.0.1:8000 listening"
+  else
+    status_line "Bench web" "WARN" "127.0.0.1:8000 not listening"
+  fi
+
+  if port_listens 9000; then
+    status_line "Socket.io" "OK" "127.0.0.1:9000 listening"
+  else
+    status_line "Socket.io" "INFO" "127.0.0.1:9000 not listening"
+  fi
+
+  direct_head="$(curl_head_status "http://127.0.0.1:8000/" "" "" "" || true)"
+  friendly_head="$(curl_head_status "http://${SITE_NAME}:8000/" "$SITE_NAME" 8000 "127.0.0.1" || true)"
+  ip_head="$(curl_head_status "http://${vm_ip}:8000/" "" "" "" || true)"
+
+  if [[ "$direct_head" == HTTP/* ]]; then
+    status_line "Local direct HTTP" "OK" "$direct_head"
+  else
+    status_line "Local direct HTTP" "WARN" "no response from http://127.0.0.1:8000"
+  fi
+
+  if [[ "$friendly_head" == HTTP/* ]]; then
+    status_line "Local site HTTP" "OK" "$friendly_head"
+  else
+    status_line "Local site HTTP" "WARN" "no response using ${SITE_NAME} host header"
+  fi
+
+  if [[ "$ip_head" == HTTP/* ]]; then
+    status_line "VM IP HTTP" "OK" "$ip_head"
+  else
+    status_line "VM IP HTTP" "INFO" "host-side test may still work if networking is correct"
+  fi
+
+  if port_listens 443; then
+    https_head="$(curl_head_status "https://${SITE_NAME}/" "$SITE_NAME" 443 "127.0.0.1" || true)"
+    [[ "$https_head" == HTTP/* ]] && status_line "Local HTTPS" "OK" "$https_head" || status_line "Local HTTPS" "WARN" "port 443 listens, but HTTPS did not respond cleanly"
+  else
+    status_line "Local HTTPS" "INFO" "not configured yet"
+  fi
+
+  echo
+  echo "Open from the HOST after /etc/hosts is set:"
+  echo "  http://${vm_ip}:8000"
+  echo "  http://${SITE_NAME}:8000"
+  echo
+  echo "HOST /etc/hosts command:"
+  echo "  sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts"
+  echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
+  echo
+  echo "HOST tests:"
+  echo "  curl -I http://${vm_ip}:8000"
+  echo "  curl -I http://${SITE_NAME}:8000"
+  echo "============================================================"
+}
+
+show_next_step() {
+  require_sudo
+
+  local vm_ip installed runtime auto data can_expand storage_reason storage_state ssl_state next_label next_command
+  vm_ip="$(get_vm_ip)"
+  installed="$(install_state 2>/dev/null || echo "Not installed")"
+  runtime="$(runtime_state 2>/dev/null || echo "Stopped")"
+  auto="$(autostart_state 2>/dev/null || echo "Not configured")"
+  data="$(storage_eval 2>/dev/null || true)"
+  can_expand="$(printf '%s\n' "$data" | awk -F= '$1=="CAN_EXPAND" {print $2; exit}')"
+  storage_reason="$(printf '%s\n' "$data" | awk -F= '$1=="REASON" {print $2; exit}')"
+  storage_state="OK"
+  ssl_state="not configured"
+
+  if [[ "${can_expand:-no}" == "yes" ]]; then
+    storage_state="recommended"
+  elif [[ -z "${can_expand:-}" ]]; then
+    storage_state="unknown"
+  fi
+
+  if ssl_is_configured 2>/dev/null; then
+    ssl_state="configured"
+  fi
+
+  echo
+  echo "============================================================"
+  echo "Next Step"
+  echo "============================================================"
+  status_line "Storage" "INFO" "${storage_state}${storage_reason:+ - ${storage_reason}}"
+  status_line "Install" "INFO" "$installed"
+  status_line "Runtime" "INFO" "$runtime"
+  status_line "Autostart" "INFO" "$auto"
+  status_line "Local SSL" "INFO" "$ssl_state"
+  echo
+
+  if [[ "${can_expand:-no}" == "yes" ]]; then
+    next_label="expand root storage"
+    next_command="./install-erpnext-dev.sh expand-root-storage"
+  else
+    case "$installed" in
+      "Not installed")
+        next_label="run guided setup"
+        next_command="./install-erpnext-dev.sh guided-setup"
+        ;;
+      "Incomplete")
+        next_label="repair or reinstall the environment"
+        next_command="./install-erpnext-dev.sh repair"
+        ;;
+      *)
+        if [[ "$runtime" != Running* ]]; then
+          next_label="start ERPNext"
+          next_command="./install-erpnext-dev.sh start"
+        elif [[ "$auto" != "Enabled" ]]; then
+          next_label="enable autostart so the VM recovers cleanly after reboot"
+          next_command="./install-erpnext-dev.sh enable-autostart"
+        elif [[ "$ssl_state" != "configured" ]]; then
+          next_label="configure local HTTPS"
+          next_command="./install-erpnext-dev.sh local-ssl-wizard"
+        else
+          next_label="install optional apps with a checkpoint"
+          next_command="./install-erpnext-dev.sh app-install-wizard"
+        fi
+        ;;
+    esac
+  fi
+
+  echo "Recommended next step: ${next_label}."
+  echo "  ${next_command}"
+  echo
+  echo "Useful checks:"
+  echo "  ./install-erpnext-dev.sh verify-access"
+  echo "  ./install-erpnext-dev.sh storage-status"
+  echo
+  echo "Open when running:"
+  echo "  http://${vm_ip}:8000"
+  echo "  http://${SITE_NAME}:8000"
+  if [[ "$ssl_state" == "configured" ]]; then
+    echo "  https://${SITE_NAME}"
+  fi
+  echo "============================================================"
+}
+
+run_guided_setup() {
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "Guided ERPNext Setup"
+  echo "============================================================"
+  echo "Flow: storage -> site name -> install -> service -> access."
+  echo "Keep this terminal open until setup finishes."
+  echo "============================================================"
+
+  run_install
+
+  echo
+  echo "Guided setup finished. Verifying local access state..."
+  verify_access
+  show_next_step
+}
+
 show_host_hosts_command() {
   local vm_ip escaped_site
   vm_ip="$(get_vm_ip)"
@@ -1975,6 +2425,243 @@ show_host_hosts_command() {
   echo "============================================================"
 }
 
+
+show_config_summary() {
+  require_sudo
+  local vm_ip prod_display mode_display ssl_display
+  vm_ip="$(get_vm_ip 2>/dev/null || echo unknown)"
+  prod_display="${PRODUCTION_DOMAIN:-not set}"
+  mode_display="${DEPLOYMENT_MODE:-development}"
+  ssl_display="${PRODUCTION_SSL_MODE:-planned}"
+
+  ui_box_start "Installer Config Summary"
+  status_line "Site" "INFO" "${SITE_NAME} (${SITE_NAME_SOURCE})"
+  status_line "Production domain" "$([[ -n "${PRODUCTION_DOMAIN:-}" ]] && echo OK || echo INFO)" "$prod_display"
+  status_line "Deployment mode" "INFO" "$mode_display"
+  status_line "SSL mode" "INFO" "$ssl_display"
+  status_line "VM IP" "INFO" "$vm_ip"
+  status_line "Config file" "INFO" "$CONFIG_FILE"
+  ui_box_end
+  ui_next "./install-erpnext-dev.sh setup-wizard" "./install-erpnext-dev.sh production-readiness"
+}
+
+prompt_and_save_public_domain() {
+  require_sudo
+
+  local current default_domain domain reply site_reply use_as_site
+  current="${PRODUCTION_DOMAIN:-}"
+  if [[ -z "$current" && "$SITE_NAME" != *.test && "$SITE_NAME" != *.local ]]; then
+    current="$SITE_NAME"
+  fi
+  default_domain="${current:-erp.company.com}"
+
+  ui_box_start "Set Public ERPNext Domain"
+  echo "Enter the real hostname users will open in the browser."
+  echo "Example: erp.flowmaya.com"
+  echo
+
+  while true; do
+    if [[ "$ASSUME_YES" -ne 1 ]]; then
+      read -r -p "Production domain [${default_domain}]: " domain || domain=""
+      domain="${domain:-$default_domain}"
+    else
+      domain="$default_domain"
+    fi
+    domain="${domain,,}"
+    if validate_production_domain_value "$domain" >/dev/null 2>&1; then
+      break
+    fi
+    echo "Invalid domain. Use a real hostname such as erp.company.com."
+  done
+
+  use_as_site="Y"
+  if [[ "$ASSUME_YES" -ne 1 ]]; then
+    read -r -p "Use ${domain} as the ERPNext site name too? [Y/n]: " reply || reply=""
+    reply="${reply:-Y}"
+    [[ "$reply" =~ ^[Nn]$ ]] && use_as_site="N"
+  fi
+
+  PRODUCTION_DOMAIN="$domain"
+  DEPLOYMENT_MODE="public-vm"
+  PRODUCTION_SSL_MODE="planned"
+
+  if [[ "$use_as_site" == "Y" ]]; then
+    SITE_NAME="$domain"
+    SITE_NAME_SOURCE="domain wizard"
+  else
+    while true; do
+      if [[ "$ASSUME_YES" -ne 1 ]]; then
+        read -r -p "ERPNext site name [${SITE_NAME}]: " site_reply || site_reply=""
+        site_reply="${site_reply:-$SITE_NAME}"
+      else
+        site_reply="$SITE_NAME"
+      fi
+      site_reply="${site_reply,,}"
+      if validate_site_name_value "$site_reply" >/dev/null 2>&1; then
+        SITE_NAME="$site_reply"
+        SITE_NAME_SOURCE="domain wizard"
+        break
+      fi
+      echo "Invalid site name. Use a hostname without URL, port, spaces, or slashes."
+    done
+  fi
+
+  write_dev_config_file
+  SITE_NAME_SOURCE="saved config"
+
+  ui_box_start "Result Summary"
+  status_line "Production domain" "OK" "$PRODUCTION_DOMAIN"
+  status_line "ERPNext site" "OK" "$SITE_NAME"
+  status_line "Deployment mode" "INFO" "$DEPLOYMENT_MODE"
+  status_line "Saved config" "OK" "$CONFIG_FILE"
+  ui_box_end
+  ui_next "./install-erpnext-dev.sh public-vm-quickstart" "./install-erpnext-dev.sh production-domain-plan"
+}
+
+set_local_dev_defaults() {
+  require_sudo
+
+  if [[ "$SITE_NAME_ENV_PROVIDED" -eq 0 && ( -z "${SITE_NAME:-}" || "$SITE_NAME" != *.test ) ]]; then
+    SITE_NAME="erp.test"
+  fi
+  SITE_NAME_SOURCE="local quickstart"
+  DEPLOYMENT_MODE="development"
+  PRODUCTION_DOMAIN=""
+  PRODUCTION_SSL_MODE="planned"
+  write_dev_config_file
+  SITE_NAME_SOURCE="saved config"
+}
+
+run_local_dev_quickstart() {
+  require_sudo
+
+  ui_box_start "Local VM Quickstart"
+  echo "This path uses local development defaults and keeps inputs minimal."
+  status_line "Site" "INFO" "${SITE_NAME:-erp.test}"
+  status_line "Production domain" "INFO" "not used"
+  status_line "Mode" "INFO" "local development"
+  ui_box_end
+
+  if confirm "Save local defaults and start guided setup now?"; then
+    set_local_dev_defaults
+    run_guided_setup
+  else
+    ui_next "./install-erpnext-dev.sh local-dev-quickstart" "./install-erpnext-dev.sh setup-wizard"
+  fi
+}
+
+public_quickstart_status_summary() {
+  local vm_ip installed runtime ssl_pair ssl_status ssl_detail domain_status dns_ip provider
+  vm_ip="$(get_vm_ip 2>/dev/null || echo unknown)"
+  installed="$(install_state 2>/dev/null || echo "Not installed")"
+  runtime="$(runtime_state 2>/dev/null || echo "Stopped")"
+  provider="$(active_production_ssl_provider 2>/dev/null || echo "none")"
+  ssl_pair="$(production_ssl_overall_status 2>/dev/null || echo "WARN|not configured")"
+  ssl_status="${ssl_pair%%|*}"
+  ssl_detail="${ssl_pair#*|}"
+  dns_ip=""
+  domain_status="INFO"
+  if [[ -n "${PRODUCTION_DOMAIN:-}" ]]; then
+    dns_ip="$(resolve_ipv4_first "$PRODUCTION_DOMAIN")"
+    if [[ -n "$dns_ip" ]]; then
+      if [[ "$dns_ip" == "$vm_ip" || "$provider" == "Cloudflare Origin CA" ]]; then
+        domain_status="OK"
+      else
+        domain_status="WARN"
+      fi
+    else
+      domain_status="WARN"
+    fi
+  else
+    domain_status="WARN"
+  fi
+
+  status_line "Domain" "$domain_status" "${PRODUCTION_DOMAIN:-not set}${dns_ip:+; DNS=$dns_ip}; VM=$vm_ip"
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "Install" "$([[ "$installed" == "Installed" ]] && echo OK || echo WARN)" "$installed"
+  status_line "Runtime" "$([[ "$runtime" == Running* ]] && echo OK || echo WARN)" "$runtime"
+  status_line "HTTPS" "$ssl_status" "$ssl_detail"
+}
+
+ensure_public_domain_configured() {
+  if [[ -n "${PRODUCTION_DOMAIN:-}" ]] && validate_production_domain_value "$PRODUCTION_DOMAIN" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  warn "Public VM setup needs a real production domain before install/HTTPS."
+  if confirm "Set the production domain now?"; then
+    prompt_and_save_public_domain
+    return 0
+  fi
+  return 1
+}
+
+run_public_vm_quickstart() {
+  require_sudo
+
+  while true; do
+    ui_box_start "Public VM Quickstart"
+    echo "One guided flow for domain, install, HTTPS, and hardening."
+    echo
+    public_quickstart_status_summary
+    echo
+    echo "1) Set/change domain"
+    echo "2) Check DNS/domain plan"
+    echo "3) Install or repair ERPNext"
+    echo "4) Configure HTTPS"
+    echo "5) Security hardening"
+    echo "6) Final status / support bundle"
+    echo "7) Exit"
+    echo
+    read -r -p "Choose an option: " choice
+
+    case "$choice" in
+      1) prompt_and_save_public_domain ;;
+      2) show_production_domain_plan ;;
+      3) ensure_public_domain_configured && run_guided_setup ;;
+      4) ensure_public_domain_configured && production_ssl_wizard ;;
+      5) security_hardening_wizard ;;
+      6)
+        show_production_readiness
+        show_production_ssl_status
+        show_firewall_hardening_status
+        ui_next "./install-erpnext-dev.sh support-bundle" "Take a cloud snapshot after validation."
+        ;;
+      7) return 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
+}
+
+run_first_run_wizard() {
+  require_sudo
+
+  while true; do
+    ui_box_start "First Run / Setup Wizard"
+    echo "Choose the setup type. The script will save non-secret settings."
+    echo
+    status_line "Current site" "INFO" "${SITE_NAME} (${SITE_NAME_SOURCE})"
+    status_line "Production domain" "$([[ -n "${PRODUCTION_DOMAIN:-}" ]] && echo OK || echo INFO)" "${PRODUCTION_DOMAIN:-not set}"
+    status_line "Config" "INFO" "$CONFIG_FILE"
+    echo
+    echo "1) Local development VM"
+    echo "2) Public VM / production-candidate"
+    echo "3) Existing install / maintenance menu"
+    echo "4) Show saved config"
+    echo "5) Exit"
+    echo
+    read -r -p "Choose an option: " choice
+
+    case "$choice" in
+      1) run_local_dev_quickstart ;;
+      2) run_public_vm_quickstart ;;
+      3) show_menu ;;
+      4) show_config_summary ;;
+      5) return 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
+}
 
 get_primary_interface() {
   ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i=="dev") {print $(i+1); exit}}'
@@ -2141,6 +2828,7 @@ Planned local architecture:
 Planned local SSL commands:
   ./install-erpnext-dev.sh ssl-status
   ./install-erpnext-dev.sh local-ssl-guide
+  ./install-erpnext-dev.sh local-ssl-wizard
   ./install-erpnext-dev.sh mkcert-guide
   ./install-erpnext-dev.sh verify-local-ssl
   ./install-erpnext-dev.sh configure-local-ssl
@@ -2221,10 +2909,78 @@ DNS requirements:
   - Local datacenter: internal DNS points to the ERPNext server.
   - Avoid .test and .local for production.
 
+Structured planning command:
+  ./install-erpnext-dev.sh production-domain-plan
+
 This developer installer only plans production settings.
 Production automation should be a separate track.
 ============================================================
 EOF_PROD_DOMAIN
+}
+
+show_production_domain_plan() {
+  local vm_ip planned_domain domain_status domain_detail network_note dns_target record_name record_value
+
+  require_sudo
+
+  vm_ip="$(get_vm_ip)"
+  planned_domain="${PRODUCTION_DOMAIN:-erp.company.com}"
+  domain_status="WARN"
+  domain_detail="not set; using placeholder example ${planned_domain}"
+
+  if [[ -n "${PRODUCTION_DOMAIN:-}" ]]; then
+    if validate_production_domain_value "$PRODUCTION_DOMAIN" >/dev/null 2>&1; then
+      domain_status="OK"
+      domain_detail="$PRODUCTION_DOMAIN"
+    else
+      domain_status="WARN"
+      domain_detail="invalid value: $PRODUCTION_DOMAIN"
+    fi
+  fi
+
+  network_note="Private/NAT address detected. For public production, DNS should point to the production server public IP, not this VM IP."
+  dns_target="PRODUCTION_SERVER_PUBLIC_IP"
+  record_name="$planned_domain"
+  record_value="$dns_target"
+
+  if [[ "$vm_ip" != 10.* && "$vm_ip" != 172.16.* && "$vm_ip" != 172.17.* && "$vm_ip" != 172.18.* && "$vm_ip" != 172.19.* && "$vm_ip" != 172.2* && "$vm_ip" != 172.30.* && "$vm_ip" != 172.31.* && "$vm_ip" != 192.168.* ]]; then
+    network_note="Current VM IP does not look private. Confirm it is the intended production server IP before using it in DNS."
+    dns_target="$vm_ip"
+    record_value="$vm_ip"
+  fi
+
+  echo
+  echo "============================================================"
+  echo "Production Domain Plan"
+  echo "============================================================"
+  status_line "Mode" "INFO" "planning only; no DNS changes are applied"
+  status_line "Local site" "INFO" "${SITE_NAME} (${SITE_NAME_SOURCE})"
+  status_line "Current VM IP" "INFO" "${vm_ip}"
+  status_line "Production domain" "$domain_status" "$domain_detail"
+  status_line "Network note" "INFO" "$network_note"
+  echo
+  echo "Recommended DNS record:"
+  echo "  Type:  A"
+  echo "  Name:  ${record_name}"
+  echo "  Value: ${record_value}"
+  echo
+  echo "Provider notes:"
+  echo "  - Cloudflare: create/update the A record, then decide proxied vs DNS-only before SSL planning."
+  echo "  - GoDaddy/other DNS: create/update the A record to the production server public IP."
+  echo "  - Internal-only ERPNext: use internal DNS instead of public DNS."
+  echo "  - Do not change MX/email records unless you are intentionally changing mail routing."
+  echo
+  echo "Validation checklist:"
+  echo "  - Domain is not .test or .local."
+  echo "  - DNS target is the production server, not a temporary dev NAT IP."
+  echo "  - Ports 80/443 are reachable for the chosen SSL method."
+  echo "  - The ERPNext site/domain mapping is planned before go-live."
+  echo
+  echo "Useful commands:"
+  echo "  PRODUCTION_DOMAIN=${record_name} ./install-erpnext-dev.sh production-readiness"
+  echo "  PRODUCTION_DOMAIN=${record_name} ./install-erpnext-dev.sh production-domain-plan"
+  echo "  ./install-erpnext-dev.sh production-ssl-guide"
+  echo "============================================================"
 }
 
 show_production_ssl_guide() {
@@ -2253,40 +3009,1911 @@ Current local SSL remains separate:
 EOF_PROD_SSL
 }
 
-show_production_readiness() {
-  local domain_state="not set"
-  local domain_status="WARN"
-  local nginx_state="not installed"
-  local ssl_state="local/dev only"
 
-  if [[ -n "$PRODUCTION_DOMAIN" ]]; then
-    if validate_production_domain_value "$PRODUCTION_DOMAIN" >/dev/null 2>&1; then
-      domain_state="$PRODUCTION_DOMAIN"
-      domain_status="OK"
+is_private_ipv4() {
+  local ip="$1"
+
+  [[ -n "$ip" ]] || return 1
+  case "$ip" in
+    10.*|192.168.*|127.*|169.254.*) return 0 ;;
+    172.16.*|172.17.*|172.18.*|172.19.*|172.20.*|172.21.*|172.22.*|172.23.*|172.24.*|172.25.*|172.26.*|172.27.*|172.28.*|172.29.*|172.30.*|172.31.*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+resolve_ipv4_first() {
+  local host="$1"
+
+  if command -v getent >/dev/null 2>&1; then
+    getent ahostsv4 "$host" 2>/dev/null | awk '{print $1; exit}'
+    return 0
+  fi
+
+  if command -v dig >/dev/null 2>&1; then
+    dig +short A "$host" 2>/dev/null | awk '/^[0-9.]+$/ {print; exit}'
+    return 0
+  fi
+
+  echo ""
+}
+
+production_listener_detail() {
+  local port="$1"
+
+  if command -v ss >/dev/null 2>&1; then
+    ss -lntH "sport = :${port}" 2>/dev/null | awk 'NR==1 {print $4; found=1} END {if (!found) print "not listening"}'
+    return 0
+  fi
+
+  if port_listens "$port"; then
+    echo "listening"
+  else
+    echo "not listening"
+  fi
+}
+
+production_listener_is_public() {
+  local port="$1" detail
+  detail="$(production_listener_detail "$port")"
+  [[ "$detail" == *"0.0.0.0:"* || "$detail" == "*:"* || "$detail" == "*:${port}"* || "$detail" == *"[::]:"* ]]
+}
+
+production_listener_is_local_only() {
+  local port="$1" detail
+  detail="$(production_listener_detail "$port")"
+  [[ "$detail" == *"127.0.0.1:"* || "$detail" == *"[::1]:"* ]]
+}
+
+production_listener_exposure_label() {
+  local port="$1" detail
+  detail="$(production_listener_detail "$port")"
+  if [[ "$detail" == "not listening" ]]; then
+    echo "OK|not listening"
+  elif production_listener_is_local_only "$port" && ! production_listener_is_public "$port"; then
+    echo "OK|local-only: ${detail}"
+  elif production_listener_is_public "$port"; then
+    echo "WARN|public interface: ${detail}"
+  else
+    echo "INFO|${detail}"
+  fi
+}
+
+production_domain_status_for_provider() {
+  local domain="$1" vm_ip="$2" dns_ip="$3" provider="$4"
+  if [[ -z "$dns_ip" ]]; then
+    echo "WARN|${domain}; DNS=unresolved; VM=${vm_ip}"
+  elif [[ "$dns_ip" == "$vm_ip" ]]; then
+    echo "OK|${domain}; DNS=${dns_ip}; VM=${vm_ip}"
+  elif [[ "$provider" == "Cloudflare Origin CA" ]]; then
+    echo "OK|${domain}; DNS=${dns_ip}; VM=${vm_ip}; Cloudflare proxy likely active"
+  else
+    echo "WARN|${domain}; DNS=${dns_ip}; VM=${vm_ip}"
+  fi
+}
+
+production_cloudflare_proxy_hint() {
+  local dns_ip="$1" vm_ip="$2" provider="$3"
+  if [[ "$provider" == "Cloudflare Origin CA" && -n "$dns_ip" && "$dns_ip" != "$vm_ip" ]]; then
+    echo "OK|DNS does not resolve directly to origin IP; Cloudflare proxy appears active"
+  elif [[ "$provider" == "Cloudflare Origin CA" ]]; then
+    echo "INFO|DNS resolves to origin IP; Cloudflare proxy may be DNS-only/grey-cloud"
+  elif [[ -n "$dns_ip" && "$dns_ip" != "$vm_ip" ]]; then
+    echo "INFO|DNS does not resolve directly to origin IP"
+  else
+    echo "INFO|DNS resolves directly to origin IP"
+  fi
+}
+
+production_http_status() {
+  local url="$1"
+  curl -fsSI --max-time 8 "$url" 2>/dev/null | awk 'NR==1 {print; exit}' || true
+}
+
+show_public_vm_readiness() {
+  local vm_ip domain dns_ip install_quick runtime service auto nginx_state ssl_pair ssl_status ssl_detail backup_count
+  local http_ip http_domain public_note dns_status dns_detail active_provider domain_pair
+
+  require_sudo
+
+  vm_ip="$(get_vm_ip)"
+  domain="${PRODUCTION_DOMAIN:-$SITE_NAME}"
+  dns_ip=""
+  dns_status="WARN"
+  dns_detail="set PRODUCTION_DOMAIN or SITE_NAME to the public hostname"
+  public_note="private/NAT IP detected; this does not look like a public VM"
+
+  if ! is_private_ipv4 "$vm_ip"; then
+    public_note="public-looking IPv4 detected; confirm this is the intended cloud VM IP"
+  fi
+
+  active_provider="$(production_ssl_provider_from_cert_path "$(production_nginx_active_cert_path 2>/dev/null || true)")"
+  if validate_production_domain_value "$domain" >/dev/null 2>&1; then
+    dns_ip="$(resolve_ipv4_first "$domain")"
+    domain_pair="$(production_domain_status_for_provider "$domain" "$vm_ip" "$dns_ip" "$active_provider")"
+    dns_status="${domain_pair%%|*}"
+    dns_detail="${domain_pair#*|}"
+  fi
+
+  install_quick="$(production_quick_install_state)"
+  runtime="$(runtime_state 2>/dev/null || echo unknown)"
+  service="$(service_state 2>/dev/null || echo unknown)"
+  auto="$(autostart_state 2>/dev/null || echo unknown)"
+  nginx_state="not installed"
+  command -v nginx >/dev/null 2>&1 && nginx_state="installed"
+  ssl_pair="$(production_ssl_readiness_detail)"
+  ssl_status="${ssl_pair%%|*}"
+  ssl_detail="${ssl_pair#*|}"
+  backup_count="$(production_backup_count)"
+  http_ip="$(production_http_status "http://${vm_ip}:8000")"
+  http_domain="$(production_http_status "http://${domain}:8000")"
+
+  echo
+  echo "============================================================"
+  echo "Public VM Readiness"
+  echo "============================================================"
+  status_line "Mode" "INFO" "planning/check only; no firewall or SSL changes are applied"
+  status_line "VM IP" "INFO" "${vm_ip}"
+  status_line "Network" "INFO" "$public_note"
+  status_line "Domain" "$dns_status" "$dns_detail"
+  status_line "Install state" "$([[ "$install_quick" == Installed* ]] && echo OK || echo WARN)" "$install_quick"
+  status_line "Runtime" "$([[ "$runtime" == Running* ]] && echo OK || echo WARN)" "$runtime"
+  status_line "Service" "INFO" "${service}; autostart=${auto}"
+  status_line "Nginx" "$([[ "$nginx_state" == installed ]] && echo OK || echo WARN)" "$nginx_state"
+  status_line "Production SSL" "$ssl_status" "$ssl_detail"
+  if [[ "$backup_count" =~ ^[0-9]+$ && "$backup_count" -gt 0 ]]; then
+    status_line "Backup readiness" "OK" "${backup_count} local backup file(s); off-VM copy still required"
+  else
+    status_line "Backup readiness" "WARN" "no local backup files detected"
+  fi
+
+  echo
+  echo "HTTP checks:"
+  status_line "Public IP :8000" "$([[ "$http_ip" == HTTP/* ]] && echo OK || echo WARN)" "${http_ip:-no response}"
+  status_line "Domain :8000" "$([[ "$http_domain" == HTTP/* ]] && echo OK || echo WARN)" "${http_domain:-no response}"
+
+  echo
+  echo "Listener summary:"
+  for port in 22 80 443 8000 9000 11000 13000; do
+    status_line "Port ${port}" "INFO" "$(production_listener_detail "$port")"
+  done
+
+  echo
+  echo "Recommended next commands:"
+  echo "  ./install-erpnext-dev.sh backup-files"
+  echo "  ./install-erpnext-dev.sh production-ssl-plan"
+  echo "  ./install-erpnext-dev.sh production-ssl-wizard"
+  echo "  ./install-erpnext-dev.sh configure-production-ssl"
+  echo "  ./install-erpnext-dev.sh configure-cloudflare-origin-ssl"
+  echo "  ./install-erpnext-dev.sh production-ssl-status"
+  echo "  ./install-erpnext-dev.sh production-firewall-plan"
+  echo "  ./install-erpnext-dev.sh firewall-hardening-status"
+  echo "  ./install-erpnext-dev.sh support-bundle"
+  echo "============================================================"
+}
+
+show_production_ssl_plan() {
+  local vm_ip domain dns_ip dns_state dns_detail nginx_state local_ssl_pair local_ssl_status local_ssl_detail port80 port443
+
+  require_sudo
+
+  vm_ip="$(get_vm_ip)"
+  domain="${PRODUCTION_DOMAIN:-$SITE_NAME}"
+  dns_ip=""
+  dns_state="WARN"
+  dns_detail="set PRODUCTION_DOMAIN=erp.company.com before production SSL planning"
+
+  if ! validate_production_domain_value "$domain" >/dev/null 2>&1; then
+    domain="erp.company.com"
+  else
+    dns_ip="$(resolve_ipv4_first "$domain")"
+    if [[ -n "$dns_ip" && "$dns_ip" == "$vm_ip" ]]; then
+      dns_state="OK"
+      dns_detail="${domain} resolves to ${vm_ip}"
+    elif [[ -n "$dns_ip" ]]; then
+      dns_detail="${domain} resolves to ${dns_ip}, expected ${vm_ip}"
     else
-      domain_state="invalid: $PRODUCTION_DOMAIN"
-      domain_status="WARN"
+      dns_detail="${domain} did not resolve yet from this VM"
     fi
   fi
+
+  nginx_state="not installed"
+  command -v nginx >/dev/null 2>&1 && nginx_state="installed"
+  local_ssl_pair="$(production_ssl_readiness_detail)"
+  local_ssl_status="${local_ssl_pair%%|*}"
+  local_ssl_detail="${local_ssl_pair#*|}"
+  port80="$(production_listener_detail 80)"
+  port443="$(production_listener_detail 443)"
+
+  echo
+  echo "============================================================"
+  echo "Production SSL Plan"
+  echo "============================================================"
+  status_line "Mode" "INFO" "planning only; no certificate or Nginx changes are applied"
+  status_line "Domain" "$dns_state" "$dns_detail"
+  status_line "VM IP" "INFO" "$vm_ip"
+  status_line "Nginx" "$([[ "$nginx_state" == installed ]] && echo OK || echo WARN)" "$nginx_state"
+  status_line "Port 80" "INFO" "$port80"
+  status_line "Port 443" "INFO" "$port443"
+  status_line "Current SSL" "$local_ssl_status" "$local_ssl_detail"
+  echo
+  echo "Recommended SSL path for this public VM:"
+  echo "  1) Keep Cloudflare DNS-only while issuing/testing the certificate."
+  echo "  2) Point A record ${domain} -> ${vm_ip}."
+  echo "  3) Use Let's Encrypt for https://${domain}."
+  echo "  4) Put ERPNext behind Nginx on ports 80/443."
+  echo "  5) After HTTPS is working, close/restrict public :8000."
+  echo
+  echo "Do not use for final production SSL:"
+  echo "  - mkcert certificates"
+  echo "  - self-signed local certificates"
+  echo "  - browser-trusted dev certificates copied from your workstation"
+  echo
+  echo "Cloudflare choices:"
+  echo "  - DNS-only: best for first Let's Encrypt HTTP-01 test."
+  echo "  - Proxied/orange-cloud: useful later; requires SSL mode planning."
+  echo "  - Cloudflare Origin CA: only valid when Cloudflare proxy stays enabled."
+  echo
+  echo "Manual validation commands:"
+  echo "  curl -I http://${domain}:8000"
+  echo "  curl -I http://${domain}"
+  echo "  curl -Ik https://${domain}"
+  echo
+  echo "Related commands:"
+  echo "  ./install-erpnext-dev.sh production-ssl-wizard"
+  echo "  ./install-erpnext-dev.sh configure-production-ssl"
+  echo "  ./install-erpnext-dev.sh configure-cloudflare-origin-ssl"
+  echo "  ./install-erpnext-dev.sh production-ssl-status"
+  echo "  ./install-erpnext-dev.sh production-firewall-plan"
+  echo "  ./install-erpnext-dev.sh public-vm-readiness"
+  echo "  ./install-erpnext-dev.sh production-ssl-guide"
+  echo "============================================================"
+}
+
+show_production_firewall_plan() {
+  local vm_ip domain
+
+  require_sudo
+
+  vm_ip="$(get_vm_ip)"
+  domain="${PRODUCTION_DOMAIN:-$SITE_NAME}"
+
+  echo
+  echo "============================================================"
+  echo "Production Firewall Plan"
+  echo "============================================================"
+  status_line "Mode" "INFO" "planning only; no firewall changes are applied"
+  status_line "VM IP" "INFO" "$vm_ip"
+  status_line "Domain" "INFO" "$domain"
+  echo
+  echo "Current listener summary:"
+  for port in 22 80 443 8000 9000 11000 13000; do
+    status_line "Port ${port}" "INFO" "$(production_listener_detail "$port")"
+  done
+  echo
+  echo "Recommended Hetzner/edge firewall for first public test:"
+  echo "  22/tcp    allow only your admin IP if possible"
+  echo "  80/tcp    allow public, needed for HTTP and Let's Encrypt HTTP-01"
+  echo "  443/tcp   allow public, needed for HTTPS"
+  echo "  8000/tcp  temporary only; restrict to your admin IP while testing"
+  echo
+  echo "Recommended long-term production exposure:"
+  echo "  22/tcp    restricted to admin IP/VPN"
+  echo "  80/tcp    public, redirect/ACME use"
+  echo "  443/tcp   public"
+  echo "  8000/tcp  closed publicly after Nginx/HTTPS works"
+  echo "  9000/tcp  closed publicly"
+  echo "  11000/tcp closed publicly"
+  echo "  13000/tcp closed publicly"
+  echo
+  echo "Why:"
+  echo "  - 8000 is the Bench web port and should not be the final public entry point."
+  echo "  - 9000 is socket.io and should be proxied through Nginx, not opened directly."
+  echo "  - 11000/13000 are Redis services and must never be public."
+  echo
+  echo "Safe check commands:"
+  echo "  ss -lntp"
+  echo "  ./install-erpnext-dev.sh public-vm-readiness"
+  echo "  ./install-erpnext-dev.sh production-ssl-plan"
+  echo "============================================================"
+}
+
+show_firewall_hardening_status() {
+  local vm_ip domain dns_ip active_cert provider proxy_pair proxy_status proxy_detail ssl_pair ssl_status ssl_detail
+  local detail pair status message
+
+  require_sudo
+
+  vm_ip="$(get_vm_ip)"
+  domain="${PRODUCTION_DOMAIN:-$SITE_NAME}"
+  dns_ip="$(resolve_ipv4_first "$domain")"
+  active_cert="$(production_nginx_active_cert_path 2>/dev/null || true)"
+  provider="$(production_ssl_provider_from_cert_path "$active_cert")"
+  proxy_pair="$(production_cloudflare_proxy_hint "$dns_ip" "$vm_ip" "$provider")"
+  proxy_status="${proxy_pair%%|*}"
+  proxy_detail="${proxy_pair#*|}"
+  ssl_pair="$(production_ssl_runtime_detail)"
+  ssl_status="${ssl_pair%%|*}"
+  ssl_detail="${ssl_pair#*|}"
+
+  echo
+  echo "============================================================"
+  echo "Firewall Hardening Status"
+  echo "============================================================"
+  status_line "Mode" "INFO" "check only; no firewall changes are applied"
+  status_line "Domain" "INFO" "${domain}; DNS=${dns_ip:-unresolved}; VM=${vm_ip}"
+  status_line "SSL provider" "$([[ "$provider" != "not configured" ]] && echo OK || echo WARN)" "$provider"
+  status_line "HTTPS entrypoint" "$ssl_status" "$ssl_detail"
+  status_line "Cloudflare proxy" "$proxy_status" "$proxy_detail"
+  echo
+  echo "Local listeners inside the VM:"
+  echo "  These rows show what services are bound on the server itself."
+  echo "  A service may still be blocked externally by the Hetzner Cloud Firewall."
+  for port in 22 80 443 8000 9000 11000 13000; do
+    pair="$(production_listener_exposure_label "$port")"
+    status="${pair%%|*}"
+    detail="${pair#*|}"
+    case "$port" in
+      22)
+        if [[ "$status" == "WARN" ]]; then
+          status="INFO"
+          message="${detail}; local SSH listener exists. Verify Hetzner firewall allows only admin IP/VPN."
+        else
+          message="$detail"
+        fi
+        ;;
+      80|443)
+        if [[ "$status" == "WARN" || "$status" == "INFO" ]]; then
+          if [[ "$provider" == "Cloudflare Origin CA" ]]; then
+            message="${detail}; expected local Nginx listener. Hetzner firewall should allow Cloudflare/public on this port."
+          else
+            message="${detail}; expected public HTTP/HTTPS entrypoint."
+          fi
+          status="OK"
+        else
+          message="$detail"
+        fi
+        ;;
+      8000|9000)
+        if [[ "$status" == "WARN" && "$ssl_status" == "OK" ]]; then
+          status="INFO"
+          message="${detail}; backend listener exists for Nginx/ERPNext. Verify Hetzner firewall blocks public access."
+        elif [[ "$status" == "WARN" ]]; then
+          status="INFO"
+          message="${detail}; temporary backend listener. Close/restrict externally after HTTPS works."
+        else
+          message="$detail"
+        fi
+        ;;
+      11000|13000)
+        if [[ "$status" == "WARN" ]]; then
+          status="FAIL"
+          message="${detail}; Redis must never be publicly reachable. Bind to localhost and block at firewall."
+        else
+          message="$detail"
+        fi
+        ;;
+      *) message="$detail" ;;
+    esac
+    status_line "Port ${port}" "$status" "$message"
+  done
+  echo
+  echo "Recommended Hetzner inbound firewall:"
+  echo "  22/tcp     allow only your admin IP or VPN"
+  echo "  80/tcp     allow public, or Cloudflare IP ranges if staying proxied"
+  echo "  443/tcp    allow public, or Cloudflare IP ranges if staying proxied"
+  echo "  8000/tcp   no allow rule; block public access"
+  echo "  9000/tcp   no allow rule; block public access"
+  echo "  11000/tcp  no allow rule; block public access"
+  echo "  13000/tcp  no allow rule; block public access"
+  echo
+  echo "External validation from your workstation, not from inside the VM:"
+  echo "  curl -I https://${domain}"
+  echo "  curl -I --connect-timeout 10 http://${vm_ip}:8000"
+  echo "  curl -I --connect-timeout 10 http://${vm_ip}:9000"
+  echo "Expected: HTTPS returns 200/redirect through Cloudflare/Nginx; 8000/9000 time out or are blocked."
+  echo
+  echo "Internal validation from this VM:"
+  echo "  ./install-erpnext-dev.sh firewall-hardening-status"
+  echo "  ./install-erpnext-dev.sh public-vm-readiness"
+  echo "============================================================"
+}
+
+
+vm_firewall_plan() {
+  local vm_ip domain
+
+  require_sudo
+  vm_ip="$(get_vm_ip)"
+  domain="${PRODUCTION_DOMAIN:-$SITE_NAME}"
+
+  echo
+  echo "============================================================"
+  echo "VM Firewall / UFW Plan"
+  echo "============================================================"
+  status_line "Mode" "INFO" "planning only; no firewall changes are applied"
+  status_line "VM IP" "INFO" "$vm_ip"
+  status_line "Domain" "INFO" "$domain"
+  echo
+  echo "Safe default UFW profile:"
+  echo "  - Default incoming: deny"
+  echo "  - Default outgoing: allow"
+  echo "  - Allow 22/tcp from any source at UFW layer to avoid dynamic-IP lockout"
+  echo "  - Allow 80/tcp for Nginx / Cloudflare / redirects"
+  echo "  - Allow 443/tcp for Nginx / Cloudflare HTTPS"
+  echo "  - Do not allow 8000, 9000, 11000, or 13000"
+  echo
+  echo "Why SSH stays open in UFW by default:"
+  echo "  - Your admin IP may change. Restrict SSH at the Hetzner Cloud Firewall first."
+  echo "  - UFW can be made stricter later with: ./install-erpnext-dev.sh ufw-ssh-admin-only"
+  echo "  - That advanced SSH restriction can lock you out if the wrong IP is used."
+  echo
+  echo "Recommended layering:"
+  echo "  Layer 1: ERPNext/Nginx service listeners"
+  echo "  Layer 2: UFW inside this VM"
+  echo "  Layer 3: Hetzner Cloud Firewall"
+  echo "  Layer 4: Cloudflare proxy/WAF/CDN"
+  echo
+  echo "Commands:"
+  echo "  ./install-erpnext-dev.sh configure-vm-firewall"
+  echo "  ./install-erpnext-dev.sh configure-fail2ban"
+  echo "  ./install-erpnext-dev.sh vm-firewall-status"
+  echo "  ./install-erpnext-dev.sh fail2ban-status"
+  echo "  ./install-erpnext-dev.sh security-hardening-wizard"
+  echo "============================================================"
+}
+
+ufw_status_raw() {
+  if ! command -v ufw >/dev/null 2>&1; then
+    return 1
+  fi
+  $SUDO ufw status verbose 2>/dev/null || true
+}
+
+ufw_is_active() {
+  command -v ufw >/dev/null 2>&1 || return 1
+  $SUDO ufw status 2>/dev/null | grep -qi '^Status:[[:space:]]*active'
+}
+
+ufw_port_allow_lines() {
+  local port="$1"
+  command -v ufw >/dev/null 2>&1 || return 0
+  $SUDO ufw status 2>/dev/null | grep -E "(^|[[:space:]])${port}(/tcp)?([[:space:]]|$)" || true
+}
+
+ufw_port_has_allow() {
+  [[ -n "$(ufw_port_allow_lines "$1")" ]]
+}
+
+show_vm_firewall_status() {
+  local status default_line port lines state detail
+
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "VM Firewall / UFW Status"
+  echo "============================================================"
+  if ! command -v ufw >/dev/null 2>&1; then
+    status_line "UFW" "WARN" "not installed"
+    echo "Run: ./install-erpnext-dev.sh configure-vm-firewall"
+    echo "============================================================"
+    return 0
+  fi
+
+  status="inactive"
+  ufw_is_active && status="active"
+  status_line "UFW" "$([[ "$status" == active ]] && echo OK || echo WARN)" "$status"
+  default_line="$(ufw_status_raw | awk '/^Default:/ {print; exit}')"
+  status_line "Default policy" "INFO" "${default_line:-unknown}"
+  echo
+  echo "Expected safe default UFW rules:"
+  for port in 22 80 443 8000 9000 11000 13000; do
+    lines="$(ufw_port_allow_lines "$port" | paste -sd ';' -)"
+    case "$port" in
+      22)
+        if ufw_port_has_allow 22; then
+          state="OK"
+          detail="allowed at UFW layer to avoid lockout; restrict SSH at Hetzner firewall"
+        else
+          state="WARN"
+          detail="no UFW allow rule detected; SSH could be blocked if UFW is active"
+        fi
+        ;;
+      80|443)
+        if ufw_port_has_allow "$port"; then
+          state="OK"
+          detail="allowed for Nginx/Cloudflare HTTPS path"
+        else
+          state="WARN"
+          detail="no UFW allow rule detected; Cloudflare/Nginx may be blocked"
+        fi
+        ;;
+      8000|9000|11000|13000)
+        if ufw_port_has_allow "$port"; then
+          state="WARN"
+          detail="explicit UFW allow rule found; remove it unless you intentionally need this"
+        else
+          state="OK"
+          detail="no explicit UFW allow rule; should be blocked externally by UFW"
+        fi
+        ;;
+    esac
+    [[ -n "$lines" ]] && detail+="; rule(s): ${lines}"
+    status_line "Port ${port}" "$state" "$detail"
+  done
+  echo
+  echo "Raw UFW status:"
+  ufw_status_raw | sed 's/^/  /'
+  echo
+  echo "Note: UFW protects the VM itself. Hetzner Cloud Firewall should still restrict SSH and block backend ports at the edge."
+  echo "============================================================"
+}
+
+configure_vm_firewall() {
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "Configure VM Firewall / UFW"
+  echo "============================================================"
+  echo "This applies safe UFW defaults inside the VM:"
+  echo "  - deny incoming by default"
+  echo "  - allow outgoing by default"
+  echo "  - allow 22/tcp from any source at UFW layer to avoid lockout"
+  echo "  - allow 80/tcp and 443/tcp"
+  echo "  - no allow rules for 8000, 9000, 11000, or 13000"
+  echo
+  echo "SSH restriction should stay in Hetzner Cloud Firewall unless you intentionally run ufw-ssh-admin-only."
+  confirm "Configure safe UFW defaults now?" || return 1
+
+  log "Installing UFW"
+  $SUDO apt-get update
+  $SUDO apt-get install -y ufw
+
+  log "Applying safe UFW defaults"
+  $SUDO ufw default deny incoming
+  $SUDO ufw default allow outgoing
+  $SUDO ufw allow 22/tcp
+  $SUDO ufw allow 80/tcp
+  $SUDO ufw allow 443/tcp
+
+  # Remove common accidental backend allow rules when possible.
+  for port in 8000 9000 11000 13000; do
+    $SUDO ufw delete allow "${port}/tcp" >/dev/null 2>&1 || true
+    $SUDO ufw delete allow "$port" >/dev/null 2>&1 || true
+  done
+
+  $SUDO ufw --force enable
+
+  ui_box_start "Result Summary"
+  status_line "UFW" "OK" "enabled with safe defaults"
+  status_line "Incoming policy" "OK" "deny by default"
+  status_line "Outgoing policy" "OK" "allow by default"
+  status_line "SSH" "OK" "22/tcp allowed in UFW; restrict at Hetzner firewall"
+  status_line "HTTP/HTTPS" "OK" "80/tcp and 443/tcp allowed"
+  status_line "Backend ports" "OK" "8000/9000/11000/13000 not allowed in UFW"
+  ui_box_end
+  ui_next \
+    "./install-erpnext-dev.sh vm-firewall-status" \
+    "./install-erpnext-dev.sh firewall-hardening-status"
+}
+
+configure_ufw_ssh_admin_only() {
+  local detected_ip admin_ip
+
+  require_sudo
+  command -v ufw >/dev/null 2>&1 || fail "UFW is not installed. Run configure-vm-firewall first."
+
+  detected_ip="${ADMIN_SSH_SOURCE_IP:-}"
+  if [[ -z "$detected_ip" && -n "${SSH_CLIENT:-}" ]]; then
+    detected_ip="${SSH_CLIENT%% *}"
+  fi
+
+  echo
+  echo "============================================================"
+  echo "Advanced UFW SSH Restriction"
+  echo "============================================================"
+  warn "This can lock you out if your IP changes or is entered incorrectly."
+  echo "Recommended default: restrict SSH in Hetzner Cloud Firewall, not in UFW."
+  echo "Keep a second SSH session open and confirm Hetzner console/rescue access before continuing."
+  echo
+  echo "Detected current SSH client IP: ${detected_ip:-unknown}"
+  if [[ -n "${ADMIN_SSH_SOURCE_IP:-}" ]]; then
+    admin_ip="$ADMIN_SSH_SOURCE_IP"
+  else
+    read -r -p "Admin public IPv4 to allow for SSH [${detected_ip:-}]: " admin_ip
+    admin_ip="${admin_ip:-$detected_ip}"
+  fi
+
+  [[ -n "$admin_ip" ]] || fail "Admin IP is required."
+  if ! [[ "$admin_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
+    fail "Only IPv4/CIDR is supported by this helper. Example: 68.144.2.171/32"
+  fi
+  [[ "$admin_ip" == */* ]] || admin_ip="${admin_ip}/32"
+
+  status_line "New SSH source" "INFO" "$admin_ip"
+  confirm "Apply UFW SSH restriction to ${admin_ip}?" || return 1
+  confirm "Final confirmation: keep a second SSH session open. Continue?" || return 1
+
+  log "Restricting UFW SSH to ${admin_ip}"
+  $SUDO ufw allow from "$admin_ip" to any port 22 proto tcp
+  $SUDO ufw delete allow 22/tcp >/dev/null 2>&1 || true
+  $SUDO ufw delete allow ssh >/dev/null 2>&1 || true
+  $SUDO ufw --force enable
+
+  ui_box_start "Result Summary"
+  status_line "UFW SSH" "OK" "restricted to ${admin_ip}"
+  status_line "Lockout safety" "WARN" "test a second SSH session before closing this one"
+  ui_box_end
+  ui_next "ssh root@$(get_vm_ip 2>/dev/null || echo VM_IP)" "./install-erpnext-dev.sh vm-firewall-status"
+}
+
+show_fail2ban_status() {
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "Fail2Ban Status"
+  echo "============================================================"
+  if ! command -v fail2ban-client >/dev/null 2>&1; then
+    status_line "Fail2Ban" "WARN" "not installed"
+    echo "Run: ./install-erpnext-dev.sh configure-fail2ban"
+    echo "============================================================"
+    return 0
+  fi
+
+  if $SUDO systemctl is-active --quiet fail2ban; then
+    status_line "Fail2Ban service" "OK" "running"
+  else
+    status_line "Fail2Ban service" "WARN" "not running"
+  fi
+
+  if $SUDO fail2ban-client status sshd >/tmp/erpnext-dev-fail2ban-sshd-status.$$ 2>/dev/null; then
+    status_line "sshd jail" "OK" "enabled"
+    sed 's/^/  /' /tmp/erpnext-dev-fail2ban-sshd-status.$$ || true
+    rm -f /tmp/erpnext-dev-fail2ban-sshd-status.$$
+  else
+    rm -f /tmp/erpnext-dev-fail2ban-sshd-status.$$
+    status_line "sshd jail" "WARN" "not active or not found"
+  fi
+  echo "============================================================"
+}
+
+configure_fail2ban() {
+  local bantime findtime maxretry jail_file
+
+  require_sudo
+  bantime="${FAIL2BAN_SSH_BANTIME:-1h}"
+  findtime="${FAIL2BAN_SSH_FINDTIME:-10m}"
+  maxretry="${FAIL2BAN_SSH_MAXRETRY:-5}"
+  jail_file="/etc/fail2ban/jail.d/erpnext-dev-sshd.conf"
+
+  echo
+  echo "============================================================"
+  echo "Configure Fail2Ban for SSH"
+  echo "============================================================"
+  status_line "bantime" "INFO" "$bantime"
+  status_line "findtime" "INFO" "$findtime"
+  status_line "maxretry" "INFO" "$maxretry"
+  echo
+  echo "This enables the sshd jail to reduce repeated unauthorized SSH login attempts."
+  confirm "Install/configure Fail2Ban sshd jail now?" || return 1
+
+  log "Installing Fail2Ban"
+  $SUDO apt-get update
+  $SUDO apt-get install -y fail2ban
+
+  log "Writing Fail2Ban sshd jail"
+  $SUDO mkdir -p /etc/fail2ban/jail.d
+  $SUDO tee "$jail_file" >/dev/null <<EOF
+[sshd]
+enabled = true
+backend = systemd
+port = ssh
+filter = sshd
+bantime = ${bantime}
+findtime = ${findtime}
+maxretry = ${maxretry}
+EOF
+
+  $SUDO systemctl enable --now fail2ban
+  $SUDO systemctl restart fail2ban
+
+  ui_box_start "Result Summary"
+  status_line "Fail2Ban" "OK" "service enabled and restarted"
+  status_line "sshd jail" "OK" "enabled"
+  status_line "bantime" "INFO" "$bantime"
+  status_line "findtime" "INFO" "$findtime"
+  status_line "maxretry" "INFO" "$maxretry"
+  ui_box_end
+  ui_next "./install-erpnext-dev.sh fail2ban-status" "./install-erpnext-dev.sh security-hardening-wizard"
+}
+
+security_hardening_wizard() {
+  local choice
+
+  require_sudo
+  while true; do
+    echo
+    echo "============================================================"
+    echo "Security Hardening"
+    echo "============================================================"
+    echo "1) Plan"
+    echo "2) Apply safe UFW defaults"
+    echo "3) UFW status"
+    echo "4) Apply Fail2Ban for SSH"
+    echo "5) Fail2Ban status"
+    echo "6) Public firewall status"
+    echo "7) Advanced: restrict SSH in UFW"
+    echo "8) Back"
+    echo
+    echo "Recommended: run 2 and 4. Keep SSH IP restriction in Hetzner firewall by default."
+    echo
+    read -r -p "Choose an option: " choice
+    case "$choice" in
+      1) vm_firewall_plan ;;
+      2) configure_vm_firewall ;;
+      3) show_vm_firewall_status ;;
+      4) configure_fail2ban ;;
+      5) show_fail2ban_status ;;
+      6) show_firewall_hardening_status ;;
+      7) configure_ufw_ssh_admin_only ;;
+      8|q|Q) return 0 ;;
+      *) warn "Invalid option." ;;
+    esac
+  done
+}
+
+
+production_ssl_domain() {
+  local domain="${PRODUCTION_DOMAIN:-$SITE_NAME}"
+  if validate_production_domain_value "$domain" >/dev/null 2>&1; then
+    printf '%s\n' "$domain"
+    return 0
+  fi
+  return 1
+}
+
+production_ssl_site_slug() {
+  local domain
+  domain="$(production_ssl_domain 2>/dev/null || echo "$SITE_NAME")"
+  printf '%s' "$domain" | tr -c 'A-Za-z0-9._-' '-'
+}
+
+production_nginx_site_name() {
+  echo "erpnext-production-$(production_ssl_site_slug)"
+}
+
+production_nginx_available_path() {
+  echo "/etc/nginx/sites-available/$(production_nginx_site_name).conf"
+}
+
+production_nginx_enabled_path() {
+  echo "/etc/nginx/sites-enabled/$(production_nginx_site_name).conf"
+}
+
+production_letsencrypt_live_dir() {
+  local domain
+  domain="$(production_ssl_domain)" || return 1
+  echo "/etc/letsencrypt/live/${domain}"
+}
+
+production_letsencrypt_fullchain_path() {
+  echo "$(production_letsencrypt_live_dir)/fullchain.pem"
+}
+
+production_letsencrypt_key_path() {
+  echo "$(production_letsencrypt_live_dir)/privkey.pem"
+}
+
+
+cloudflare_origin_dir() {
+  echo "$CLOUDFLARE_ORIGIN_DIR"
+}
+
+cloudflare_origin_cert_path() {
+  local domain
+  domain="$(production_ssl_domain)" || return 1
+  echo "$(cloudflare_origin_dir)/${domain}.pem"
+}
+
+cloudflare_origin_key_path() {
+  local domain
+  domain="$(production_ssl_domain)" || return 1
+  echo "$(cloudflare_origin_dir)/${domain}.key"
+}
+
+production_nginx_active_cert_path() {
+  local enabled_path
+  enabled_path="$(production_nginx_enabled_path)"
+  [[ -r "$enabled_path" ]] || return 1
+  awk '/^[[:space:]]*ssl_certificate[[:space:]]+/ && $1 == "ssl_certificate" {gsub(";", "", $2); print $2; exit}' "$enabled_path" 2>/dev/null
+}
+
+production_nginx_active_key_path() {
+  local enabled_path
+  enabled_path="$(production_nginx_enabled_path)"
+  [[ -r "$enabled_path" ]] || return 1
+  awk '/^[[:space:]]*ssl_certificate_key[[:space:]]+/ {gsub(";", "", $2); print $2; exit}' "$enabled_path" 2>/dev/null
+}
+
+production_ssl_provider_from_cert_path() {
+  local cert_path="${1:-}"
+  case "$cert_path" in
+    /etc/letsencrypt/live/*) echo "Let's Encrypt" ;;
+    /etc/ssl/cloudflare-origin/*|*cloudflare-origin*) echo "Cloudflare Origin CA" ;;
+    "") echo "not configured" ;;
+    *) echo "custom/origin certificate" ;;
+  esac
+}
+
+certificate_issuer_for_file() {
+  local cert_path="$1"
+  [[ -n "$cert_path" && -f "$cert_path" ]] || return 1
+  openssl x509 -in "$cert_path" -noout -issuer 2>/dev/null | sed 's/^issuer=//' || return 1
+}
+
+certificate_subject_for_file() {
+  local cert_path="$1"
+  [[ -n "$cert_path" && -f "$cert_path" ]] || return 1
+  openssl x509 -in "$cert_path" -noout -subject 2>/dev/null | sed 's/^subject=//' || return 1
+}
+
+certificate_dates_for_file() {
+  local cert_path="$1"
+  [[ -n "$cert_path" && -f "$cert_path" ]] || return 1
+  openssl x509 -in "$cert_path" -noout -dates 2>/dev/null | paste -sd '; ' - || return 1
+}
+
+certificate_detail_for_file() {
+  local cert_path="$1" provider issuer dates subject
+  provider="$(production_ssl_provider_from_cert_path "$cert_path")"
+  issuer="$(certificate_issuer_for_file "$cert_path" 2>/dev/null || true)"
+  subject="$(certificate_subject_for_file "$cert_path" 2>/dev/null || true)"
+  dates="$(certificate_dates_for_file "$cert_path" 2>/dev/null || true)"
+  if [[ -z "$issuer" ]]; then
+    echo "missing or unreadable"
+  elif [[ "$issuer" == *STAGING* || "$issuer" == *staging* ]]; then
+    echo "${provider}; STAGING certificate; issuer=${issuer}; subject=${subject}; ${dates}"
+  else
+    echo "${provider}; issuer=${issuer}; subject=${subject}; ${dates}"
+  fi
+}
+
+certificate_file_is_staging() {
+  local cert_path="$1" issuer
+  issuer="$(certificate_issuer_for_file "$cert_path" 2>/dev/null || true)"
+  [[ "$issuer" == *STAGING* || "$issuer" == *staging* ]]
+}
+
+validate_certificate_and_key_pair() {
+  local cert_path="$1" key_path="$2" cert_pub key_pub
+  openssl x509 -in "$cert_path" -noout >/dev/null 2>&1 || return 1
+  openssl pkey -in "$key_path" -noout >/dev/null 2>&1 || return 1
+  cert_pub="$(openssl x509 -in "$cert_path" -pubkey -noout 2>/dev/null | openssl sha256 2>/dev/null | awk '{print $2}')"
+  key_pub="$(openssl pkey -in "$key_path" -pubout 2>/dev/null | openssl sha256 2>/dev/null | awk '{print $2}')"
+  [[ -n "$cert_pub" && -n "$key_pub" && "$cert_pub" == "$key_pub" ]]
+}
+
+read_multiline_secret_to_file() {
+  local label="$1" end_marker="$2" output_file="$3" line had_tty=0
+  echo
+  echo "Paste the ${label}. End with a line containing only: ${end_marker}"
+  echo "Input is hidden while you paste. Nothing is printed to the installer log."
+  : > "$output_file"
+  chmod 600 "$output_file" 2>/dev/null || true
+  if [[ -t 0 ]]; then
+    had_tty=1
+    stty -echo 2>/dev/null || true
+  fi
+  while IFS= read -r line; do
+    [[ "$line" == "$end_marker" ]] && break
+    printf '%s
+' "$line" >> "$output_file"
+  done
+  if [[ "$had_tty" -eq 1 ]]; then
+    stty echo 2>/dev/null || true
+    echo
+  fi
+}
+
+read_pem_block_to_file() {
+  local label="$1" begin_regex="$2" end_regex="$3" output_file="$4" begin_hint="${5:-$2}" end_hint="${6:-$3}"
+  local line had_tty=0 in_block=0 found_begin=0 found_end=0
+
+  echo
+  echo "Paste the ${label} PEM block now."
+  echo "The installer will stop reading automatically when it sees the real PEM ending line."
+  echo "Input is hidden while you paste. Nothing is printed to the installer log."
+  echo
+  echo "Expected first line: ${begin_hint}"
+  echo "Expected ending:     ${end_hint}"
+
+  : > "$output_file"
+  chmod 600 "$output_file" 2>/dev/null || true
+
+  if [[ -t 0 ]]; then
+    had_tty=1
+    stty -echo 2>/dev/null || true
+  fi
+
+  while IFS= read -r line; do
+    line="${line%$'
+'}"
+
+    if [[ "$in_block" -eq 0 ]]; then
+      if [[ "$line" =~ $begin_regex ]]; then
+        in_block=1
+        found_begin=1
+        printf '%s
+' "$line" >> "$output_file"
+      fi
+      continue
+    fi
+
+    printf '%s
+' "$line" >> "$output_file"
+
+    if [[ "$line" =~ $end_regex ]]; then
+      found_end=1
+      break
+    fi
+  done
+
+  if [[ "$had_tty" -eq 1 ]]; then
+    stty echo 2>/dev/null || true
+    echo
+  fi
+
+  if [[ "$found_begin" -ne 1 ]]; then
+    rm -f "$output_file"
+    fail "Did not detect the beginning of the ${label} PEM block."
+  fi
+
+  if [[ "$found_end" -ne 1 ]]; then
+    rm -f "$output_file"
+    fail "Did not detect the ending line of the ${label} PEM block."
+  fi
+}
+
+
+production_https_status() {
+  local domain="$1"
+  curl -fsSI --max-time 10 "https://${domain}/" 2>/dev/null | awk 'NR==1 {print; exit}' || true
+}
+
+production_http_status_plain() {
+  local domain="$1"
+  curl -fsSI --max-time 10 "http://${domain}/" 2>/dev/null | awk 'NR==1 {print; exit}' || true
+}
+
+production_certificate_issuer() {
+  local fullchain
+  fullchain="$(production_letsencrypt_fullchain_path 2>/dev/null || true)"
+  certificate_issuer_for_file "$fullchain"
+}
+
+production_certificate_subject() {
+  local fullchain
+  fullchain="$(production_letsencrypt_fullchain_path 2>/dev/null || true)"
+  certificate_subject_for_file "$fullchain"
+}
+
+production_certificate_dates() {
+  local fullchain
+  fullchain="$(production_letsencrypt_fullchain_path 2>/dev/null || true)"
+  certificate_dates_for_file "$fullchain"
+}
+
+production_certificate_is_staging() {
+  local issuer
+  issuer="$(production_certificate_issuer 2>/dev/null || true)"
+  [[ "$issuer" == *STAGING* || "$issuer" == *staging* ]]
+}
+
+production_certificate_detail() {
+  local issuer dates
+  issuer="$(production_certificate_issuer 2>/dev/null || true)"
+  dates="$(production_certificate_dates 2>/dev/null || true)"
+  if [[ -z "$issuer" ]]; then
+    echo "missing or unreadable"
+  elif [[ "$issuer" == *STAGING* || "$issuer" == *staging* ]]; then
+    echo "STAGING certificate; issuer=${issuer}; ${dates}"
+  else
+    echo "production/trusted issuer likely; issuer=${issuer}; ${dates}"
+  fi
+}
+
+production_ssl_is_configured() {
+  local domain fullchain key enabled_path https_head
+  domain="$(production_ssl_domain 2>/dev/null || true)"
+  [[ -n "$domain" ]] || return 1
+  fullchain="$(production_letsencrypt_fullchain_path 2>/dev/null || true)"
+  key="$(production_letsencrypt_key_path 2>/dev/null || true)"
+  enabled_path="$(production_nginx_enabled_path)"
+
+  [[ -f "$fullchain" && -f "$key" ]] || return 1
+  [[ -L "$enabled_path" || -f "$enabled_path" ]] || return 1
+  port_listens 443 || return 1
+  https_head="$(production_https_status "$domain")"
+  [[ "$https_head" == HTTP/* ]]
+}
+
+production_ssl_runtime_detail() {
+  local domain active_cert active_key fullchain enabled_path https_head provider
+  domain="$(production_ssl_domain 2>/dev/null || true)"
+  if [[ -z "$domain" ]]; then
+    echo "WARN|no valid production domain set"
+    return 0
+  fi
+
+  fullchain="$(production_letsencrypt_fullchain_path 2>/dev/null || true)"
+  enabled_path="$(production_nginx_enabled_path)"
+  active_cert="$(production_nginx_active_cert_path 2>/dev/null || true)"
+  active_key="$(production_nginx_active_key_path 2>/dev/null || true)"
+  provider="$(production_ssl_provider_from_cert_path "$active_cert")"
+
+  if [[ -n "$active_cert" && -n "$active_key" && -f "$active_cert" && -f "$active_key" && ( -L "$enabled_path" || -f "$enabled_path" ) ]]; then
+    if certificate_file_is_staging "$active_cert"; then
+      echo "WARN|${provider} staging certificate is installed; replace with production certificate before trusting HTTPS"
+      return 0
+    fi
+    https_head="$(production_https_status "$domain")"
+    if [[ "$https_head" == HTTP/* ]]; then
+      echo "OK|${provider}/Nginx HTTPS responding: ${https_head}"
+    elif [[ "$provider" == "Cloudflare Origin CA" ]]; then
+      echo "WARN|Cloudflare Origin CA is installed, but trusted HTTPS did not respond. If DNS is grey-cloud/DNS-only, this is expected; switch Cloudflare proxy on and use Full (strict)."
+    else
+      echo "WARN|certificate/config present, but HTTPS did not respond"
+    fi
+  elif [[ -f "$fullchain" ]]; then
+    echo "WARN|Let's Encrypt certificate exists, but production Nginx site is not enabled"
+  elif command -v nginx >/dev/null 2>&1; then
+    echo "WARN|Nginx installed, but no production HTTPS certificate is configured"
+  else
+    echo "WARN|not configured for production"
+  fi
+}
+
+write_production_nginx_config() {
+  local mode="$1" domain available_path webroot fullchain key cert_provider ssl_block redirect_block
+  domain="$(production_ssl_domain)" || return 1
+  available_path="$(production_nginx_available_path)"
+  webroot="$PRODUCTION_SSL_WEBROOT"
+  fullchain="${2:-$(production_letsencrypt_fullchain_path)}"
+  key="${3:-$(production_letsencrypt_key_path)}"
+  cert_provider="${4:-}"
+  [[ -n "$cert_provider" ]] || cert_provider="Let's Encrypt"
+
+  $SUDO mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled "$webroot/.well-known/acme-challenge"
+  $SUDO chown -R root:root "$webroot"
+  $SUDO chmod -R 755 "$webroot"
+
+  if [[ "$mode" == "https" ]]; then
+    ssl_block="
+server {
+    listen 443 ssl;
+    server_name ${domain};
+
+    ssl_certificate     ${fullchain};
+    ssl_certificate_key ${key};
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    client_max_body_size 100m;
+
+    proxy_read_timeout 120s;
+    proxy_send_timeout 120s;
+
+    location /socket.io {
+        proxy_pass http://127.0.0.1:9000/socket.io;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \"upgrade\";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_read_timeout 86400;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_redirect off;
+    }
+}
+"
+    redirect_block="return 301 https://\$host\$request_uri;"
+  else
+    ssl_block=""
+    redirect_block="proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto http;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_redirect off;"
+  fi
+
+  $SUDO tee "$available_path" >/dev/null <<EOF_PROD_NGINX
+# Managed by ERPNext Developer Installer.
+# Production HTTPS reverse proxy for ${domain}.
+# Certificate provider: ${cert_provider}.
+# ERPNext Bench remains on localhost :8000/:9000 behind Nginx.
+
+server {
+    listen 80;
+    server_name ${domain};
+
+    location ^~ /.well-known/acme-challenge/ {
+        root ${webroot};
+        default_type "text/plain";
+        try_files \$uri =404;
+    }
+
+    location /socket.io {
+        proxy_pass http://127.0.0.1:9000/socket.io;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto http;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_read_timeout 86400;
+    }
+
+    location / {
+        ${redirect_block}
+    }
+}
+${ssl_block}
+EOF_PROD_NGINX
+}
+
+show_production_ssl_status() {
+  local domain vm_ip dns_ip nginx_state certbot_state cert_state cert_detail cert_line_status enabled_state http_head https_head ssl_pair ssl_status ssl_detail
+  local active_cert active_key provider
+
+  require_sudo
+  vm_ip="$(get_vm_ip)"
+  domain="$(production_ssl_domain 2>/dev/null || echo "${PRODUCTION_DOMAIN:-$SITE_NAME}")"
+  dns_ip="$(resolve_ipv4_first "$domain")"
+  nginx_state="not installed"
+  command -v nginx >/dev/null 2>&1 && nginx_state="installed: $(nginx -v 2>&1 | sed 's/^nginx version: //')"
+  certbot_state="not installed"
+  command -v certbot >/dev/null 2>&1 && certbot_state="installed: $(certbot --version 2>&1 | head -n 1)"
+  active_cert="$(production_nginx_active_cert_path 2>/dev/null || true)"
+  active_key="$(production_nginx_active_key_path 2>/dev/null || true)"
+  provider="$(production_ssl_provider_from_cert_path "$active_cert")"
+  cert_state="missing"
+  cert_detail="missing"
+  cert_line_status="WARN"
+  if [[ -n "$active_cert" && -f "$active_cert" ]]; then
+    cert_state="active: ${active_cert}"
+    cert_detail="$(certificate_detail_for_file "$active_cert" 2>/dev/null || echo 'present, but issuer could not be read')"
+    if certificate_file_is_staging "$active_cert"; then
+      cert_line_status="WARN"
+    else
+      cert_line_status="OK"
+    fi
+  elif production_ssl_domain >/dev/null 2>&1 && [[ -f "$(production_letsencrypt_fullchain_path 2>/dev/null || true)" ]]; then
+    cert_state="present: $(production_letsencrypt_fullchain_path)"
+    cert_detail="$(production_certificate_detail 2>/dev/null || echo 'present, but issuer could not be read')"
+    if production_certificate_is_staging; then cert_line_status="WARN"; else cert_line_status="OK"; fi
+  fi
+  enabled_state="not enabled"
+  if [[ -L "$(production_nginx_enabled_path)" || -f "$(production_nginx_enabled_path)" ]]; then
+    enabled_state="enabled: $(production_nginx_enabled_path)"
+  fi
+  http_head="$(production_http_status_plain "$domain")"
+  https_head="$(production_https_status "$domain")"
+  ssl_pair="$(production_ssl_runtime_detail)"
+  ssl_status="${ssl_pair%%|*}"
+  ssl_detail="${ssl_pair#*|}"
+
+  echo
+  echo "============================================================"
+  echo "Production SSL Status"
+  echo "============================================================"
+  local domain_pair domain_status domain_detail
+  domain_pair="$(production_domain_status_for_provider "$domain" "$vm_ip" "$dns_ip" "$provider")"
+  domain_status="${domain_pair%%|*}"
+  domain_detail="${domain_pair#*|}"
+  status_line "Domain" "$domain_status" "$domain_detail"
+  status_line "Provider" "$([[ "$provider" != "not configured" ]] && echo OK || echo WARN)" "$provider"
+  status_line "Nginx" "$([[ "$nginx_state" == installed* ]] && echo OK || echo WARN)" "$nginx_state"
+  status_line "Certbot" "$([[ "$certbot_state" == installed* ]] && echo OK || echo INFO)" "$certbot_state"
+  status_line "Certificate" "$cert_line_status" "$cert_state"
+  status_line "Certificate issuer" "$cert_line_status" "$cert_detail"
+  status_line "Certificate key" "$([[ -n "$active_key" && -f "$active_key" ]] && echo OK || echo WARN)" "${active_key:-missing}"
+  status_line "Nginx site" "$([[ "$enabled_state" == enabled* ]] && echo OK || echo WARN)" "$enabled_state"
+  status_line "Port 80" "INFO" "$(production_listener_detail 80)"
+  status_line "Port 443" "INFO" "$(production_listener_detail 443)"
+  status_line "HTTP" "$([[ "$http_head" == HTTP/* ]] && echo OK || echo WARN)" "${http_head:-no response}"
+  status_line "HTTPS" "$([[ "$https_head" == HTTP/* ]] && echo OK || echo WARN)" "${https_head:-no response}"
+  status_line "Overall" "$ssl_status" "$ssl_detail"
+  echo
+  echo "Useful tests:"
+  echo "  curl -I http://${domain}"
+  echo "  curl -I https://${domain}"
+  echo "  ./install-erpnext-dev.sh public-vm-readiness"
+  echo "============================================================"
+}
+
+configure_production_ssl() {
+  require_erpnext_vm_context "configure-production-ssl" || return 1
+  require_sudo
+
+  local domain vm_ip dns_ip install_quick runtime backup_count email_args staging_args force_renewal_args http_head https_head existing_cert_detail
+  domain="$(production_ssl_domain 2>/dev/null || true)"
+  [[ -n "$domain" ]] || fail "Set a valid PRODUCTION_DOMAIN or SITE_NAME, for example: PRODUCTION_DOMAIN=erp.flowmaya.com SITE_NAME=erp.flowmaya.com ./install-erpnext-dev.sh configure-production-ssl"
+
+  vm_ip="$(get_vm_ip)"
+  dns_ip="$(resolve_ipv4_first "$domain")"
+  install_quick="$(production_quick_install_state)"
+  runtime="$(runtime_state 2>/dev/null || echo Stopped)"
+  backup_count="$(production_backup_count)"
+
+  echo
+  echo "============================================================"
+  echo "Configure Production HTTPS / Let's Encrypt"
+  echo "============================================================"
+  echo "This configures Nginx + Let's Encrypt for: https://${domain}"
+  echo "It does not change Hetzner firewall rules and does not stop the ERPNext service."
+  echo
+  status_line "Domain" "$([[ -n "$dns_ip" && "$dns_ip" == "$vm_ip" ]] && echo OK || echo FAIL)" "${domain}; DNS=${dns_ip:-unresolved}; VM=${vm_ip}"
+  status_line "Install state" "$([[ "$install_quick" == Installed* ]] && echo OK || echo FAIL)" "$install_quick"
+  status_line "Runtime" "$([[ "$runtime" == Running* ]] && echo OK || echo FAIL)" "$runtime"
+  if [[ "$backup_count" =~ ^[0-9]+$ && "$backup_count" -gt 0 ]]; then
+    status_line "Backup" "OK" "${backup_count} local backup file(s) found; off-VM copy still recommended"
+  else
+    status_line "Backup" "WARN" "no local backup detected; create one before production changes"
+  fi
+  status_line "Port 80" "INFO" "$(production_listener_detail 80)"
+  status_line "Port 443" "INFO" "$(production_listener_detail 443)"
+  if [[ -f "$(production_letsencrypt_fullchain_path 2>/dev/null || true)" ]]; then
+    existing_cert_detail="$(production_certificate_detail 2>/dev/null || echo 'present, but issuer could not be read')"
+    if production_certificate_is_staging; then
+      status_line "Existing cert" "WARN" "$existing_cert_detail"
+    else
+      status_line "Existing cert" "OK" "$existing_cert_detail"
+    fi
+  else
+    status_line "Existing cert" "INFO" "none"
+  fi
+  echo
+
+  [[ -n "$dns_ip" && "$dns_ip" == "$vm_ip" ]] || fail "DNS for ${domain} must resolve to ${vm_ip} before issuing Let's Encrypt. Use DNS-only first if behind Cloudflare."
+  [[ "$install_quick" == Installed* ]] || fail "ERPNext is not fully installed. Run guided setup first."
+  [[ "$runtime" == Running* ]] || fail "ERPNext is not running. Start it first: ./install-erpnext-dev.sh start"
+
+  if [[ "$backup_count" =~ ^[0-9]+$ && "$backup_count" -eq 0 ]]; then
+    warn "No local backup detected. Recommended: ./install-erpnext-dev.sh backup-files"
+  fi
+
+  if [[ "$ASSUME_YES" -ne 1 ]]; then
+    echo "Before continuing, confirm you already took a snapshot or are ready to change Nginx/SSL."
+    confirm "Configure production HTTPS for ${domain} now?" || return 1
+  fi
+
+  log "Installing Nginx and Certbot"
+  $SUDO apt-get update
+  $SUDO apt-get install -y nginx certbot
+
+  # Disable the default site to avoid accidental default landing pages on the production domain.
+  if [[ -L /etc/nginx/sites-enabled/default || -f /etc/nginx/sites-enabled/default ]]; then
+    $SUDO rm -f /etc/nginx/sites-enabled/default
+  fi
+
+  log "Writing temporary HTTP reverse proxy for ACME challenge"
+  write_production_nginx_config http
+  $SUDO ln -sfn "$(production_nginx_available_path)" "$(production_nginx_enabled_path)"
+
+  log "Testing and starting Nginx"
+  $SUDO nginx -t || fail "Nginx config test failed before certificate issuance."
+  $SUDO systemctl enable --now nginx
+  $SUDO systemctl reload nginx
+
+  http_head="$(production_http_status_plain "$domain")"
+  if [[ "$http_head" != HTTP/* ]]; then
+    warn "HTTP check did not return a response before ACME: ${http_head:-no response}"
+    warn "If port 80 is blocked at the Hetzner firewall, Let's Encrypt HTTP-01 will fail."
+  fi
+
+  email_args=(--register-unsafely-without-email)
+  if [[ -n "$LETSENCRYPT_EMAIL" ]]; then
+    email_args=(--email "$LETSENCRYPT_EMAIL")
+  fi
+  staging_args=()
+  force_renewal_args=()
+  if [[ "$LETSENCRYPT_STAGING" == "true" ]]; then
+    staging_args=(--staging)
+  elif production_certificate_is_staging; then
+    warn "Existing Let's Encrypt staging certificate detected. Forcing replacement with a production certificate."
+    force_renewal_args=(--force-renewal)
+  fi
+
+  log "Requesting Let's Encrypt certificate"
+  $SUDO certbot certonly \
+    --non-interactive \
+    --agree-tos \
+    "${email_args[@]}" \
+    "${staging_args[@]}" \
+    "${force_renewal_args[@]}" \
+    --webroot \
+    -w "$PRODUCTION_SSL_WEBROOT" \
+    -d "$domain" || fail "Let's Encrypt certificate request failed. Check DNS, Cloudflare DNS-only/proxy status, and port 80 firewall."
+
+  if [[ "$LETSENCRYPT_STAGING" != "true" ]] && production_certificate_is_staging; then
+    fail "A staging certificate is still installed after the production request. Check /var/log/letsencrypt/letsencrypt.log and rerun with --force-renewal manually if needed."
+  fi
+
+  log "Writing HTTPS reverse proxy config"
+  write_production_nginx_config https
+
+  log "Testing and reloading Nginx"
+  $SUDO nginx -t || fail "Nginx config test failed after certificate issuance."
+  $SUDO systemctl reload nginx
+
+  https_head="$(production_https_status "$domain")"
+  if [[ "$https_head" == HTTP/* ]]; then
+    ok "Production HTTPS is responding: ${https_head}"
+  else
+    warn "Certificate and Nginx config were installed, but HTTPS did not respond from this VM."
+  fi
+
+  echo
+  echo "Next steps:"
+  echo "  curl -I https://${domain}"
+  echo "  ./install-erpnext-dev.sh production-ssl-status"
+  echo "  ./install-erpnext-dev.sh production-firewall-plan"
+  echo
+  echo "After HTTPS works, restrict/close public :8000 and :9000 at the Hetzner firewall."
+  echo "============================================================"
+}
+
+
+show_cloudflare_origin_guide() {
+  local domain vm_ip
+  vm_ip="$(get_vm_ip)"
+  domain="$(production_ssl_domain 2>/dev/null || echo "${PRODUCTION_DOMAIN:-$SITE_NAME}")"
+  echo
+  echo "============================================================"
+  echo "Cloudflare Origin CA Guide"
+  echo "============================================================"
+  echo "Use this path when Cloudflare will stay proxied/orange-cloud."
+  echo
+  echo "Cloudflare dashboard steps:"
+  echo "  1) SSL/TLS -> Origin Server -> Create Certificate."
+  echo "  2) Hostname: ${domain}"
+  echo "  3) Key type: RSA or ECC."
+  echo "  4) Save both the Origin Certificate and Private Key. Cloudflare shows the private key only once."
+  echo "     Certificate must include -----BEGIN CERTIFICATE----- through -----END CERTIFICATE-----."
+  echo "     Private key must include -----BEGIN PRIVATE KEY----- through -----END PRIVATE KEY-----."
+  echo "  5) Keep DNS record ${domain} pointed to ${vm_ip}."
+  echo "  6) After installing the origin cert here, turn proxy ON/orange-cloud."
+  echo "  7) Set SSL/TLS encryption mode to Full (strict)."
+  echo
+  echo "Installer commands:"
+  echo "  ./install-erpnext-dev.sh production-ssl-wizard"
+  echo "  ./install-erpnext-dev.sh configure-cloudflare-origin-ssl"
+  echo "  ./install-erpnext-dev.sh cloudflare-origin-ssl-status"
+  echo
+  echo "Important: Cloudflare Origin CA certificates are trusted by Cloudflare, not by browsers directly."
+  echo "With DNS-only/grey-cloud, direct curl/browser checks may show a certificate trust warning."
+  echo "============================================================"
+}
+
+install_cloudflare_origin_material() {
+  local domain tmp_dir tmp_cert tmp_key src_cert src_key dest_dir dest_cert dest_key cert_status key_status
+  domain="$(production_ssl_domain)" || return 1
+  tmp_dir="$(mktemp -d)"
+  tmp_cert="${tmp_dir}/cloudflare-origin.pem"
+  tmp_key="${tmp_dir}/cloudflare-origin.key"
+
+  if [[ -n "$CLOUDFLARE_ORIGIN_CERT_FILE" && -n "$CLOUDFLARE_ORIGIN_KEY_FILE" ]]; then
+    src_cert="$CLOUDFLARE_ORIGIN_CERT_FILE"
+    src_key="$CLOUDFLARE_ORIGIN_KEY_FILE"
+    [[ -f "$src_cert" ]] || fail "CLOUDFLARE_ORIGIN_CERT_FILE not found: ${src_cert}"
+    [[ -f "$src_key" ]] || fail "CLOUDFLARE_ORIGIN_KEY_FILE not found: ${src_key}"
+    cp "$src_cert" "$tmp_cert"
+    cp "$src_key" "$tmp_key"
+  else
+    echo
+    echo "Cloudflare should have shown you two PEM blocks:"
+    echo "  - Origin Certificate"
+    echo "  - Private Key"
+    echo
+    confirm "Have you generated and copied both values from Cloudflare Origin Server?" || return 1
+    read_pem_block_to_file "Cloudflare Origin Certificate" '^-----BEGIN CERTIFICATE-----$' '^-----END CERTIFICATE-----$' "$tmp_cert" '-----BEGIN CERTIFICATE-----' '-----END CERTIFICATE-----'
+    read_pem_block_to_file "Cloudflare Origin Private Key" '^-----BEGIN (RSA |EC )?PRIVATE KEY-----$' '^-----END (RSA |EC )?PRIVATE KEY-----$' "$tmp_key" '-----BEGIN PRIVATE KEY-----' '-----END PRIVATE KEY-----'
+  fi
+
+  validate_certificate_and_key_pair "$tmp_cert" "$tmp_key" || fail "Cloudflare origin certificate/key validation failed. Confirm the private key matches the certificate."
+
+  dest_dir="$(cloudflare_origin_dir)"
+  dest_cert="$(cloudflare_origin_cert_path)"
+  dest_key="$(cloudflare_origin_key_path)"
+  $SUDO mkdir -p "$dest_dir"
+  $SUDO install -m 0644 -o root -g root "$tmp_cert" "$dest_cert"
+  $SUDO install -m 0600 -o root -g root "$tmp_key" "$dest_key"
+  rm -rf "$tmp_dir"
+
+  cert_status="$(certificate_detail_for_file "$dest_cert" 2>/dev/null || echo 'installed')"
+  key_status="private key installed with mode 0600"
+  ok "Cloudflare Origin certificate installed: ${dest_cert}"
+  ok "${key_status}"
+  status_line "Certificate detail" "INFO" "$cert_status"
+}
+
+configure_cloudflare_origin_ssl() {
+  require_erpnext_vm_context "configure-cloudflare-origin-ssl" || return 1
+  require_sudo
+
+  local domain vm_ip dns_ip install_quick runtime backup_count available_path backup_path https_head provider cert_path key_path
+  domain="$(production_ssl_domain 2>/dev/null || true)"
+  [[ -n "$domain" ]] || fail "Set PRODUCTION_DOMAIN and SITE_NAME, for example: SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh configure-cloudflare-origin-ssl"
+  vm_ip="$(get_vm_ip)"
+  dns_ip="$(resolve_ipv4_first "$domain")"
+  install_quick="$(production_quick_install_state)"
+  runtime="$(runtime_state 2>/dev/null || echo Stopped)"
+  backup_count="$(production_backup_count)"
+
+  echo
+  echo "============================================================"
+  echo "Configure Cloudflare Origin CA HTTPS"
+  echo "============================================================"
+  echo "This installs a Cloudflare Origin CA certificate and configures Nginx for ${domain}."
+  echo "It does not change Cloudflare DNS/proxy settings and does not change Hetzner firewall rules."
+  echo
+  status_line "Domain" "$([[ -n "$dns_ip" ]] && echo OK || echo WARN)" "${domain}; DNS=${dns_ip:-unresolved}; VM=${vm_ip}"
+  status_line "Install state" "$([[ "$install_quick" == Installed* ]] && echo OK || echo FAIL)" "$install_quick"
+  status_line "Runtime" "$([[ "$runtime" == Running* ]] && echo OK || echo FAIL)" "$runtime"
+  if [[ "$backup_count" =~ ^[0-9]+$ && "$backup_count" -gt 0 ]]; then
+    status_line "Backup" "OK" "${backup_count} local backup file(s) found; off-VM copy still recommended"
+  else
+    status_line "Backup" "WARN" "no local backup detected; create one before production changes"
+  fi
+  status_line "Current SSL" "INFO" "$(production_ssl_runtime_detail | cut -d'|' -f2-)"
+  echo
+  echo "Recommended Cloudflare settings after this command succeeds:"
+  echo "  DNS record ${domain}: Proxied / orange-cloud"
+  echo "  SSL/TLS encryption mode: Full (strict)"
+  echo
+
+  [[ "$install_quick" == Installed* ]] || fail "ERPNext is not fully installed. Run guided setup first."
+  [[ "$runtime" == Running* ]] || fail "ERPNext is not running. Start it first: ./install-erpnext-dev.sh start"
+
+  if [[ "$ASSUME_YES" -ne 1 ]]; then
+    echo "Before continuing, confirm you have a snapshot and the Cloudflare Origin certificate/private key."
+    confirm "Configure Cloudflare Origin CA SSL for ${domain} now?" || return 1
+  fi
+
+  log "Installing Nginx if needed"
+  $SUDO apt-get update
+  $SUDO apt-get install -y nginx
+
+  install_cloudflare_origin_material
+  cert_path="$(cloudflare_origin_cert_path)"
+  key_path="$(cloudflare_origin_key_path)"
+
+  available_path="$(production_nginx_available_path)"
+  if [[ -f "$available_path" ]]; then
+    backup_path="${available_path}.bak-$(date +%Y%m%d-%H%M%S)"
+    $SUDO cp -a "$available_path" "$backup_path"
+    ok "Existing production Nginx config backed up: ${backup_path}"
+  fi
+
+  if [[ -L /etc/nginx/sites-enabled/default || -f /etc/nginx/sites-enabled/default ]]; then
+    $SUDO rm -f /etc/nginx/sites-enabled/default
+  fi
+
+  log "Writing Cloudflare Origin CA Nginx config"
+  write_production_nginx_config https "$cert_path" "$key_path" "Cloudflare Origin CA"
+  $SUDO ln -sfn "$(production_nginx_available_path)" "$(production_nginx_enabled_path)"
+
+  log "Testing and reloading Nginx"
+  $SUDO nginx -t || fail "Nginx config test failed. The previous config backup is available if needed."
+  $SUDO systemctl enable --now nginx
+  $SUDO systemctl reload nginx
+
+  PRODUCTION_SSL_MODE="cloudflare-origin-ca"
+  write_dev_config_file >/dev/null || true
+
+  provider="$(production_ssl_provider_from_cert_path "$cert_path")"
+  https_head="$(production_https_status "$domain")"
+  if [[ "$https_head" == HTTP/* ]]; then
+    ok "${provider} HTTPS path is responding through the current DNS route: ${https_head}"
+  else
+    warn "Cloudflare Origin CA is installed. Direct curl may fail until Cloudflare proxy is ON and SSL/TLS mode is Full (strict)."
+  fi
+
+  echo
+  echo "Next steps in Cloudflare:"
+  echo "  1) Set ${domain} DNS record to Proxied / orange-cloud."
+  echo "  2) Set SSL/TLS mode to Full (strict)."
+  echo "  3) Test: curl -I https://${domain}"
+  echo "  4) Run: ./install-erpnext-dev.sh cloudflare-origin-ssl-status"
+  echo "============================================================"
+}
+
+show_cloudflare_origin_ssl_status() {
+  local domain vm_ip dns_ip cert_path key_path enabled_path provider https_head ssl_pair ssl_status ssl_detail proxied_note
+  require_sudo
+  domain="$(production_ssl_domain 2>/dev/null || echo "${PRODUCTION_DOMAIN:-$SITE_NAME}")"
+  vm_ip="$(get_vm_ip)"
+  dns_ip="$(resolve_ipv4_first "$domain")"
+  cert_path="$(cloudflare_origin_cert_path 2>/dev/null || true)"
+  key_path="$(cloudflare_origin_key_path 2>/dev/null || true)"
+  enabled_path="$(production_nginx_enabled_path)"
+  provider="$(production_ssl_provider_from_cert_path "$(production_nginx_active_cert_path 2>/dev/null || true)")"
+  https_head="$(production_https_status "$domain")"
+  ssl_pair="$(production_ssl_runtime_detail)"
+  ssl_status="${ssl_pair%%|*}"
+  ssl_detail="${ssl_pair#*|}"
+  proxied_note="DNS resolves to origin IP; Cloudflare proxy may be DNS-only/grey-cloud"
+  if [[ -n "$dns_ip" && "$dns_ip" != "$vm_ip" ]]; then
+    proxied_note="DNS does not resolve directly to origin IP; Cloudflare proxy may be ON"
+  fi
+
+  echo
+  echo "============================================================"
+  echo "Cloudflare Origin SSL Status"
+  echo "============================================================"
+  status_line "Domain" "$([[ -n "$dns_ip" ]] && echo OK || echo WARN)" "${domain}; DNS=${dns_ip:-unresolved}; VM=${vm_ip}"
+  status_line "Cloudflare proxy hint" "INFO" "$proxied_note"
+  status_line "Active provider" "$([[ "$provider" == "Cloudflare Origin CA" ]] && echo OK || echo WARN)" "$provider"
+  status_line "Origin certificate" "$([[ -f "$cert_path" ]] && echo OK || echo WARN)" "${cert_path:-missing}"
+  status_line "Origin private key" "$([[ -f "$key_path" ]] && echo OK || echo WARN)" "${key_path:-missing}"
+  if [[ -f "$cert_path" ]]; then
+    status_line "Origin cert detail" "INFO" "$(certificate_detail_for_file "$cert_path")"
+  fi
+  status_line "Nginx site" "$([[ -L "$enabled_path" || -f "$enabled_path" ]] && echo OK || echo WARN)" "$enabled_path"
+  status_line "HTTPS" "$([[ "$https_head" == HTTP/* ]] && echo OK || echo WARN)" "${https_head:-no response/trust warning}"
+  status_line "Overall" "$ssl_status" "$ssl_detail"
+  echo
+  echo "Cloudflare dashboard target: DNS Proxied/orange-cloud + SSL/TLS Full (strict)."
+  echo "============================================================"
+}
+
+production_ssl_wizard() {
+  local choice
+  echo
+  echo "============================================================"
+  echo "Production SSL Provider Wizard"
+  echo "============================================================"
+  echo "Choose how this public ERPNext VM should handle HTTPS."
+  echo
+  echo "1) Let's Encrypt certificate directly on this VM"
+  echo "2) Cloudflare Origin CA certificate for Cloudflare Full (strict)"
+  echo "3) Show current production SSL status"
+  echo "4) Show Cloudflare Origin CA guide"
+  echo "5) Back"
+  echo
+  read -r -p "Choose an option: " choice
+  case "$choice" in
+    1) configure_production_ssl ;;
+    2) configure_cloudflare_origin_ssl ;;
+    3) show_production_ssl_status ;;
+    4) show_cloudflare_origin_guide ;;
+    5|"") return 0 ;;
+    *) warn "Invalid option: ${choice}" ; return 1 ;;
+  esac
+}
+
+disable_production_ssl() {
+  require_erpnext_vm_context "disable-production-ssl" || return 1
+  require_sudo
+
+  local enabled_path available_path domain
+  domain="$(production_ssl_domain 2>/dev/null || echo "${PRODUCTION_DOMAIN:-$SITE_NAME}")"
+  enabled_path="$(production_nginx_enabled_path)"
+  available_path="$(production_nginx_available_path)"
+
+  echo
+  echo "============================================================"
+  echo "Disable Production HTTPS Reverse Proxy"
+  echo "============================================================"
+  echo "This disables the managed production Nginx site for ${domain}."
+  echo "It does not delete Let's Encrypt certificate files and does not stop ERPNext :8000."
+  echo
+
+  if [[ "$ASSUME_YES" -ne 1 ]]; then
+    confirm "Disable production HTTPS Nginx site now?" || return 1
+  fi
+
+  $SUDO rm -f "$enabled_path"
+  if command -v nginx >/dev/null 2>&1; then
+    $SUDO nginx -t || warn "Nginx config test failed after disabling the production site."
+    $SUDO systemctl reload nginx || true
+  fi
+
+  ok "Production HTTPS site disabled"
+  echo "Config file kept for review: ${available_path}"
+  echo "Certificate files, if present, are kept under: /etc/letsencrypt/live/${domain}"
+  echo "============================================================"
+}
+
+production_cpu_count() {
+  nproc 2>/dev/null || echo 0
+}
+
+production_memory_mb() {
+  awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0
+}
+
+production_root_total_gb() {
+  df -BG / 2>/dev/null | awk 'NR==2 {gsub("G", "", $2); print $2+0}' || echo 0
+}
+
+production_root_free_gb() {
+  df -BG / 2>/dev/null | awk 'NR==2 {gsub("G", "", $4); print $4+0}' || echo 0
+}
+
+production_quick_install_state() {
+  local state
+
+  # Use the same sudo-aware install detector as doctor/status.
+  # Direct [[ -d ... ]] checks can produce false "Incomplete" results when
+  # the caller cannot traverse /home/${FRAPPE_USER} without sudo.
+  state="$(install_state 2>/dev/null || echo "unknown")"
+
+  case "$state" in
+    Installed*) echo "Installed" ;;
+    Incomplete) echo "Incomplete" ;;
+    "Not installed") echo "Not installed" ;;
+    *) echo "$state" ;;
+  esac
+}
+
+production_backup_count() {
+  local bench_dir backup_dir
+  bench_dir="$(active_bench_dir 2>/dev/null || echo "$BENCH_DIR")"
+  backup_dir="${bench_dir}/sites/${SITE_NAME}/private/backups"
+
+  if ! path_is_dir "$backup_dir"; then
+    echo "0"
+    return 0
+  fi
+
+  if [[ "${SUDO:-}" == "sudo" ]]; then
+    $SUDO find "$backup_dir" -maxdepth 1 -type f \( -name '*.sql.gz' -o -name '*.tgz' -o -name '*.tar' -o -name '*.tar.gz' \) 2>/dev/null | wc -l | awk '{print $1+0}'
+  else
+    find "$backup_dir" -maxdepth 1 -type f \( -name '*.sql.gz' -o -name '*.tgz' -o -name '*.tar' -o -name '*.tar.gz' \) 2>/dev/null | wc -l | awk '{print $1+0}'
+  fi
+}
+
+production_domain_readiness_status() {
+  if [[ -z "$PRODUCTION_DOMAIN" ]]; then
+    echo "WARN|not set"
+  elif validate_production_domain_value "$PRODUCTION_DOMAIN" >/dev/null 2>&1; then
+    echo "OK|$PRODUCTION_DOMAIN"
+  else
+    echo "WARN|invalid: $PRODUCTION_DOMAIN"
+  fi
+}
+
+production_ssl_readiness_detail() {
+  local prod_pair cert_path
+
+  if prod_pair="$(production_ssl_runtime_detail 2>/dev/null)" && [[ "$prod_pair" == OK\|* ]]; then
+    echo "$prod_pair"
+    return 0
+  fi
+
+  cert_path="$(ssl_cert_path 2>/dev/null || true)"
+
+  if ssl_is_configured 2>/dev/null; then
+    if [[ -n "$cert_path" && -f "$cert_path" ]] && ssl_cert_is_self_signed "$cert_path" 2>/dev/null; then
+      echo "WARN|local self-signed SSL only; not production SSL"
+    else
+      echo "INFO|local HTTPS configured; still verify production certificate plan"
+    fi
+  elif [[ -n "${prod_pair:-}" ]]; then
+    echo "$prod_pair"
+  else
+    echo "WARN|not configured for production"
+  fi
+}
+
+production_classification() {
+  local install_state="$1"
+  local cpu_count="$2"
+  local mem_mb="$3"
+  local free_gb="$4"
+  local domain_state="$5"
+  local backup_count="$6"
+
+  if [[ "$install_state" != Installed* ]]; then
+    echo "Not recommended|core ERPNext install is incomplete"
+    return 0
+  fi
+
+  if [[ "$cpu_count" =~ ^[0-9]+$ && "$cpu_count" -lt 2 ]]; then
+    echo "Not recommended|CPU is below the practical minimum"
+    return 0
+  fi
+
+  if [[ "$mem_mb" =~ ^[0-9]+$ && "$mem_mb" -lt 4096 ]]; then
+    echo "Not recommended|RAM is below the practical minimum"
+    return 0
+  fi
+
+  if [[ "$free_gb" =~ ^[0-9]+$ && "$free_gb" -lt 20 ]]; then
+    echo "Not recommended|root filesystem free space is low"
+    return 0
+  fi
+
+  if [[ "$domain_state" != "OK" ]]; then
+    echo "Dev-only|no valid production domain is configured"
+    return 0
+  fi
+
+  if [[ "$backup_count" == "0" || "$backup_count" == "unknown" ]]; then
+    echo "Dev-only|backup readiness is not confirmed"
+    return 0
+  fi
+
+  echo "Production candidate|resources and basic planning inputs look usable; hardening still required"
+}
+
+show_production_readiness() {
+  local bench_dir install_quick runtime service auto cpu_count mem_mb total_gb free_gb nginx_state backup_count
+
+  require_sudo
+  local domain_pair domain_status domain_state ssl_pair ssl_status ssl_detail class_pair class_name class_reason
+
+  bench_dir="$(active_bench_dir 2>/dev/null || echo "$BENCH_DIR")"
+  install_quick="$(production_quick_install_state)"
+  runtime="$(runtime_state 2>/dev/null || echo unknown)"
+  service="$(service_state 2>/dev/null || echo unknown)"
+  auto="$(autostart_state 2>/dev/null || echo unknown)"
+  cpu_count="$(production_cpu_count)"
+  mem_mb="$(production_memory_mb)"
+  total_gb="$(production_root_total_gb)"
+  free_gb="$(production_root_free_gb)"
+  backup_count="$(production_backup_count)"
+  nginx_state="not installed"
 
   if command -v nginx >/dev/null 2>&1; then
     nginx_state="installed"
   fi
 
+  domain_pair="$(production_domain_readiness_status)"
+  domain_status="${domain_pair%%|*}"
+  domain_state="${domain_pair#*|}"
+
+  ssl_pair="$(production_ssl_readiness_detail)"
+  ssl_status="${ssl_pair%%|*}"
+  ssl_detail="${ssl_pair#*|}"
+
+  class_pair="$(production_classification "$install_quick" "$cpu_count" "$mem_mb" "$free_gb" "$domain_status" "$backup_count")"
+  class_name="${class_pair%%|*}"
+  class_reason="${class_pair#*|}"
+
   echo
   echo "============================================================"
-  echo "Production Readiness Preview"
+  echo "Production Readiness / Planning"
   echo "============================================================"
-  status_line "Developer mode" "OK" "active"
-  status_line "Production automation" "INFO" "planned, not enabled"
-  status_line "Local site" "INFO" "$SITE_NAME"
+  status_line "Classification" "INFO" "$class_name — $class_reason"
+  status_line "Automation mode" "INFO" "planning only; no production changes are applied"
+  status_line "Local site" "INFO" "${SITE_NAME} (${SITE_NAME_SOURCE})"
+  status_line "Bench" "INFO" "$bench_dir"
+  if [[ "$install_quick" == Installed* ]]; then
+    status_line "Install state" "OK" "$install_quick"
+  else
+    status_line "Install state" "WARN" "$install_quick"
+  fi
+  if [[ "$runtime" == Running* ]]; then
+    status_line "Runtime" "OK" "$runtime"
+  else
+    status_line "Runtime" "WARN" "$runtime"
+  fi
+  status_line "Service" "INFO" "$service; autostart=${auto}"
+
+  if [[ "$cpu_count" =~ ^[0-9]+$ && "$cpu_count" -ge 2 ]]; then
+    status_line "CPU" "OK" "${cpu_count} vCPU"
+  else
+    status_line "CPU" "WARN" "${cpu_count} vCPU; recommended minimum is 2+"
+  fi
+
+  if [[ "$mem_mb" =~ ^[0-9]+$ && "$mem_mb" -ge 8192 ]]; then
+    status_line "RAM" "OK" "${mem_mb} MB"
+  elif [[ "$mem_mb" =~ ^[0-9]+$ && "$mem_mb" -ge 4096 ]]; then
+    status_line "RAM" "WARN" "${mem_mb} MB; usable for dev/small testing, 8192+ MB preferred"
+  else
+    status_line "RAM" "FAIL" "${mem_mb} MB; recommended minimum is 4096 MB"
+  fi
+
+  if [[ "$free_gb" =~ ^[0-9]+$ && "$free_gb" -ge 60 ]]; then
+    status_line "Root disk" "OK" "${free_gb}G free of ${total_gb}G"
+  elif [[ "$free_gb" =~ ^[0-9]+$ && "$free_gb" -ge 20 ]]; then
+    status_line "Root disk" "WARN" "${free_gb}G free of ${total_gb}G; 60G+ free preferred"
+  else
+    status_line "Root disk" "FAIL" "${free_gb}G free of ${total_gb}G; too low for safe growth/backups"
+  fi
+
   status_line "Production domain" "$domain_status" "$domain_state"
   status_line "Nginx" "INFO" "$nginx_state"
-  status_line "SSL mode" "INFO" "$ssl_state"
+  status_line "Production SSL" "$ssl_status" "$ssl_detail"
+
+  if [[ "$backup_count" =~ ^[0-9]+$ && "$backup_count" -gt 0 ]]; then
+    status_line "Backup readiness" "OK" "${backup_count} local backup file(s) found; off-VM backups still recommended"
+  elif [[ "$backup_count" == "unknown" ]]; then
+    status_line "Backup readiness" "WARN" "backup folder not readable from current user"
+  else
+    status_line "Backup readiness" "WARN" "no local backup files detected"
+  fi
+
   echo
-  echo "Next planning commands:"
-  echo "  ./install-erpnext-dev.sh production-domain-guide"
-  echo "  ./install-erpnext-dev.sh production-ssl-guide"
+  echo "Recommended next commands:"
+  echo "  ./install-erpnext-dev.sh production-plan"
+  echo "  ./install-erpnext-dev.sh production-domain-plan"
+  echo "  ./install-erpnext-dev.sh public-vm-readiness"
+  echo "  ./install-erpnext-dev.sh production-ssl-plan"
+  echo "  ./install-erpnext-dev.sh production-firewall-plan"
+  echo "============================================================"
+}
+
+show_production_plan() {
+  local domain_hint="${PRODUCTION_DOMAIN:-erp.company.com}"
+
+  echo
+  echo "============================================================"
+  echo "Production Planning Checklist"
+  echo "============================================================"
+  echo
+  echo "This command is planning-only. It does not convert the dev VM into production."
+  echo
+  echo "1) Decide the target architecture"
+  echo "   - Keep this VM as development only, or migrate/harden a separate production VM."
+  echo "   - Production should not rely on a casual bench start workflow."
+  echo
+  echo "2) Confirm production domain"
+  echo "   - Current local site: ${SITE_NAME}"
+  echo "   - Planned production domain: ${domain_hint}"
+  echo "   - Use a real DNS name such as erp.company.com, not .test or .local."
+  echo
+  echo "3) Confirm DNS and network path"
+  echo "   - A/AAAA record points to the production server."
+  echo "   - Ports 80 and 443 are reachable where required."
+  echo "   - Do not change MX/email DNS records unless ERPNext email routing requires it."
+  echo
+  echo "4) Confirm SSL approach"
+  echo "   - Local mkcert/self-signed SSL is for development only."
+  echo "   - Production should use Let's Encrypt, Cloudflare Origin CA, or a business-approved certificate."
+  echo
+  echo "5) Confirm backup and restore readiness"
+  echo "   - Create database + files backup."
+  echo "   - Store a copy off the VM."
+  echo "   - Test restore before trusting the environment."
+  echo
+  echo "6) Confirm hardening before go-live"
+  echo "   - Firewall policy"
+  echo "   - Service supervision"
+  echo "   - Update strategy"
+  echo "   - Monitoring/log review"
+  echo "   - Admin password and credential handling"
+  echo
+  echo "Useful commands now:"
+  echo "  ./install-erpnext-dev.sh production-readiness"
+  echo "  ./install-erpnext-dev.sh production-domain-plan"
+  echo "  ./install-erpnext-dev.sh public-vm-readiness"
+  echo "  ./install-erpnext-dev.sh production-ssl-plan"
+  echo "  ./install-erpnext-dev.sh production-firewall-plan"
+  echo "  ./install-erpnext-dev.sh backup-files"
+  echo "  ./install-erpnext-dev.sh support-bundle"
   echo "============================================================"
 }
 
@@ -2569,9 +5196,9 @@ install_local_ssl_cert() {
     echo "  /tmp/${SITE_NAME}.crt"
     echo "  /tmp/${SITE_NAME}.key"
     echo
-    echo "Generate trusted local certificates on the HOST with mkcert, then copy them to the VM:"
-    echo "  scp ${SITE_NAME}.crt test@VM_IP:/tmp/${SITE_NAME}.crt"
-    echo "  scp ${SITE_NAME}.key test@VM_IP:/tmp/${SITE_NAME}.key"
+    echo "Generate trusted local certificates on the HOST with mkcert, then copy them to the VM."
+    echo "Existing VM cert/key files will be backed up automatically when the files are installed."
+    show_local_ssl_wizard_host_mkcert_steps
     echo
     echo "You can override the VM source paths like this:"
     echo "  LOCAL_SSL_CERT_SOURCE=/path/to/${SITE_NAME}.crt LOCAL_SSL_KEY_SOURCE=/path/to/${SITE_NAME}.key ./install-erpnext-dev.sh install-local-ssl-cert"
@@ -2729,6 +5356,239 @@ verify_local_ssl() {
   echo "============================================================"
 }
 
+ssl_is_configured() {
+  local cert_path key_path enabled_path https_head
+  cert_path="$(ssl_cert_path)"
+  key_path="$(ssl_key_path)"
+  enabled_path="$(ssl_nginx_enabled_path)"
+
+  [[ -f "$cert_path" && -f "$key_path" ]] || return 1
+  [[ -L "$enabled_path" || -f "$enabled_path" ]] || return 1
+  port_listens 443 || return 1
+
+  https_head="$(curl_head_status "https://${SITE_NAME}/" "$SITE_NAME" 443 "127.0.0.1" || true)"
+  [[ "$https_head" == HTTP/* ]]
+}
+
+ssl_cert_is_self_signed() {
+  local cert_path subject issuer
+  cert_path="${1:-$(ssl_cert_path)}"
+
+  [[ -f "$cert_path" ]] || return 1
+  command -v openssl >/dev/null 2>&1 || return 1
+
+  subject="$(openssl x509 -in "$cert_path" -noout -subject 2>/dev/null | sed 's/^subject=//; s/^ *//')"
+  issuer="$(openssl x509 -in "$cert_path" -noout -issuer 2>/dev/null | sed 's/^issuer=//; s/^ *//')"
+
+  [[ -n "$subject" && "$subject" == "$issuer" ]]
+}
+
+
+show_local_ssl_wizard_host_mkcert_steps() {
+  local vm_ip escaped_site cert_path key_path
+  vm_ip="$(get_vm_ip)"
+  escaped_site="${SITE_NAME//./\\.}"
+  cert_path="$(ssl_cert_path)"
+  key_path="$(ssl_key_path)"
+
+  echo
+  echo "Run these on the HOST machine:"
+  echo "  sudo apt update && sudo apt install -y libnss3-tools mkcert"
+  echo "  mkcert -install"
+  echo "  mkcert -cert-file ${SITE_NAME}.crt -key-file ${SITE_NAME}.key ${SITE_NAME} ${vm_ip} localhost 127.0.0.1"
+  echo "  scp ${SITE_NAME}.crt ${SITE_NAME}.key USER@${vm_ip}:/tmp/"
+  echo
+  echo "Then run inside this VM:"
+  echo "  ./install-erpnext-dev.sh local-ssl-wizard"
+  echo "  # choose the mkcert replace/install option"
+  echo
+  echo "Replacement safety:"
+  echo "  Existing VM cert/key files are backed up before replacement."
+  echo "  Browser trust still belongs on the HOST where mkcert -install was run."
+  echo
+  echo "Target VM paths:"
+  echo "  ${cert_path}"
+  echo "  ${key_path}"
+  echo
+  echo "HOST /etc/hosts must also contain:"
+  echo "  sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts"
+  echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
+}
+
+show_local_ssl_wizard_host_tests() {
+  local vm_ip escaped_site
+  vm_ip="$(get_vm_ip)"
+  escaped_site="${SITE_NAME//./\\.}"
+
+  echo
+  echo "HOST checks:"
+  echo "  sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts"
+  echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
+  echo "  curl -I http://${SITE_NAME}"
+  echo "  curl -kI https://${SITE_NAME}     # self-signed test"
+  echo "  curl -I https://${SITE_NAME}      # trusted mkcert test"
+  echo "  curl -I http://${SITE_NAME}:8000"
+}
+
+run_local_ssl_wizard() {
+  require_erpnext_vm_context "local-ssl-wizard" || return 1
+  require_sudo
+
+  local vm_ip direct_head friendly_head choice reply src_cert src_key cert_path cert_mode
+  vm_ip="$(get_vm_ip)"
+  src_cert="/tmp/${SITE_NAME}.crt"
+  src_key="/tmp/${SITE_NAME}.key"
+  cert_path="$(ssl_cert_path)"
+  cert_mode="not installed"
+
+  echo
+  echo "============================================================"
+  echo "Local SSL Wizard"
+  echo "============================================================"
+  echo "Goal: https://${SITE_NAME}"
+  echo "This runs inside the ERPNext VM. Browser trust is configured on the HOST."
+  echo "============================================================"
+
+  if ! port_listens 8000; then
+    status_line "Bench web" "WARN" "127.0.0.1:8000 not listening"
+    if [[ -t 0 && "$ASSUME_YES" -ne 1 ]]; then
+      read -r -p "Start ERPNext service now? [Y/n]: " reply
+      reply="${reply:-Y}"
+      if [[ "$reply" =~ ^[Yy]$ ]]; then
+        start_erpnext_service || return 1
+      else
+        warn "Start ERPNext first, then rerun local-ssl-wizard."
+        echo "============================================================"
+        return 1
+      fi
+    else
+      start_erpnext_service || return 1
+    fi
+  fi
+
+  direct_head="$(curl_head_status "http://127.0.0.1:8000/" "" "" "" || true)"
+  friendly_head="$(curl_head_status "http://${SITE_NAME}:8000/" "$SITE_NAME" 8000 "127.0.0.1" || true)"
+
+  [[ "$direct_head" == HTTP/* ]] && status_line "Direct Bench" "OK" "$direct_head" || status_line "Direct Bench" "WARN" "no response"
+  [[ "$friendly_head" == HTTP/* ]] && status_line "Site host header" "OK" "$friendly_head" || status_line "Site host header" "WARN" "no response"
+
+  if [[ "$direct_head" != HTTP/* ]]; then
+    warn "ERPNext direct HTTP must work before SSL is configured."
+    echo "Run: ./install-erpnext-dev.sh verify-access"
+    echo "============================================================"
+    return 1
+  fi
+
+  if [[ -f "$cert_path" ]]; then
+    if ssl_cert_is_self_signed "$cert_path"; then
+      cert_mode="self-signed/local test certificate"
+    else
+      cert_mode="existing certificate, not self-signed"
+    fi
+  fi
+
+  if ssl_is_configured; then
+    status_line "Local HTTPS" "OK" "already configured"
+    status_line "Certificate mode" "INFO" "$cert_mode"
+    echo
+    echo "Choose SSL action:"
+    echo "  1) Keep current SSL and show HOST checks"
+    echo "  2) Replace/install trusted mkcert certificate from HOST files in /tmp"
+    echo "  3) Regenerate quick self-signed certificate"
+    echo "  4) Show SSL status only"
+    echo
+
+    if [[ "$ASSUME_YES" -eq 1 ]]; then
+      choice="1"
+    else
+      read -r -p "Choose [1-4]: " choice
+      choice="${choice:-1}"
+    fi
+
+    case "$choice" in
+      1)
+        show_local_ssl_wizard_host_tests
+        ;;
+      2)
+        if [[ -f "$src_cert" && -f "$src_key" ]]; then
+          status_line "mkcert files" "OK" "found in /tmp"
+          install_local_ssl_cert
+          configure_local_ssl
+          verify_local_ssl
+          show_local_ssl_wizard_host_tests
+        else
+          status_line "mkcert files" "INFO" "not found in /tmp"
+          warn "No certificate was replaced. Generate/copy mkcert files first, then rerun this wizard."
+          show_local_ssl_wizard_host_mkcert_steps
+        fi
+        ;;
+      3)
+        create_self_signed_local_cert
+        configure_local_ssl
+        verify_local_ssl
+        show_local_ssl_wizard_host_tests
+        echo
+        warn "Self-signed SSL works for testing, but browsers will show a warning."
+        ;;
+      4)
+        show_ssl_status
+        ;;
+      *)
+        warn "Invalid choice. No changes made."
+        ;;
+    esac
+
+    echo "============================================================"
+    return 0
+  fi
+
+  echo
+  echo "Choose SSL mode:"
+  echo "  1) Quick self-signed certificate"
+  echo "  2) Trusted mkcert certificate from HOST"
+  echo "  3) Show status only"
+  echo
+
+  if [[ "$ASSUME_YES" -eq 1 ]]; then
+    choice="1"
+  else
+    read -r -p "Choose [1-3]: " choice
+    choice="${choice:-1}"
+  fi
+
+  case "$choice" in
+    1)
+      create_self_signed_local_cert
+      configure_local_ssl
+      verify_local_ssl
+      show_local_ssl_wizard_host_tests
+      echo
+      warn "Self-signed SSL works for testing, but browsers will show a warning."
+      echo "For trusted browser SSL, run: ./install-erpnext-dev.sh local-ssl-wizard and choose mkcert."
+      ;;
+    2)
+      if [[ -f "$src_cert" && -f "$src_key" ]]; then
+        status_line "mkcert files" "OK" "found in /tmp"
+        install_local_ssl_cert
+        configure_local_ssl
+        verify_local_ssl
+        show_local_ssl_wizard_host_tests
+      else
+        status_line "mkcert files" "INFO" "not found in /tmp"
+        show_local_ssl_wizard_host_mkcert_steps
+      fi
+      ;;
+    3)
+      show_ssl_status
+      ;;
+    *)
+      warn "Invalid choice. No changes made."
+      ;;
+  esac
+
+  echo "============================================================"
+}
+
 ssl_file_permissions() {
   local file_path="$1"
   if [[ -e "$file_path" ]]; then
@@ -2869,6 +5729,11 @@ show_ssl_status() {
   fi
 
   if [[ -f "$cert_path" ]]; then
+    if ssl_cert_is_self_signed "$cert_path"; then
+      status_line "Certificate trust" "WARN" "self-signed; browser warning is expected unless the HOST trusts this certificate/CA"
+    else
+      status_line "Certificate trust" "INFO" "not self-signed; if this is mkcert, trust must be installed on the HOST"
+    fi
     echo
     echo "Certificate details:"
     ssl_cert_summary "$cert_path"
@@ -3268,27 +6133,29 @@ show_access_menu() {
     echo "2) Show host /etc/hosts command only"
     echo "3) Show VM network/access status"
     echo "4) Show host access test guide"
-    echo "5) Show KVM VM identification + fixed IP helper"
-    echo "6) Show KVM/libvirt fixed IP guide"
-    echo "7) Show multi-environment naming guide"
-    echo "8) Show SSL/HTTPS roadmap"
-    echo "9) Show local SSL status"
-    echo "10) Show local SSL guide"
-    echo "11) Show trusted mkcert SSL guide"
-    echo "12) Show browser trust check guide"
-    echo "13) Verify local SSL"
-    echo "14) Install/replace local SSL cert"
-    echo "15) Create self-signed local cert"
-    echo "16) Configure local SSL reverse proxy"
-    echo "17) Disable local SSL reverse proxy"
-    echo "18) Verify SSL rollback"
-    echo "19) Show SSL rollback guide"
-    echo "20) Domain config"
-    echo "21) Production readiness preview"
-    echo "22) Production domain guide"
-    echo "23) Production SSL guide"
-    echo "24) Environment / location check"
-    echo "25) Back"
+    echo "5) Verify ERPNext HTTP access"
+    echo "6) Show KVM VM identification + fixed IP helper"
+    echo "7) Show KVM/libvirt fixed IP guide"
+    echo "8) Show multi-environment naming guide"
+    echo "9) Show SSL/HTTPS roadmap"
+    echo "10) Show local SSL status"
+    echo "11) Show local SSL guide"
+    echo "12) Local SSL wizard"
+    echo "13) Show trusted mkcert SSL guide"
+    echo "14) Show browser trust check guide"
+    echo "15) Verify local SSL"
+    echo "16) Install/replace local SSL cert"
+    echo "17) Create self-signed local cert"
+    echo "18) Configure local SSL reverse proxy"
+    echo "19) Disable local SSL reverse proxy"
+    echo "20) Verify SSL rollback"
+    echo "21) Show SSL rollback guide"
+    echo "22) Domain config"
+    echo "23) Production readiness preview"
+    echo "24) Production domain guide"
+    echo "25) Production SSL guide"
+    echo "26) Environment / location check"
+    echo "27) Back"
     echo
     read -r -p "Choose an option: " access_choice
 
@@ -3297,30 +6164,70 @@ show_access_menu() {
       2) show_host_hosts_command ;;
       3) show_network_status ;;
       4) show_host_access_test_guide ;;
-      5) show_kvm_vm_identification_guide ;;
-      6) show_kvm_fixed_ip_guide ;;
-      7) show_multi_environment_guide ;;
-      8) show_ssl_roadmap_guide ;;
-      9) show_ssl_status ;;
-      10) show_local_ssl_guide ;;
-      11) show_mkcert_local_ssl_guide ;;
-      12) show_browser_trust_check_guide ;;
-      13) verify_local_ssl ;;
-      14) install_local_ssl_cert ;;
-      15) create_self_signed_local_cert ;;
-      16) configure_local_ssl ;;
-      17) disable_local_ssl ;;
-      18) verify_ssl_rollback ;;
-      19) show_ssl_rollback_guide ;;
-      20) show_domain_config ;;
-      21) show_production_readiness ;;
-      22) show_production_domain_guide ;;
-      23) show_production_ssl_guide ;;
-      24) show_environment_check ;;
-      25) return 0 ;;
+      5) verify_access ;;
+      6) show_kvm_vm_identification_guide ;;
+      7) show_kvm_fixed_ip_guide ;;
+      8) show_multi_environment_guide ;;
+      9) show_ssl_roadmap_guide ;;
+      10) show_ssl_status ;;
+      11) show_local_ssl_guide ;;
+      12) run_local_ssl_wizard ;;
+      13) show_mkcert_local_ssl_guide ;;
+      14) show_browser_trust_check_guide ;;
+      15) verify_local_ssl ;;
+      16) install_local_ssl_cert ;;
+      17) create_self_signed_local_cert ;;
+      18) configure_local_ssl ;;
+      19) disable_local_ssl ;;
+      20) verify_ssl_rollback ;;
+      21) show_ssl_rollback_guide ;;
+      22) show_domain_config ;;
+      23) show_production_readiness ;;
+      24) show_production_domain_guide ;;
+      25) show_production_ssl_guide ;;
+      26) show_environment_check ;;
+      27) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
+}
+
+post_install_validation_summary() {
+  local free_gb service_status autostart_status
+  free_gb="$(df -BG / | awk 'NR==2 {gsub("G", "", $4); print $4}' 2>/dev/null || echo 0)"
+  service_status="$(service_state 2>/dev/null || echo unknown)"
+  autostart_status="$(autostart_state 2>/dev/null || echo unknown)"
+
+  echo
+  echo "============================================================"
+  echo "Post-Install Validation"
+  echo "============================================================"
+
+  if [[ "$free_gb" =~ ^[0-9]+$ && "$free_gb" -ge 30 ]]; then
+    status_line "Root free space" "OK" "${free_gb}G available"
+  else
+    status_line "Root free space" "WARN" "${free_gb}G available; 60G+ recommended"
+  fi
+
+  if [[ "$service_status" == "Running" ]]; then
+    status_line "ERPNext service" "OK" "$service_status"
+  else
+    status_line "ERPNext service" "INFO" "$service_status"
+  fi
+
+  if [[ "$autostart_status" == "Enabled" ]]; then
+    status_line "Autostart" "OK" "$autostart_status"
+  else
+    status_line "Autostart" "WARN" "$autostart_status"
+  fi
+
+  if path_is_file "${FRAPPE_HOME}/erpnext-dev-credentials.txt"; then
+    status_line "Credentials file" "OK" "${FRAPPE_HOME}/erpnext-dev-credentials.txt"
+  else
+    status_line "Credentials file" "WARN" "missing at ${FRAPPE_HOME}/erpnext-dev-credentials.txt"
+  fi
+
+  echo "============================================================"
 }
 
 print_summary() {
@@ -3338,7 +6245,8 @@ print_summary() {
   echo
   echo "Login:"
   echo "  Username: Administrator"
-  echo "  Password: ${ADMIN_PASSWORD}"
+  echo "  Password: saved in the credentials file"
+  echo "  View with: sudo cat ${FRAPPE_HOME}/erpnext-dev-credentials.txt"
   echo
   echo "Start ERPNext:"
   echo "  ./install-erpnext-dev.sh start"
@@ -3350,14 +6258,14 @@ print_summary() {
   echo "  bench start"
   echo
   echo "Browser access:"
-  echo "  Direct IP URL, works while Bench is running:"
-  echo "    http://${vm_ip}:8000"
+  echo "  Direct IP:    http://${vm_ip}:8000"
+  echo "  Friendly URL: http://${SITE_NAME}:8000"
   echo
-  echo "  Friendly URL, works after HOST /etc/hosts setup:"
-  echo "    http://${SITE_NAME}:8000"
+  echo "Run this on the HOST for the friendly URL:"
+  echo "  echo "${vm_ip} ${SITE_NAME}" | sudo tee -a /etc/hosts"
   echo
-  echo "On your HOST machine, add/update this /etc/hosts entry:"
-  echo "  ${vm_ip} ${SITE_NAME}"
+  echo "Verify access after setup:"
+  echo "  ./install-erpnext-dev.sh verify-access"
   echo
   echo "Credentials file:"
   echo "  ${FRAPPE_HOME}/erpnext-dev-credentials.txt"
@@ -3412,7 +6320,15 @@ detect_bench_dir() {
 }
 
 active_bench_dir() {
-  detect_bench_dir 2>/dev/null || echo "$BENCH_DIR"
+  local detected
+
+  detected="$(detect_bench_dir 2>/dev/null || true)"
+  if [[ -n "$detected" ]]; then
+    printf '%s
+' "$detected" | head -n 1
+  else
+    echo "$BENCH_DIR"
+  fi
 }
 
 
@@ -3499,7 +6415,7 @@ resolve_site_name_after_sudo() {
     return 0
   fi
 
-  if [[ "$SITE_NAME_SOURCE" == "setup prompt" ]]; then
+  if [[ "$SITE_NAME_SOURCE" == "setup prompt" || "$SITE_NAME_SOURCE" == "domain wizard" || "$SITE_NAME_SOURCE" == "local quickstart" ]]; then
     return 0
   fi
 
@@ -3867,6 +6783,664 @@ show_status_menu() {
   done
 }
 
+
+
+status_line_plain() {
+  local label="$1"
+  local state="$2"
+  local message="$3"
+
+  printf "  %-28s %-7s %s\n" "$label" "$state" "$message"
+}
+
+json_escape() {
+  local s="${1:-}"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\t'/\\t}"
+  printf '"%s"' "$s"
+}
+
+doctor_add_check() {
+  DOCTOR_CHECK_NAMES+=("$1")
+  DOCTOR_CHECK_STATUSES+=("$2")
+  DOCTOR_CHECK_DETAILS+=("$3")
+}
+
+doctor_command_version() {
+  local cmd="$1"
+  shift || true
+
+  if command -v "$cmd" >/dev/null 2>&1; then
+    "$cmd" "$@" 2>/dev/null | head -n 1 || true
+  else
+    echo "missing"
+  fi
+}
+
+doctor_run_as_frappe_one_line() {
+  local cmd="$1"
+
+  if id "$FRAPPE_USER" >/dev/null 2>&1; then
+    run_as_frappe "$cmd" 2>/dev/null | head -n 1 || true
+  else
+    echo "frappe user missing"
+  fi
+}
+
+doctor_storage_detail() {
+  local data layout root_bytes vg_free_bytes tail_free_bytes can_expand reason
+  data="$(storage_eval 2>/dev/null || true)"
+
+  while IFS='=' read -r k v; do
+    case "$k" in
+      LAYOUT) layout="$v" ;;
+      ROOT_BYTES) root_bytes="$v" ;;
+      VG_FREE_BYTES) vg_free_bytes="$v" ;;
+      TAIL_FREE_BYTES) tail_free_bytes="$v" ;;
+      CAN_EXPAND) can_expand="$v" ;;
+      REASON) reason="$v" ;;
+    esac
+  done <<< "$data"
+
+  printf 'layout=%s; root=%s; vg_free=%s; tail_free=%s; reason=%s\n' \
+    "${layout:-unknown}" \
+    "$(bytes_to_gib "${root_bytes:-0}" 2>/dev/null || echo unknown)" \
+    "$(bytes_to_gib "${vg_free_bytes:-0}" 2>/dev/null || echo unknown)" \
+    "$(bytes_to_gib "${tail_free_bytes:-0}" 2>/dev/null || echo unknown)" \
+    "${reason:-unknown}"
+}
+
+doctor_optional_app_detail() {
+  local bench_dir="$1"
+  local app="$2"
+
+  if site_app_installed "$app" 2>/dev/null; then
+    echo "installed on ${SITE_NAME}"
+  elif app_folder_exists "$bench_dir" "$app" 2>/dev/null && app_in_apps_txt "$app" 2>/dev/null; then
+    echo "downloaded and registered, not installed on ${SITE_NAME}"
+  elif app_folder_exists "$bench_dir" "$app" 2>/dev/null; then
+    echo "downloaded, not registered"
+  else
+    echo "not installed"
+  fi
+}
+
+doctor_collect() {
+  require_sudo
+
+  DOCTOR_GENERATED_AT="$(date -Iseconds 2>/dev/null || date)"
+  DOCTOR_HOSTNAME="$(hostname 2>/dev/null || echo unknown)"
+  DOCTOR_CURRENT_USER="$(id -un 2>/dev/null || echo unknown)"
+  DOCTOR_VM_IP="$(get_vm_ip 2>/dev/null || echo unknown)"
+  DOCTOR_BENCH_DIR="$(active_bench_dir 2>/dev/null || echo "$BENCH_DIR")"
+  DOCTOR_INSTALL_STATE="$(install_state 2>/dev/null || echo unknown)"
+  DOCTOR_RUNTIME_STATE="$(runtime_state 2>/dev/null || echo unknown)"
+  DOCTOR_SERVICE_STATE="$(service_state 2>/dev/null || echo unknown)"
+  DOCTOR_AUTOSTART_STATE="$(autostart_state 2>/dev/null || echo unknown)"
+  DOCTOR_SSL_STATE="not configured"
+  DOCTOR_CHECK_NAMES=()
+  DOCTOR_CHECK_STATUSES=()
+  DOCTOR_CHECK_DETAILS=()
+  DOCTOR_OPTIONAL_APPS=()
+  DOCTOR_OPTIONAL_LABELS=()
+  DOCTOR_OPTIONAL_DETAILS=()
+
+  if ssl_is_configured 2>/dev/null; then
+    DOCTOR_SSL_STATE="configured"
+  fi
+
+  if [[ -f /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    DOCTOR_OS="${PRETTY_NAME:-unknown}"
+    if [[ "${ID:-}" == "ubuntu" && ( "${VERSION_ID:-}" == "24.04" || "${VERSION_ID:-}" == "26.04" ) ]]; then
+      doctor_add_check "OS" "OK" "$DOCTOR_OS"
+    else
+      doctor_add_check "OS" "FAIL" "${DOCTOR_OS}; supported: Ubuntu 24.04 / 26.04"
+    fi
+  else
+    DOCTOR_OS="unknown"
+    doctor_add_check "OS" "FAIL" "/etc/os-release not found"
+  fi
+
+  local py_system py_frappe node_frappe mariadb_version redis_version storage_detail storage_data storage_can_expand storage_layout storage_reason
+  py_system="$(doctor_command_version python3 --version)"
+  py_frappe="$(doctor_run_as_frappe_one_line 'python --version 2>&1')"
+  node_frappe="$(doctor_run_as_frappe_one_line 'node --version 2>/dev/null || echo missing')"
+  mariadb_version="$(doctor_command_version mariadb --version)"
+  if [[ "$mariadb_version" == "missing" ]]; then
+    mariadb_version="$(doctor_command_version mysql --version)"
+  fi
+  redis_version="$(doctor_command_version redis-server --version)"
+
+  doctor_add_check "System Python" "INFO" "$py_system"
+  doctor_add_check "frappe Python" "INFO" "$py_frappe"
+  doctor_add_check "frappe Node" "INFO" "$node_frappe"
+  doctor_add_check "MariaDB version" "INFO" "$mariadb_version"
+  doctor_add_check "Redis version" "INFO" "$redis_version"
+
+  if systemctl is-active --quiet mariadb 2>/dev/null; then
+    doctor_add_check "MariaDB service" "OK" "running"
+  else
+    doctor_add_check "MariaDB service" "WARN" "not running"
+  fi
+
+  if systemctl is-active --quiet redis-server 2>/dev/null; then
+    doctor_add_check "Redis service" "OK" "running"
+  else
+    doctor_add_check "Redis service" "WARN" "not running"
+  fi
+
+  if [[ "$(sysctl -n vm.overcommit_memory 2>/dev/null || echo 0)" == "1" ]]; then
+    doctor_add_check "Redis overcommit" "OK" "vm.overcommit_memory=1"
+  else
+    doctor_add_check "Redis overcommit" "WARN" "not set to 1"
+  fi
+
+  if id "$FRAPPE_USER" >/dev/null 2>&1; then
+    doctor_add_check "frappe user" "OK" "$FRAPPE_USER exists"
+  else
+    doctor_add_check "frappe user" "FAIL" "$FRAPPE_USER missing"
+  fi
+
+  if path_is_dir "$DOCTOR_BENCH_DIR"; then
+    doctor_add_check "Bench folder" "OK" "$DOCTOR_BENCH_DIR"
+  else
+    doctor_add_check "Bench folder" "FAIL" "$DOCTOR_BENCH_DIR missing"
+  fi
+
+  if check_bench_app_installed frappe; then
+    doctor_add_check "Frappe app files" "OK" "apps/frappe exists"
+  else
+    doctor_add_check "Frappe app files" "FAIL" "apps/frappe missing"
+  fi
+
+  if check_bench_app_installed erpnext; then
+    doctor_add_check "ERPNext app files" "OK" "apps/erpnext exists"
+  else
+    doctor_add_check "ERPNext app files" "WARN" "apps/erpnext missing"
+  fi
+
+  if site_exists; then
+    doctor_add_check "Site folder" "OK" "${SITE_NAME} exists"
+  else
+    doctor_add_check "Site folder" "WARN" "${SITE_NAME} missing"
+  fi
+
+  if site_app_installed frappe 2>/dev/null; then
+    doctor_add_check "Site app: frappe" "OK" "installed on ${SITE_NAME}"
+  else
+    doctor_add_check "Site app: frappe" "WARN" "not confirmed on ${SITE_NAME}"
+  fi
+
+  if site_app_installed erpnext 2>/dev/null; then
+    doctor_add_check "Site app: erpnext" "OK" "installed on ${SITE_NAME}"
+  else
+    doctor_add_check "Site app: erpnext" "WARN" "not confirmed on ${SITE_NAME}"
+  fi
+
+  case "$DOCTOR_INSTALL_STATE" in
+    Installed) doctor_add_check "Install state" "OK" "$DOCTOR_INSTALL_STATE" ;;
+    Incomplete) doctor_add_check "Install state" "WARN" "$DOCTOR_INSTALL_STATE" ;;
+    *) doctor_add_check "Install state" "INFO" "$DOCTOR_INSTALL_STATE" ;;
+  esac
+
+  case "$DOCTOR_RUNTIME_STATE" in
+    Running*) doctor_add_check "Runtime state" "OK" "$DOCTOR_RUNTIME_STATE" ;;
+    Starting*) doctor_add_check "Runtime state" "WARN" "$DOCTOR_RUNTIME_STATE" ;;
+    *) doctor_add_check "Runtime state" "INFO" "$DOCTOR_RUNTIME_STATE" ;;
+  esac
+
+  case "$DOCTOR_SERVICE_STATE" in
+    Running) doctor_add_check "Service state" "OK" "$DOCTOR_SERVICE_STATE" ;;
+    "Not configured") doctor_add_check "Service state" "WARN" "$DOCTOR_SERVICE_STATE" ;;
+    *) doctor_add_check "Service state" "INFO" "$DOCTOR_SERVICE_STATE" ;;
+  esac
+
+  case "$DOCTOR_AUTOSTART_STATE" in
+    Enabled) doctor_add_check "Autostart" "OK" "$DOCTOR_AUTOSTART_STATE" ;;
+    *) doctor_add_check "Autostart" "WARN" "$DOCTOR_AUTOSTART_STATE" ;;
+  esac
+
+  local port label item
+  for item in "8000:Bench web" "9000:Socket.io" "11000:Bench Redis queue" "13000:Bench Redis cache"; do
+    port="${item%%:*}"
+    label="${item#*:}"
+    if port_listens "$port"; then
+      doctor_add_check "$label" "OK" "port ${port} listening"
+    else
+      doctor_add_check "$label" "INFO" "port ${port} not listening"
+    fi
+  done
+
+  storage_data="$(storage_eval 2>/dev/null || true)"
+  storage_can_expand="$(printf '%s\n' "$storage_data" | awk -F= '$1=="CAN_EXPAND" {print $2; exit}')"
+  storage_layout="$(printf '%s\n' "$storage_data" | awk -F= '$1=="LAYOUT" {print $2; exit}')"
+  storage_reason="$(printf '%s\n' "$storage_data" | awk -F= '$1=="REASON" {print $2; exit}')"
+  storage_detail="$(doctor_storage_detail)"
+  if [[ "${storage_can_expand:-no}" == "yes" ]]; then
+    doctor_add_check "Root storage" "WARN" "expansion recommended; ${storage_detail}"
+  elif [[ "${storage_layout:-unknown}" == "unknown" ]]; then
+    doctor_add_check "Root storage" "WARN" "not automatic; ${storage_reason:-unknown}"
+  else
+    doctor_add_check "Root storage" "OK" "${storage_detail}"
+  fi
+
+  if [[ "$DOCTOR_SSL_STATE" == "configured" ]]; then
+    local cert_path cert_detail="configured"
+    cert_path="$(ssl_cert_path 2>/dev/null || true)"
+    if [[ -n "$cert_path" && -f "$cert_path" ]] && ssl_cert_is_self_signed "$cert_path" 2>/dev/null; then
+      cert_detail="configured; self-signed/local test certificate"
+    elif [[ -n "$cert_path" && -f "$cert_path" ]]; then
+      cert_detail="configured; certificate is not self-signed"
+    fi
+    doctor_add_check "Local SSL" "OK" "$cert_detail"
+  else
+    doctor_add_check "Local SSL" "INFO" "not configured"
+  fi
+
+  if path_is_executable "${FRAPPE_HOME}/start-erpnext-dev.sh"; then
+    doctor_add_check "Start helper" "OK" "${FRAPPE_HOME}/start-erpnext-dev.sh"
+  else
+    doctor_add_check "Start helper" "WARN" "missing or not executable at ${FRAPPE_HOME}/start-erpnext-dev.sh"
+  fi
+
+  if path_is_file "${FRAPPE_HOME}/erpnext-dev-credentials.txt"; then
+    doctor_add_check "Credentials file" "OK" "present; content intentionally not displayed"
+  else
+    doctor_add_check "Credentials file" "WARN" "missing"
+  fi
+
+  local optional_item optional_app optional_label optional_detail
+  for optional_item in "crm:Frappe CRM" "hrms:Frappe HR / HRMS" "telephony:Frappe Telephony" "helpdesk:Frappe Helpdesk" "insights:Frappe Insights"; do
+    optional_app="${optional_item%%:*}"
+    optional_label="${optional_item#*:}"
+    optional_detail="$(doctor_optional_app_detail "$DOCTOR_BENCH_DIR" "$optional_app")"
+    DOCTOR_OPTIONAL_APPS+=("$optional_app")
+    DOCTOR_OPTIONAL_LABELS+=("$optional_label")
+    DOCTOR_OPTIONAL_DETAILS+=("$optional_detail")
+  done
+
+  DOCTOR_BENCH_VERSION="$(doctor_run_as_frappe_one_line "cd '${DOCTOR_BENCH_DIR}' 2>/dev/null && bench version 2>/dev/null | head -n 1")"
+  [[ -n "$DOCTOR_BENCH_VERSION" ]] || DOCTOR_BENCH_VERSION="not available"
+}
+
+run_doctor_plain() {
+  doctor_collect
+
+  echo
+  echo "============================================================"
+  echo "ERPNext Developer Diagnostics (Plain / Safe to Share)"
+  echo "============================================================"
+  echo "Generated: ${DOCTOR_GENERATED_AT}"
+  echo "Script:    ${APP_NAME} v${SCRIPT_VERSION}"
+  echo "Note:      Secrets, passwords, tokens, private keys, and credential contents are intentionally excluded."
+  echo
+  echo "Context:"
+  status_line_plain "Hostname" "INFO" "$DOCTOR_HOSTNAME"
+  status_line_plain "Current user" "INFO" "$DOCTOR_CURRENT_USER"
+  status_line_plain "VM IP" "INFO" "$DOCTOR_VM_IP"
+  status_line_plain "Site" "INFO" "${SITE_NAME} (${SITE_NAME_SOURCE})"
+  status_line_plain "Bench" "INFO" "$DOCTOR_BENCH_DIR"
+  status_line_plain "Bench version" "INFO" "$DOCTOR_BENCH_VERSION"
+  status_line_plain "Service name" "INFO" "$ERPNEXT_SERVICE_NAME"
+  status_line_plain "Config file" "INFO" "${CONFIG_FILE}"
+  echo
+  echo "Checks:"
+
+  local i
+  for i in "${!DOCTOR_CHECK_NAMES[@]}"; do
+    status_line_plain "${DOCTOR_CHECK_NAMES[$i]}" "${DOCTOR_CHECK_STATUSES[$i]}" "${DOCTOR_CHECK_DETAILS[$i]}"
+  done
+
+  echo
+  echo "Optional apps:"
+  for i in "${!DOCTOR_OPTIONAL_APPS[@]}"; do
+    status_line_plain "${DOCTOR_OPTIONAL_APPS[$i]}" "INFO" "${DOCTOR_OPTIONAL_LABELS[$i]}: ${DOCTOR_OPTIONAL_DETAILS[$i]}"
+  done
+
+  echo
+  echo "Access:"
+  echo "  Direct URL:   http://${DOCTOR_VM_IP}:8000"
+  echo "  Friendly URL: http://${SITE_NAME}:8000"
+  if [[ "$DOCTOR_SSL_STATE" == "configured" ]]; then
+    echo "  HTTPS URL:    https://${SITE_NAME}"
+  fi
+  echo "  HOST mapping: ${DOCTOR_VM_IP} ${SITE_NAME}"
+  echo
+  echo "Log file for this run: ${LOG_FILE}"
+  echo "============================================================"
+}
+
+run_doctor_json() {
+  doctor_collect
+
+  local i
+  printf '{\n'
+  printf '  "schema_version": "1",\n'
+  printf '  "safe_to_share": true,\n'
+  printf '  "redaction_note": ' ; json_escape "Secrets, passwords, tokens, private keys, and credential contents are intentionally excluded." ; printf ',\n'
+  printf '  "generated_at": ' ; json_escape "$DOCTOR_GENERATED_AT" ; printf ',\n'
+  printf '  "script": {"name": ' ; json_escape "$APP_NAME" ; printf ', "version": ' ; json_escape "$SCRIPT_VERSION" ; printf '},\n'
+  printf '  "context": {\n'
+  printf '    "hostname": ' ; json_escape "$DOCTOR_HOSTNAME" ; printf ',\n'
+  printf '    "current_user": ' ; json_escape "$DOCTOR_CURRENT_USER" ; printf ',\n'
+  printf '    "vm_ip": ' ; json_escape "$DOCTOR_VM_IP" ; printf ',\n'
+  printf '    "site_name": ' ; json_escape "$SITE_NAME" ; printf ',\n'
+  printf '    "site_source": ' ; json_escape "$SITE_NAME_SOURCE" ; printf ',\n'
+  printf '    "bench_dir": ' ; json_escape "$DOCTOR_BENCH_DIR" ; printf ',\n'
+  printf '    "bench_version": ' ; json_escape "$DOCTOR_BENCH_VERSION" ; printf ',\n'
+  printf '    "service_name": ' ; json_escape "$ERPNEXT_SERVICE_NAME" ; printf ',\n'
+  printf '    "config_file": ' ; json_escape "$CONFIG_FILE" ; printf ',\n'
+  printf '    "install_state": ' ; json_escape "$DOCTOR_INSTALL_STATE" ; printf ',\n'
+  printf '    "runtime_state": ' ; json_escape "$DOCTOR_RUNTIME_STATE" ; printf ',\n'
+  printf '    "service_state": ' ; json_escape "$DOCTOR_SERVICE_STATE" ; printf ',\n'
+  printf '    "autostart_state": ' ; json_escape "$DOCTOR_AUTOSTART_STATE" ; printf ',\n'
+  printf '    "local_ssl_state": ' ; json_escape "$DOCTOR_SSL_STATE" ; printf '\n'
+  printf '  },\n'
+  printf '  "checks": [\n'
+  for i in "${!DOCTOR_CHECK_NAMES[@]}"; do
+    if [[ "$i" -gt 0 ]]; then printf ',\n'; fi
+    printf '    {"name": ' ; json_escape "${DOCTOR_CHECK_NAMES[$i]}" ; printf ', "status": ' ; json_escape "${DOCTOR_CHECK_STATUSES[$i]}" ; printf ', "detail": ' ; json_escape "${DOCTOR_CHECK_DETAILS[$i]}" ; printf '}'
+  done
+  printf '\n  ],\n'
+  printf '  "optional_apps": [\n'
+  for i in "${!DOCTOR_OPTIONAL_APPS[@]}"; do
+    if [[ "$i" -gt 0 ]]; then printf ',\n'; fi
+    printf '    {"app": ' ; json_escape "${DOCTOR_OPTIONAL_APPS[$i]}" ; printf ', "label": ' ; json_escape "${DOCTOR_OPTIONAL_LABELS[$i]}" ; printf ', "detail": ' ; json_escape "${DOCTOR_OPTIONAL_DETAILS[$i]}" ; printf '}'
+  done
+  printf '\n  ],\n'
+  printf '  "access": {\n'
+  printf '    "direct_url": ' ; json_escape "http://${DOCTOR_VM_IP}:8000" ; printf ',\n'
+  printf '    "friendly_url": ' ; json_escape "http://${SITE_NAME}:8000" ; printf ',\n'
+  if [[ "$DOCTOR_SSL_STATE" == "configured" ]]; then
+    printf '    "https_url": ' ; json_escape "https://${SITE_NAME}" ; printf ',\n'
+  fi
+  printf '    "host_mapping": ' ; json_escape "${DOCTOR_VM_IP} ${SITE_NAME}" ; printf '\n'
+  printf '  }\n'
+  printf '}\n'
+}
+
+
+redact_file_in_place() {
+  local file="$1"
+
+  [[ -f "$file" ]] || return 0
+
+  if command -v perl >/dev/null 2>&1; then
+    perl -0pi -e 's/(?i)(("?)(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|authorization|cookie|db_password|admin_password)\2\s*[:=]\s*)(["\x27])(?:(?!\3).)*\3/${1}${3}[REDACTED]${3}/gs; s/(?i)(("?)(?:password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|authorization|cookie|db_password|admin_password)\2\s*[:=]\s*)[^\s,;}]+/${1}[REDACTED]/g; s/(?i)(Bearer\s+)[A-Za-z0-9._~+\/=-]+/${1}[REDACTED]/g; s/-----BEGIN ([A-Z0-9 ]*PRIVATE KEY)-----.*?-----END \1-----/-----BEGIN $1-----\n[REDACTED]\n-----END $1-----/gis;' "$file" 2>/dev/null || true
+  else
+    sed -Ei \
+      -e "s/(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|authorization|cookie)([[:space:]_:=\"]+)[^[:space:]\",;}]+/\1\2[REDACTED]/Ig" \
+      -e "s/(Bearer[[:space:]]+)[A-Za-z0-9._~+\/=-]+/\1[REDACTED]/Ig" \
+      "$file" 2>/dev/null || true
+  fi
+}
+
+support_bundle_write_file() {
+  local output_file="$1"
+  shift
+
+  if ! "$@" > "$output_file" 2>&1; then
+    {
+      echo
+      echo "WARN: command failed while collecting this section."
+      echo "Command: $*"
+    } >> "$output_file"
+  fi
+
+  redact_file_in_place "$output_file"
+  chmod 600 "$output_file" 2>/dev/null || true
+}
+
+support_bundle_manifest() {
+  cat <<EOF_SUPPORT_MANIFEST
+ERPNext Developer Installer Support Bundle
+=========================================
+
+Generated: $(date -Iseconds 2>/dev/null || date)
+Script:    ${APP_NAME} v${SCRIPT_VERSION}
+Site:      ${SITE_NAME}
+
+Safe-to-share intent:
+- This bundle is designed for troubleshooting and support.
+- It includes share-safe diagnostics, status summaries, and recent redacted service errors.
+- It intentionally excludes credential files, private keys, raw site_config.json secrets, tokens, and database passwords.
+
+Recommended review before sharing:
+- Open the included .txt and .json files.
+- Confirm there is no client-sensitive text from custom logs before sending outside your organization.
+
+Included files:
+- doctor-plain.txt
+- doctor.json
+- doctor-json-validation.txt
+- system-summary.txt
+- service-status.txt
+- port-status.txt
+- storage-status.txt
+- ssl-status.txt
+- bench-status.txt
+- recent-errors.txt
+- manifest.txt
+EOF_SUPPORT_MANIFEST
+}
+
+support_bundle_system_summary() {
+  echo "Generated: $(date -Iseconds 2>/dev/null || date)"
+  echo "Script: ${APP_NAME} v${SCRIPT_VERSION}"
+  echo
+  echo "OS release:"
+  if [[ -f /etc/os-release ]]; then
+    cat /etc/os-release
+  else
+    echo "/etc/os-release missing"
+  fi
+  echo
+  echo "Kernel:"
+  uname -a || true
+  echo
+  echo "Hostname:"
+  hostname || true
+  echo
+  echo "Current user:"
+  id || true
+  echo
+  echo "Uptime:"
+  uptime || true
+  echo
+  echo "Memory:"
+  free -h || true
+  echo
+  echo "Root filesystem:"
+  df -hT / || true
+  echo
+  echo "Tool versions:"
+  python3 --version 2>&1 || true
+  mariadb --version 2>&1 || mysql --version 2>&1 || true
+  redis-server --version 2>&1 || true
+  if id "$FRAPPE_USER" >/dev/null 2>&1; then
+    doctor_run_as_frappe_one_line 'node --version 2>/dev/null || echo node missing'
+    doctor_run_as_frappe_one_line 'python --version 2>&1 || echo python missing'
+  fi
+}
+
+support_bundle_service_status() {
+  local svc
+  for svc in mariadb redis-server "$ERPNEXT_SERVICE_NAME"; do
+    echo "============================================================"
+    echo "Service: ${svc}"
+    echo "============================================================"
+    systemctl is-enabled "$svc" 2>/dev/null || true
+    systemctl is-active "$svc" 2>/dev/null || true
+    systemctl status "$svc" --no-pager --lines=30 2>&1 || true
+    echo
+  done
+}
+
+support_bundle_port_status() {
+  echo "Listening TCP ports:"
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>&1 || true
+  else
+    netstat -ltn 2>&1 || true
+  fi
+  echo
+  echo "ERPNext development port checks:"
+  local item port label
+  for item in "8000:Bench web" "9000:Socket.io" "11000:Bench Redis queue" "13000:Bench Redis cache" "80:HTTP" "443:HTTPS"; do
+    port="${item%%:*}"
+    label="${item#*:}"
+    if port_listens "$port"; then
+      printf '%-24s OK    port %s listening\n' "$label" "$port"
+    else
+      printf '%-24s INFO  port %s not listening\n' "$label" "$port"
+    fi
+  done
+}
+
+support_bundle_storage_status() {
+  echo "Raw storage evaluator output:"
+  storage_eval 2>&1 || true
+  echo
+  echo "Root mount:"
+  findmnt -n -o SOURCE,FSTYPE,SIZE,AVAIL,TARGET / 2>&1 || true
+  echo
+  echo "df -hT:"
+  df -hT || true
+  echo
+  echo "lsblk -f:"
+  lsblk -f 2>&1 || true
+  echo
+  if command -v pvs >/dev/null 2>&1; then
+    echo "LVM physical volumes:"
+    pvs 2>&1 || true
+    echo
+  fi
+  if command -v vgs >/dev/null 2>&1; then
+    echo "LVM volume groups:"
+    vgs 2>&1 || true
+    echo
+  fi
+  if command -v lvs >/dev/null 2>&1; then
+    echo "LVM logical volumes:"
+    lvs 2>&1 || true
+    echo
+  fi
+}
+
+support_bundle_ssl_status() {
+  echo "Script SSL status:"
+  show_ssl_status || true
+  echo
+  echo "Local SSL verification summary:"
+  verify_local_ssl || true
+}
+
+support_bundle_bench_status() {
+  local bench_dir
+  bench_dir="$(active_bench_dir 2>/dev/null || echo "$BENCH_DIR")"
+
+  echo "Bench directory: ${bench_dir}"
+  echo "Site: ${SITE_NAME}"
+  echo
+
+  if ! id "$FRAPPE_USER" >/dev/null 2>&1; then
+    echo "frappe user missing; Bench status unavailable."
+    return 0
+  fi
+
+  if ! path_is_dir "$bench_dir"; then
+    echo "Bench directory missing; Bench status unavailable."
+    return 0
+  fi
+
+  echo "Bench version:"
+  run_as_frappe "cd '${bench_dir}' && bench version" 2>&1 || true
+  echo
+  echo "Installed site apps:"
+  run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' list-apps" 2>&1 || true
+  echo
+  echo "Downloaded app folders and Git branches:"
+  run_as_frappe "cd '${bench_dir}' && for appdir in apps/*; do [ -d \"\$appdir\" ] || continue; app=\$(basename \"\$appdir\"); branch=\$(git -C \"\$appdir\" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); printf '%s %s\\n' \"\$app\" \"\$branch\"; done | sort" 2>&1 || true
+}
+
+support_bundle_recent_errors() {
+  local svc
+  for svc in "$ERPNEXT_SERVICE_NAME" mariadb redis-server; do
+    echo "============================================================"
+    echo "Recent warnings/errors: ${svc}"
+    echo "============================================================"
+    journalctl -u "$svc" -n 120 --no-pager -o short-iso -p warning..alert 2>&1 || true
+    echo
+  done
+}
+
+create_support_bundle() {
+  require_sudo
+
+  local timestamp bundle_name bundle_parent bundle_dir archive json_stderr validation_file
+  timestamp="$(date +%Y%m%d-%H%M%S)"
+  bundle_name="erpnext-dev-support-bundle-${timestamp}"
+  bundle_parent="${SUPPORT_BUNDLE_DIR:-/tmp}"
+  bundle_dir="${bundle_parent}/${bundle_name}"
+  archive="${bundle_parent}/${bundle_name}.tar.gz"
+  json_stderr="${bundle_dir}/doctor-json.stderr"
+  validation_file="${bundle_dir}/doctor-json-validation.txt"
+
+  log "Creating redacted support bundle"
+
+  rm -rf "$bundle_dir" "$archive" 2>/dev/null || true
+  mkdir -p "$bundle_dir"
+  chmod 700 "$bundle_dir" 2>/dev/null || true
+
+  support_bundle_write_file "${bundle_dir}/manifest.txt" support_bundle_manifest
+  support_bundle_write_file "${bundle_dir}/doctor-plain.txt" run_doctor_plain
+
+  if run_doctor_json > "${bundle_dir}/doctor.json" 2> "$json_stderr"; then
+    :
+  else
+    echo "WARN: doctor --json returned a non-zero exit code." > "$validation_file"
+  fi
+  redact_file_in_place "${bundle_dir}/doctor.json"
+  redact_file_in_place "$json_stderr"
+  chmod 600 "${bundle_dir}/doctor.json" "$json_stderr" 2>/dev/null || true
+
+  if [[ ! -s "$json_stderr" ]]; then
+    rm -f "$json_stderr"
+  fi
+
+  if command -v python3 >/dev/null 2>&1 && python3 -m json.tool "${bundle_dir}/doctor.json" >/dev/null 2>&1; then
+    echo "OK: doctor.json is valid JSON." >> "$validation_file"
+  else
+    echo "WARN: doctor.json could not be validated as JSON on this system." >> "$validation_file"
+  fi
+  chmod 600 "$validation_file" 2>/dev/null || true
+
+  support_bundle_write_file "${bundle_dir}/system-summary.txt" support_bundle_system_summary
+  support_bundle_write_file "${bundle_dir}/service-status.txt" support_bundle_service_status
+  support_bundle_write_file "${bundle_dir}/port-status.txt" support_bundle_port_status
+  support_bundle_write_file "${bundle_dir}/storage-status.txt" support_bundle_storage_status
+  support_bundle_write_file "${bundle_dir}/ssl-status.txt" support_bundle_ssl_status
+  support_bundle_write_file "${bundle_dir}/bench-status.txt" support_bundle_bench_status
+  support_bundle_write_file "${bundle_dir}/recent-errors.txt" support_bundle_recent_errors
+
+  tar -C "$bundle_parent" -czf "$archive" "$bundle_name"
+  chmod 600 "$archive" 2>/dev/null || true
+  rm -rf "$bundle_dir"
+
+  ok "Support bundle created: ${archive}"
+  echo
+  echo "Review before sharing:"
+  echo "  tar -tzf ${archive}"
+  echo "  mkdir -p /tmp/erpnext-support-review && tar -xzf ${archive} -C /tmp/erpnext-support-review"
+  echo
+  echo "This bundle intentionally excludes credential files, private keys, raw site_config.json secrets, tokens, and passwords."
+  ui_next "Review archive contents before sharing."
+}
 
 run_full_status() {
   require_sudo
@@ -4486,6 +8060,274 @@ print_app_profile() {
   echo
 }
 
+version_major_from_branch() {
+  local branch="$1"
+
+  if [[ "$branch" =~ ^version-([0-9]+)$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+  fi
+}
+
+branch_label() {
+  local branch="$1"
+  if [[ -n "$branch" ]]; then
+    echo "$branch"
+  else
+    echo "default repository branch"
+  fi
+}
+
+app_install_state_detail() {
+  local bench_dir="$1"
+  local app_name="$2"
+
+  if site_app_installed "$app_name"; then
+    echo "installed on ${SITE_NAME}"
+  elif app_folder_exists "$bench_dir" "$app_name" && app_in_apps_txt "$app_name"; then
+    echo "downloaded and registered, not installed"
+  elif app_folder_exists "$bench_dir" "$app_name"; then
+    echo "downloaded, not registered"
+  else
+    echo "not installed"
+  fi
+}
+
+assess_app_compatibility() {
+  local bench_dir="$1"
+  local app_name="$2"
+  local display="$3"
+  local branch="$4"
+  local repo="$5"
+  local remote_check="${6:-false}"
+  local frappe_branch erpnext_branch frappe_major erpnext_major target_major downloaded_branch branch_text
+
+  APP_COMPAT_STATUS="INFO"
+  APP_COMPAT_DETAIL="Compatibility cannot be fully verified automatically. Use a disposable VM snapshot or backup checkpoint first."
+  APP_COMPAT_RECOMMENDATION="Install one app at a time, then run app-status and doctor."
+  APP_COMPAT_FRAPPE_BRANCH=""
+  APP_COMPAT_ERPNEXT_BRANCH=""
+  APP_COMPAT_TARGET_BRANCH="$(branch_label "$branch")"
+  APP_COMPAT_REMOTE_STATUS="not checked"
+
+  frappe_branch="$(get_app_current_branch "$bench_dir" frappe | tail -1 | tr -d '[:space:]' || true)"
+  erpnext_branch="$(get_app_current_branch "$bench_dir" erpnext | tail -1 | tr -d '[:space:]' || true)"
+  frappe_branch="${frappe_branch:-${FRAPPE_BRANCH:-unknown}}"
+  erpnext_branch="${erpnext_branch:-${ERPNEXT_BRANCH:-unknown}}"
+
+  APP_COMPAT_FRAPPE_BRANCH="$frappe_branch"
+  APP_COMPAT_ERPNEXT_BRANCH="$erpnext_branch"
+
+  frappe_major="$(version_major_from_branch "$frappe_branch")"
+  erpnext_major="$(version_major_from_branch "$erpnext_branch")"
+  target_major="$(version_major_from_branch "$branch")"
+  branch_text="$(branch_label "$branch")"
+
+  if app_folder_exists "$bench_dir" "$app_name"; then
+    downloaded_branch="$(get_app_current_branch "$bench_dir" "$app_name" | tail -1 | tr -d '[:space:]' || true)"
+    if [[ -n "$branch" && -n "$downloaded_branch" && "$downloaded_branch" != "$branch" ]]; then
+      APP_COMPAT_STATUS="WARN"
+      APP_COMPAT_DETAIL="Downloaded branch is '${downloaded_branch}', but the requested target is '${branch}'. The script will not switch branches automatically."
+      APP_COMPAT_RECOMMENDATION="Review the app Git branch manually before installing on the site."
+      return 0
+    fi
+  fi
+
+  if [[ "$remote_check" == "true" && -n "$branch" ]] && ! app_folder_exists "$bench_dir" "$app_name"; then
+    if branch_available "$repo" "$branch"; then
+      APP_COMPAT_REMOTE_STATUS="branch exists"
+    else
+      APP_COMPAT_STATUS="FAIL"
+      APP_COMPAT_DETAIL="Target branch '${branch}' was not found for ${repo}, or the remote repository could not be reached."
+      APP_COMPAT_RECOMMENDATION="Choose a valid branch override before installing."
+      return 0
+    fi
+  fi
+
+  if [[ -n "$target_major" && -n "$frappe_major" && "$target_major" != "$frappe_major" ]]; then
+    APP_COMPAT_STATUS="WARN"
+    APP_COMPAT_DETAIL="Target branch ${branch_text} does not match detected Frappe branch ${frappe_branch}."
+    APP_COMPAT_RECOMMENDATION="Use a branch matching your Frappe/ERPNext major version when available."
+    return 0
+  fi
+
+  case "$app_name" in
+    hrms)
+      if [[ "$branch" == "version-16" && "${frappe_major:-16}" == "16" ]]; then
+        APP_COMPAT_STATUS="OK"
+        APP_COMPAT_DETAIL="Target branch version-16 matches the expected Frappe/ERPNext v16 developer stack."
+        APP_COMPAT_RECOMMENDATION="Safe to test after a backup checkpoint."
+      elif [[ "$branch" == main || "$branch" == develop ]]; then
+        APP_COMPAT_STATUS="WARN"
+        APP_COMPAT_DETAIL="${display} is targeting a moving branch (${branch_text}) instead of a pinned version branch."
+        APP_COMPAT_RECOMMENDATION="Prefer HRMS_BRANCH=version-16 for this installer unless you are intentionally testing upstream changes."
+      else
+        APP_COMPAT_STATUS="INFO"
+        APP_COMPAT_DETAIL="${display} target is ${branch_text}; verify it matches your Frappe/ERPNext branch."
+      fi
+      ;;
+    crm)
+      if [[ "$branch" == main ]]; then
+        APP_COMPAT_STATUS="WARN"
+        APP_COMPAT_DETAIL="Frappe CRM commonly tracks the moving main branch, so compatibility can change over time."
+        APP_COMPAT_RECOMMENDATION="Continue only on a dev VM after a backup checkpoint; pin CRM_BRANCH if you need repeatable installs."
+      elif [[ -n "$target_major" ]]; then
+        APP_COMPAT_STATUS="OK"
+        APP_COMPAT_DETAIL="Target branch ${branch_text} is version-pinned and matches the detected core major version."
+      else
+        APP_COMPAT_STATUS="INFO"
+        APP_COMPAT_DETAIL="Frappe CRM target is ${branch_text}; verify upstream compatibility before important data."
+      fi
+      ;;
+    insights)
+      if [[ "$branch" == main ]]; then
+        APP_COMPAT_STATUS="WARN"
+        APP_COMPAT_DETAIL="Frappe Insights is targeting the moving main branch; compatibility can change."
+        APP_COMPAT_RECOMMENDATION="Use a backup checkpoint and test before relying on it."
+      elif [[ -n "$target_major" ]]; then
+        APP_COMPAT_STATUS="OK"
+        APP_COMPAT_DETAIL="Target branch ${branch_text} is version-pinned and matches the detected core major version."
+      else
+        APP_COMPAT_STATUS="INFO"
+        APP_COMPAT_DETAIL="Frappe Insights target is ${branch_text}; verify upstream compatibility before important data."
+      fi
+      ;;
+    helpdesk)
+      if [[ "$branch" == main ]]; then
+        APP_COMPAT_STATUS="WARN"
+        APP_COMPAT_DETAIL="Frappe Helpdesk is targeting the moving main branch and also requires the Telephony dependency."
+        APP_COMPAT_RECOMMENDATION="Install on a dev VM with a backup checkpoint; expect Telephony compatibility checks as well."
+      elif [[ -n "$target_major" ]]; then
+        APP_COMPAT_STATUS="OK"
+        APP_COMPAT_DETAIL="Target branch ${branch_text} is version-pinned and matches the detected core major version."
+      else
+        APP_COMPAT_STATUS="INFO"
+        APP_COMPAT_DETAIL="Frappe Helpdesk target is ${branch_text}; verify dependency compatibility before important data."
+      fi
+      ;;
+    telephony)
+      if [[ "$branch" == develop ]]; then
+        APP_COMPAT_STATUS="WARN"
+        APP_COMPAT_DETAIL="Frappe Telephony targets the develop branch by default, which is experimental and can change."
+        APP_COMPAT_RECOMMENDATION="Use only when required for Helpdesk testing, and keep a backup checkpoint."
+      elif [[ -n "$target_major" ]]; then
+        APP_COMPAT_STATUS="OK"
+        APP_COMPAT_DETAIL="Target branch ${branch_text} is version-pinned and matches the detected core major version."
+      else
+        APP_COMPAT_STATUS="INFO"
+        APP_COMPAT_DETAIL="Frappe Telephony target is ${branch_text}; verify upstream compatibility before use."
+      fi
+      ;;
+    *)
+      APP_COMPAT_STATUS="WARN"
+      APP_COMPAT_DETAIL="Custom app compatibility cannot be verified by this installer."
+      APP_COMPAT_RECOMMENDATION="Only install trusted apps after confirming the app supports your detected Frappe branch."
+      ;;
+  esac
+
+  if [[ -n "$target_major" && -n "$erpnext_major" && "$target_major" != "$erpnext_major" ]]; then
+    APP_COMPAT_STATUS="WARN"
+    APP_COMPAT_DETAIL="Target branch ${branch_text} does not match detected ERPNext branch ${erpnext_branch}."
+    APP_COMPAT_RECOMMENDATION="Use an app branch that matches ERPNext/Frappe v${erpnext_major} when available."
+  fi
+}
+
+show_app_compatibility_card() {
+  local bench_dir="$1"
+  local app_name="$2"
+  local display="$3"
+  local repo="$4"
+  local branch="$5"
+  local notes="$6"
+  local remote_check="${7:-false}"
+
+  assess_app_compatibility "$bench_dir" "$app_name" "$display" "$branch" "$repo" "$remote_check"
+
+  echo
+  echo "Compatibility preflight: ${display}"
+  status_line "Detected Frappe" "INFO" "${APP_COMPAT_FRAPPE_BRANCH}"
+  status_line "Detected ERPNext" "INFO" "${APP_COMPAT_ERPNEXT_BRANCH}"
+  status_line "Target branch" "INFO" "${APP_COMPAT_TARGET_BRANCH}"
+  status_line "Install state" "INFO" "$(app_install_state_detail "$bench_dir" "$app_name")"
+  if [[ "$remote_check" == "true" ]]; then
+    status_line "Remote branch" "INFO" "${APP_COMPAT_REMOTE_STATUS}"
+  fi
+  status_line "Compatibility" "$APP_COMPAT_STATUS" "$APP_COMPAT_DETAIL"
+  status_line "Recommendation" "INFO" "$APP_COMPAT_RECOMMENDATION"
+  echo "Notes: ${notes}"
+}
+
+confirm_app_compatibility_before_install() {
+  local bench_dir="$1"
+  local app_name="$2"
+  local display="$3"
+  local repo="$4"
+  local branch="$5"
+  local notes="$6"
+
+  show_app_compatibility_card "$bench_dir" "$app_name" "$display" "$repo" "$branch" "$notes" "true"
+
+  case "$APP_COMPAT_STATUS" in
+    FAIL)
+      fail "Compatibility preflight failed for ${display}."
+      ;;
+    WARN)
+      warn "Compatibility warning for ${display}: ${APP_COMPAT_DETAIL}"
+      if ! confirm "Continue despite this compatibility warning?"; then
+        warn "App installation cancelled."
+        return 1
+      fi
+      ;;
+  esac
+
+  return 0
+}
+
+show_app_compatibility_matrix() {
+  require_sudo
+
+  local bench_dir profile app_state
+  bench_dir="$(require_site_environment)" || return 1
+
+  normalize_apps_txt "$bench_dir" "" "true" || warn "Could not normalize sites/apps.txt before compatibility check."
+
+  echo
+  echo "============================================================"
+  echo "Optional App Compatibility Matrix"
+  echo "============================================================"
+  echo "Site:  ${SITE_NAME}"
+  echo "Bench: ${bench_dir}"
+  echo
+  echo "This check is a pre-install guide. It does not guarantee upstream app compatibility."
+  echo "The install command still verifies remote branch availability before downloading."
+  echo
+
+  for profile in crm hrms insights telephony helpdesk; do
+    app_profile_defaults "$profile" || continue
+    assess_app_compatibility "$bench_dir" "$LIB_APP_NAME" "$LIB_APP_DISPLAY" "$LIB_APP_BRANCH" "$LIB_APP_REPO" "false"
+    app_state="$(app_install_state_detail "$bench_dir" "$LIB_APP_NAME")"
+    status_line "$LIB_APP_DISPLAY" "$APP_COMPAT_STATUS" "target=${APP_COMPAT_TARGET_BRANCH}; state=${app_state}; ${APP_COMPAT_DETAIL}"
+  done
+
+  echo
+  echo "Detailed check for one app is shown automatically before install."
+  echo "Branch overrides: CRM_BRANCH, HRMS_BRANCH, INSIGHTS_BRANCH, TELEPHONY_BRANCH, HELPDESK_BRANCH."
+  echo "============================================================"
+}
+
+print_app_compatibility_snapshot() {
+  local bench_dir="$1"
+  local profile summary
+
+  echo
+  echo "Compatibility snapshot:"
+  for profile in crm hrms insights telephony helpdesk; do
+    app_profile_defaults "$profile" || continue
+    assess_app_compatibility "$bench_dir" "$LIB_APP_NAME" "$LIB_APP_DISPLAY" "$LIB_APP_BRANCH" "$LIB_APP_REPO" "false"
+    summary="target=${APP_COMPAT_TARGET_BRANCH}; $(app_install_state_detail "$bench_dir" "$LIB_APP_NAME")"
+    status_line "$LIB_APP_DISPLAY" "$APP_COMPAT_STATUS" "$summary"
+  done
+}
+
 
 install_app_dependency_telephony() {
   local bench_dir="$1"
@@ -4506,6 +8348,8 @@ install_app_dependency_telephony() {
   if ! validate_branch_name "$dep_branch"; then
     fail "Invalid TELEPHONY_BRANCH value: ${dep_branch}"
   fi
+
+  confirm_app_compatibility_before_install "$bench_dir" "$dep_name" "$dep_display" "$dep_repo" "$dep_branch" "Dependency app used by Frappe Helpdesk for telephony integrations." || return 1
 
   if app_folder_exists "$bench_dir" "$dep_name"; then
     downloaded_branch="$(get_app_current_branch "$bench_dir" "$dep_name" | tail -1 | tr -d '[:space:]')"
@@ -4550,6 +8394,219 @@ install_app_dependencies() {
   esac
 }
 
+
+show_app_install_guide() {
+  echo
+  echo "============================================================"
+  echo "Optional App Install Guide"
+  echo "============================================================"
+  echo "Recommended order:"
+  echo "  1) CRM, HRMS, or Insights if needed"
+  echo "  2) Telephony before Helpdesk, unless the wizard installs it"
+  echo "  3) Helpdesk after Telephony dependency is ready"
+  echo
+  echo "Safety workflow:"
+  echo "  - Install one optional app at a time."
+  echo "  - Create a backup checkpoint before each app."
+  echo "  - Run app-status and doctor after each install."
+  echo "  - Take a VM snapshot before testing several apps together."
+  echo
+  echo "Commands:"
+  echo "  ./install-erpnext-dev.sh app-install-wizard"
+  echo "  ./install-erpnext-dev.sh app-compatibility"
+  echo "  ./install-erpnext-dev.sh app-status"
+  echo "  ./install-erpnext-dev.sh app-rollback-guide"
+  echo "============================================================"
+}
+
+create_app_install_checkpoint() {
+  local display="$1"
+  local reply
+
+  if [[ "${APP_BACKUP_BEFORE_INSTALL}" == "false" ]]; then
+    warn "Pre-app backup skipped by APP_BACKUP_BEFORE_INSTALL=false."
+    return 0
+  fi
+
+  echo
+  echo "Backup checkpoint recommended before installing ${display}."
+
+  if [[ "${APP_BACKUP_BEFORE_INSTALL}" == "true" || "$ASSUME_YES" -eq 1 ]]; then
+    if ! create_site_backup true; then
+      fail "Pre-app backup failed. Stop here or set APP_BACKUP_BEFORE_INSTALL=false only for disposable test VMs."
+    fi
+    return 0
+  fi
+
+  if [[ -t 0 ]]; then
+    read -r -p "Create database + files backup now? [Y/n]: " reply
+    reply="${reply:-Y}"
+    if [[ "$reply" =~ ^[Yy]$ ]]; then
+      if ! create_site_backup true; then
+        warn "Pre-app backup failed."
+        if ! confirm "Continue installing ${display} without a verified backup?"; then
+          fail "App installation cancelled because backup failed."
+        fi
+      fi
+    else
+      warn "Backup checkpoint skipped. This is OK only for disposable test VMs or VM snapshots."
+      if ! confirm "Continue installing ${display} without a backup checkpoint?"; then
+        fail "App installation cancelled."
+      fi
+    fi
+  fi
+}
+
+run_post_app_validation() {
+  local app_name="$1"
+  local display="$2"
+
+  echo
+  echo "============================================================"
+  echo "Post-App Validation"
+  echo "============================================================"
+  if site_app_installed "$app_name"; then
+    status_line "$display" "OK" "installed on ${SITE_NAME}"
+  else
+    status_line "$display" "WARN" "not confirmed on ${SITE_NAME}"
+  fi
+
+  if [[ "$(runtime_state 2>/dev/null || echo Stopped)" == Running* ]]; then
+    status_line "Runtime" "OK" "$(runtime_state 2>/dev/null || echo Running)"
+  else
+    status_line "Runtime" "WARN" "$(runtime_state 2>/dev/null || echo Stopped)"
+  fi
+
+  if port_listens 8000; then
+    status_line "Bench web" "OK" "port 8000 listening"
+  else
+    status_line "Bench web" "WARN" "port 8000 not listening"
+  fi
+
+  echo
+  echo "Next checks:"
+  echo "  ./install-erpnext-dev.sh app-status"
+  echo "  ./install-erpnext-dev.sh doctor"
+  echo "  ./install-erpnext-dev.sh verify-access"
+  echo "============================================================"
+}
+
+show_app_rollback_guide() {
+  cat <<EOF_APP_ROLLBACK
+
+============================================================
+Optional App Rollback Guide
+============================================================
+
+The safest rollback is to restore a backup created before the app install.
+Do not rely on deleting app folders as a clean rollback because DocTypes,
+patches, database changes, and assets may already be applied.
+
+Recommended rollback flow:
+  1) Stop the service if needed:
+     ./install-erpnext-dev.sh stop
+
+  2) List available backups:
+     ./install-erpnext-dev.sh list-backups
+
+  3) Restore the pre-app database/files backup:
+     ./install-erpnext-dev.sh restore-full
+
+  4) Start and validate:
+     ./install-erpnext-dev.sh start
+     ./install-erpnext-dev.sh app-status
+     ./install-erpnext-dev.sh doctor
+
+Best practice:
+  - Take a VM snapshot before installing optional apps.
+  - Install one app at a time.
+  - Keep the pre-app backup until the app is fully tested.
+
+============================================================
+EOF_APP_ROLLBACK
+}
+
+app_wizard_preflight() {
+  local bench_dir="$1"
+
+  echo
+  echo "============================================================"
+  echo "Optional App Install Preflight"
+  echo "============================================================"
+  status_line "Site" "INFO" "${SITE_NAME}"
+  status_line "Bench" "INFO" "$bench_dir"
+
+  if [[ "$(install_state 2>/dev/null || echo Not installed)" == "Installed" ]]; then
+    status_line "Core install" "OK" "ERPNext installed"
+  else
+    status_line "Core install" "WARN" "not fully confirmed; run doctor before app installs"
+  fi
+
+  if [[ "$(runtime_state 2>/dev/null || echo Stopped)" == Running* ]]; then
+    status_line "Runtime" "OK" "$(runtime_state 2>/dev/null || echo Running)"
+  else
+    status_line "Runtime" "INFO" "ERPNext is not running; app install can still continue"
+  fi
+
+  if port_listens 443; then
+    status_line "Local HTTPS" "OK" "port 443 listening"
+  else
+    status_line "Local HTTPS" "INFO" "not configured or not running; optional apps can still install"
+  fi
+
+  print_app_compatibility_snapshot "$bench_dir"
+
+  echo
+  echo "Backup policy: ${APP_BACKUP_BEFORE_INSTALL}"
+  echo "============================================================"
+}
+
+run_app_install_wizard() {
+  require_sudo
+  check_internet
+
+  local bench_dir choice
+  bench_dir="$(require_site_environment)" || return 1
+
+  normalize_apps_txt "$bench_dir" "" "true" || warn "Could not normalize sites/apps.txt before app wizard."
+
+  while true; do
+    app_wizard_preflight "$bench_dir"
+    echo
+    echo "============================================================"
+    echo "Optional App Install Wizard"
+    echo "============================================================"
+    echo "1) Show optional app status"
+    echo "2) Show optional app compatibility"
+    echo "3) Install Frappe CRM"
+    echo "4) Install Frappe HR / HRMS"
+    echo "5) Install Frappe Insights"
+    echo "6) Install Frappe Telephony"
+    echo "7) Install Frappe Helpdesk"
+    echo "8) Install custom app from Git URL"
+    echo "9) Rollback guide"
+    echo "10) Back"
+    echo
+    echo "Install one app at a time. The wizard will offer a backup checkpoint first."
+    echo
+    read -r -p "Choose an option: " choice
+
+    case "$choice" in
+      1) run_app_status; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      2) show_app_compatibility_matrix; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      3) install_app_profile crm; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      4) install_app_profile hrms; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      5) install_app_profile insights; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      6) install_app_profile telephony; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      7) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      8) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      9) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      10) return 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
+}
+
 install_frappe_app() {
   require_sudo
   check_internet
@@ -4572,6 +8629,7 @@ install_frappe_app() {
   fi
 
   print_app_profile "$display" "$app_name" "$repo" "$branch" "$notes"
+  confirm_app_compatibility_before_install "$bench_dir" "$app_name" "$display" "$repo" "$branch" "$notes" || return 1
 
   # Repair any existing apps.txt corruption before backups or bench site commands.
   # A prior interrupted app install can create concatenated entries like erpnextcrm.
@@ -4587,9 +8645,7 @@ install_frappe_app() {
     return 0
   fi
 
-  if confirm "Create a database + files backup before installing ${display}?"; then
-    create_site_backup true || warn "Pre-install backup failed. Continuing only because app installation was explicitly confirmed."
-  fi
+  create_app_install_checkpoint "$display"
 
   ensure_app_library_node_tools
   install_app_dependencies "$bench_dir" "$app_name"
@@ -4646,6 +8702,7 @@ install_frappe_app() {
 
   ok "${display} installation workflow completed"
   show_installed_apps
+  run_post_app_validation "$app_name" "$display"
 }
 
 install_app_profile() {
@@ -4695,31 +8752,38 @@ show_app_library_menu() {
     echo "============================================================"
     echo "App Library"
     echo "============================================================"
-    echo "1) Show installed apps"
-    echo "2) Install Frappe CRM"
-    echo "3) Install Frappe HR / HRMS"
-    echo "4) Install Frappe Helpdesk"
-    echo "5) Install Frappe Telephony"
-    echo "6) Install Frappe Insights"
-    echo "7) Install custom app from Git URL"
-    echo "8) Back"
+    echo "1) Optional App Install Wizard"
+    echo "2) Show optional app status"
+    echo "3) Show optional app compatibility"
+    echo "4) Show installed apps"
+    echo "5) Optional app install guide"
+    echo "6) Rollback guide"
+    echo "7) Install Frappe CRM"
+    echo "8) Install Frappe HR / HRMS"
+    echo "9) Install Frappe Helpdesk"
+    echo "10) Install Frappe Telephony"
+    echo "11) Install Frappe Insights"
+    echo "12) Install custom app from Git URL"
+    echo "13) Back"
     echo
-    echo "Notes:"
-    echo "  - App installs can take several minutes."
-    echo "  - The script offers a backup before installation."
-    echo "  - Optional apps should be tested in a VM snapshot before production use."
+    echo "Notes: install one app at a time and keep a backup checkpoint."
     echo
     read -r -p "Choose an option: " app_choice
 
     case "$app_choice" in
-      1) show_installed_apps; pause_after_screen "Press Enter to return to App Library..." ;;
-      2) install_app_profile crm; pause_after_screen "Press Enter to return to App Library..." ;;
-      3) install_app_profile hrms; pause_after_screen "Press Enter to return to App Library..." ;;
-      4) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Library..." ;;
-      5) install_app_profile telephony; pause_after_screen "Press Enter to return to App Library..." ;;
-      6) install_app_profile insights; pause_after_screen "Press Enter to return to App Library..." ;;
-      7) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Library..." ;;
-      8) return 0 ;;
+      1) run_app_install_wizard ;;
+      2) run_app_status; pause_after_screen "Press Enter to return to App Library..." ;;
+      3) show_app_compatibility_matrix; pause_after_screen "Press Enter to return to App Library..." ;;
+      4) show_installed_apps; pause_after_screen "Press Enter to return to App Library..." ;;
+      5) show_app_install_guide; pause_after_screen "Press Enter to return to App Library..." ;;
+      6) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Library..." ;;
+      7) install_app_profile crm; pause_after_screen "Press Enter to return to App Library..." ;;
+      8) install_app_profile hrms; pause_after_screen "Press Enter to return to App Library..." ;;
+      9) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Library..." ;;
+      10) install_app_profile telephony; pause_after_screen "Press Enter to return to App Library..." ;;
+      11) install_app_profile insights; pause_after_screen "Press Enter to return to App Library..." ;;
+      12) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Library..." ;;
+      13) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -5126,8 +9190,8 @@ run_install() {
   require_sudo
   check_os
   check_internet
-  check_resources
   maybe_offer_root_storage_expansion
+  check_resources
   prompt_for_site_name_if_needed
 
   if path_is_dir "$BENCH_PARENT"; then
@@ -5198,6 +9262,7 @@ run_install() {
       echo "  ./install-erpnext-dev.sh start"
     fi
   fi
+  post_install_validation_summary
 }
 
 soft_uninstall() {
@@ -5349,25 +9414,37 @@ show_advanced_menu() {
     echo "13) SSL/HTTPS Roadmap"
     echo "14) Local SSL Status"
     echo "15) Local SSL Guide"
-    echo "16) Trusted mkcert SSL Guide"
-    echo "17) Browser Trust Check Guide"
-    echo "18) Install/Replace Local SSL Cert"
-    echo "19) Verify Local SSL"
-    echo "20) Create Self-Signed Local Cert"
-    echo "21) Configure Local SSL"
-    echo "22) Disable Local SSL"
-    echo "23) Verify SSL Rollback"
-    echo "24) Storage Status"
-    echo "25) Expand Root Storage"
-    echo "26) Verify Storage"
-    echo "27) Domain Config"
-    echo "28) Production Readiness Preview"
-    echo "29) Production Domain Guide"
-    echo "30) Production SSL Guide"
-    echo "31) Start Bench in Foreground"
-    echo "32) Show Service Logs"
-    echo "33) Access Submenu"
-    echo "34) Back"
+    echo "16) Local SSL Wizard"
+    echo "17) Trusted mkcert SSL Guide"
+    echo "18) Browser Trust Check Guide"
+    echo "19) Install/Replace Local SSL Cert"
+    echo "20) Verify Local SSL"
+    echo "21) Create Self-Signed Local Cert"
+    echo "22) Configure Local SSL"
+    echo "23) Disable Local SSL"
+    echo "24) Verify SSL Rollback"
+    echo "25) Storage Status"
+    echo "26) Expand Root Storage"
+    echo "27) Verify Storage"
+    echo "28) Domain Config"
+    echo "29) Production Readiness Preview"
+    echo "30) Production Domain Guide"
+    echo "31) Production SSL Guide"
+    echo "32) Public VM Readiness"
+    echo "33) Production SSL Plan"
+    echo "34) Production Firewall Plan"
+    echo "35) Firewall Hardening Status"
+    echo "36) Configure Production SSL"
+    echo "37) Production SSL Status"
+    echo "38) Disable Production SSL"
+    echo "39) Start Bench in Foreground"
+    echo "40) Show Service Logs"
+    echo "41) Access Submenu"
+    echo "42) Next Step"
+    echo "43) Verify ERPNext HTTP Access"
+    echo "44) App Install Wizard"
+    echo "45) App Rollback Guide"
+    echo "46) Back"
     echo
     read -r -p "Choose an option: " advanced_choice
 
@@ -5387,25 +9464,37 @@ show_advanced_menu() {
       13) show_ssl_roadmap_guide ;;
       14) show_ssl_status ;;
       15) show_local_ssl_guide ;;
-      16) show_mkcert_local_ssl_guide ;;
-      17) show_browser_trust_check_guide ;;
-      18) install_local_ssl_cert ;;
-      19) verify_local_ssl ;;
-      20) create_self_signed_local_cert ;;
-      21) configure_local_ssl ;;
-      22) disable_local_ssl ;;
-      23) verify_ssl_rollback ;;
-      24) show_storage_status ;;
-      25) expand_root_storage ;;
-      26) verify_storage ;;
-      27) show_domain_config ;;
-      28) show_production_readiness ;;
-      29) show_production_domain_guide ;;
-      30) show_production_ssl_guide ;;
-      31) run_foreground_start ;;
-      32) show_erpnext_service_logs ;;
-      33) show_access_menu ;;
-      34) return 0 ;;
+      16) run_local_ssl_wizard ;;
+      17) show_mkcert_local_ssl_guide ;;
+      18) show_browser_trust_check_guide ;;
+      19) install_local_ssl_cert ;;
+      20) verify_local_ssl ;;
+      21) create_self_signed_local_cert ;;
+      22) configure_local_ssl ;;
+      23) disable_local_ssl ;;
+      24) verify_ssl_rollback ;;
+      25) show_storage_status ;;
+      26) expand_root_storage ;;
+      27) verify_storage ;;
+      28) show_domain_config ;;
+      29) show_production_readiness ;;
+      30) show_production_domain_guide ;;
+      31) show_production_ssl_guide ;;
+      32) show_public_vm_readiness ;;
+      33) show_production_ssl_plan ;;
+      34) show_production_firewall_plan ;;
+      35) show_firewall_hardening_status ;;
+      36) configure_production_ssl ;;
+      37) show_production_ssl_status ;;
+      38) disable_production_ssl ;;
+      39) run_foreground_start ;;
+      40) show_erpnext_service_logs ;;
+      41) show_access_menu ;;
+      42) show_next_step ;;
+      43) verify_access ;;
+      44) run_app_install_wizard ;;
+      45) show_app_rollback_guide ;;
+      46) return 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -5415,152 +9504,81 @@ show_help() {
   cat <<EOF_HELP
 ${APP_NAME} v${SCRIPT_VERSION}
 
-Recommended local developer workflow:
-  ./install-erpnext-dev.sh setup
-  ./install-erpnext-dev.sh start
-  ./install-erpnext-dev.sh access
-
 Usage:
-  ./install-erpnext-dev.sh [action] [options]
+  ./install-erpnext-dev.sh [command]
 
-Basic actions:
-  setup         Recommended setup: install, create service, offer autostart/start
-  install       Alias for setup
-  start         Start ERPNext in the background systemd service
-  stop          Stop ERPNext service and development processes
-  status        Show quick developer status and exit
-  status-menu   Show interactive Status submenu
-  runtime-status       Show runtime/port status
-  install-status       Show installation/site status
-  service-summary      Show service/autostart summary
-  access        Show browser/IP/hostname instructions and exit
-  network-status Show VM IP/MAC/interface and access diagnostics
-  hosts-command Show HOST /etc/hosts command only
-  ssl-status    Show local HTTPS reverse proxy status
-  local-ssl-guide Show local SSL overview and quick test guide
-  mkcert-guide  Show trusted browser SSL workflow with mkcert
-  browser-trust-guide Show host browser/curl trust check workflow
-  verify-local-ssl Verify local SSL status and show host tests
-  install-local-ssl-cert Install/replace local SSL cert/key inside the VM
-  create-self-signed-local-cert Create quick self-signed cert for local SSL testing
-  environment-check Show whether this is the host or ERPNext VM context
-  site-config   Show current local site/domain configuration
-  domain-config Show local site and future production domain config
-  site-name-guide Show how to choose custom .test names for multiple VMs
-  backup        Create database backup
-  backup-files  Create database + files backup
-  list-backups  List site backups
-  app-library   Show optional Frappe app library
-  apps          Alias for app-library
-  list-apps     Show installed and downloaded Frappe apps
-  app-status    Show optional Frappe app install status
-  maintenance   Show maintenance menu
-  menu          Show interactive menu
-  help          Show this help
+Start here:
+  first-run           Pick local VM, public VM, or maintenance flow
+  public-vm-quickstart Domain -> install -> HTTPS -> security wizard
+  local-dev-quickstart Minimal-input local VM setup using erp.test
+  set-domain          Save public domain and site config
+  show-config         Show saved installer config
 
-Advanced actions:
-  repair              Run safe environment repair
-  backup-menu         Show backup/restore/maintenance menu
-  install-crm         Install Frappe CRM
-  install-hrms        Install Frappe HR / HRMS
-  install-helpdesk    Install Frappe Helpdesk
-  install-telephony   Install Frappe Telephony dependency app
-  install-insights    Install Frappe Insights
-  install-custom-app  Install a custom trusted Frappe app interactively
-  repair-app-registry Repair/normalize Bench sites/apps.txt
-  restore-db          Restore a database backup interactively
-  restore-full        Restore database + files interactively
-  migrate             Run site migration
-  build               Build assets
-  clear-cache         Clear site cache
-  restart             Restart ERPNext service and wait until ready
-  wait-ready          Wait until ERPNext development ports are ready
-  doctor              Show full health report
-  full-status         Show full health report
-  uninstall           Show uninstall/reset menu
-  advanced            Show advanced options menu
-  access-menu         Show access/networking submenu
-  foreground-start    Start Bench in the foreground terminal
-  enable-autostart    Enable ERPNext service on VM boot
-  disable-autostart   Disable ERPNext service on VM boot
-  service-start       Start ERPNext service
-  service-stop        Stop ERPNext service
-  service-restart     Restart ERPNext service
-  service-status      Show systemd service status
-  logs                Show recent ERPNext service logs
-  logs-follow         Follow ERPNext service logs
-  kvm-guide           Show KVM/libvirt fixed IP guide
-  kvm-identify        Show KVM VM identification helper using the VM MAC
-  host-test           Show host-side access test commands
-  ssl-roadmap         Show future SSL/HTTPS implementation roadmap
-  mkcert-guide        Show trusted local SSL workflow with mkcert
-  browser-trust-guide Show browser/curl trust validation checklist
-  ssl-rollback-guide  Show local SSL rollback/disable guide
-  verify-ssl-rollback Verify SSL disable/rollback state
-  verify-local-ssl    Verify local SSL status and show host tests
-  install-local-ssl-cert Install/replace local SSL cert/key inside the VM
-  create-self-signed-local-cert Create quick local SSL test certificate
-  environment-check   Show host vs ERPNext VM command context
-  site-config         Show current local site/domain configuration
-  domain-config       Show local/future production domain configuration
-  repair-site-config  Repair saved site/domain config from detected Bench site
-  storage-status      Show root disk/filesystem expansion status
-  expand-root-storage Safely expand root filesystem when VM disk is larger
-  verify-storage      Verify root storage is suitable for ERPNext
-  site-name-guide     Show custom .test hostname guide
-  production-readiness Show production readiness preview
-  production-domain-guide Show production domain planning guide
-  production-ssl-guide Show production SSL planning guide
-  configure-local-ssl Configure Nginx local HTTPS reverse proxy
-  disable-local-ssl   Disable local HTTPS reverse proxy site
-  multi-env-guide     Show multiple local environment guide
+Core:
+  guided-setup        Guided install / repair workflow
+  status              Compact ERPNext status
+  verify-access       HTTP access checks
+  next-step           Recommended next action
+  doctor --plain      Safe diagnostics
+  support-bundle      Redacted troubleshooting archive
 
-Options:
-  -y, --yes     Assume yes for install confirmations
+Production / HTTPS:
+  production-readiness    Production-candidate check
+  production-ssl-wizard   Choose Let's Encrypt or Cloudflare Origin CA
+  production-ssl-status   HTTPS/Nginx/certificate status
+  public-vm-readiness     Public VM DNS/access/listener check
 
-Environment overrides:
-  SITE_NAME=erp.test               # default local site name; use SITE_NAME=erp107.test for another VM
-  PRODUCTION_DOMAIN=erp.company.com # future production planning only
-  FRAPPE_USER=frappe
-  ADMIN_PASSWORD='YourPassword'
-  DB_ADMIN_PASSWORD='YourDbAdminPassword'
-  FRAPPE_BRANCH=version-16
-  ERPNEXT_BRANCH=version-16
-  CRM_BRANCH=main
-  HRMS_BRANCH=version-16
-  HELPDESK_BRANCH=main
-  TELEPHONY_BRANCH=develop
-  INSIGHTS_BRANCH=main
-  AUTO_START=true|false|prompt
-  ENABLE_AUTOSTART=true|false|prompt
-  AUTO_EXPAND_ROOT=true|false|prompt
+Security:
+  security-hardening-wizard  UFW + Fail2Ban workflow
+  firewall-hardening-status  Cloud firewall + backend-port guidance
+  vm-firewall-status         UFW status
+  fail2ban-status            SSH jail status
 
-Browser access:
-  Direct IP URL works while ERPNext is running: http://VM_IP:8000
-  Friendly URL works after HOST /etc/hosts setup: http://${SITE_NAME}:8000
+Backup / Apps:
+  backup-files        Database + files backup
+  list-backups        List site backups
+  app-install-wizard  Optional Frappe app installer
+  app-status          Optional app status
+
+Guides:
+  production-domain-plan   DNS/domain plan
+  production-ssl-plan      SSL plan
+  production-firewall-plan Firewall plan
+  cloudflare-origin-guide  Cloudflare Origin CA guide
+  vm-firewall-plan         UFW plan
+
+Menus:
+  menu        Main menu
+  advanced    Full advanced menu
+  maintenance Backup/maintenance menu
 
 Examples:
-  ./install-erpnext-dev.sh
-  ./install-erpnext-dev.sh setup
-  ./install-erpnext-dev.sh status
-  ./install-erpnext-dev.sh start
-  ./install-erpnext-dev.sh access
-  ./install-erpnext-dev.sh backup
-  ./install-erpnext-dev.sh app-library
-  ./install-erpnext-dev.sh install-crm
-  ./install-erpnext-dev.sh app-status
-  ./install-erpnext-dev.sh network-status
-  ./install-erpnext-dev.sh ssl-status
-  ./install-erpnext-dev.sh local-ssl-guide
-  ./install-erpnext-dev.sh mkcert-guide
-  ./install-erpnext-dev.sh browser-trust-guide
-  ./install-erpnext-dev.sh verify-local-ssl
-  ./install-erpnext-dev.sh environment-check
-  ./install-erpnext-dev.sh site-config
-  ./install-erpnext-dev.sh storage-status
-  ./install-erpnext-dev.sh domain-config
-  ./install-erpnext-dev.sh production-readiness
-  ./install-erpnext-dev.sh doctor
+  ./install-erpnext-dev.sh first-run
+  ./install-erpnext-dev.sh public-vm-quickstart
+  ./install-erpnext-dev.sh local-dev-quickstart
+  ./install-erpnext-dev.sh production-ssl-wizard
+  ./install-erpnext-dev.sh security-hardening-wizard
+
+Options:
+  -y, --yes  Assume yes for supported confirmations
+
+One-command GitHub entry points:
+  Public VM:
+    curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=\$(date +%s)" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh public-vm-quickstart
+  Local VM:
+    curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=\$(date +%s)" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh local-dev-quickstart
+
+Common environment overrides:
+  SITE_NAME=erp.test
+  PRODUCTION_DOMAIN=erp.company.com
+  LETSENCRYPT_EMAIL=admin@example.com
+  LETSENCRYPT_STAGING=true|false
+  ADMIN_SSH_SOURCE_IP=68.144.2.171/32
+  FAIL2BAN_SSH_BANTIME=1h
+  FAIL2BAN_SSH_FINDTIME=10m
+  FAIL2BAN_SSH_MAXRETRY=5
+
+Use ./install-erpnext-dev.sh advanced for the complete command menu.
 EOF_HELP
 }
 
@@ -5570,30 +9588,38 @@ show_menu() {
     echo "============================================================"
     echo "${APP_NAME} v${SCRIPT_VERSION}"
     echo "============================================================"
-    echo "1) Recommended Setup"
-    echo "2) Start ERPNext"
-    echo "3) Stop ERPNext"
+    echo "1) Start here / setup wizard"
+    echo "2) Public VM quickstart"
+    echo "3) Local VM quickstart"
     echo "4) Status"
-    echo "5) Access Instructions"
-    echo "6) Backup / Maintenance"
-    echo "7) App Library"
-    echo "8) Advanced Options"
-    echo "9) Help"
-    echo "10) Exit"
+    echo "5) Start service"
+    echo "6) Stop service"
+    echo "7) Verify access"
+    echo "8) Production HTTPS status"
+    echo "9) Security hardening"
+    echo "10) Backup / maintenance"
+    echo "11) Optional apps"
+    echo "12) Advanced"
+    echo "13) Help"
+    echo "14) Exit"
     echo
     read -r -p "Choose an option: " choice
 
     case "$choice" in
-      1) run_install ;;
-      2) run_start ;;
-      3) run_stop ;;
+      1) run_first_run_wizard ;;
+      2) run_public_vm_quickstart ;;
+      3) run_local_dev_quickstart ;;
       4) show_status_menu ;;
-      5) show_access_instructions ;;
-      6) run_backup_maintenance_menu ;;
-      7) show_app_library_menu ;;
-      8) show_advanced_menu ;;
-      9) show_help ;;
-      10) exit 0 ;;
+      5) run_start ;;
+      6) run_stop ;;
+      7) verify_access ;;
+      8) show_production_ssl_status ;;
+      9) security_hardening_wizard ;;
+      10) run_backup_maintenance_menu ;;
+      11) show_app_library_menu ;;
+      12) show_advanced_menu ;;
+      13) show_help ;;
+      14) exit 0 ;;
       *) warn "Invalid option" ;;
     esac
   done
@@ -5606,7 +9632,15 @@ parse_args() {
         ASSUME_YES=1
         shift
         ;;
-      setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|full-status|start|stop|uninstall|advanced|access|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|expand-root-storage|verify-storage|production-readiness|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+      --plain)
+        DOCTOR_FORMAT="plain"
+        shift
+        ;;
+      --json)
+        DOCTOR_FORMAT="json"
+        shift
+        ;;
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -5615,13 +9649,27 @@ parse_args() {
         ;;
     esac
   done
+
+  if [[ -z "${ACTION}" && "${DOCTOR_FORMAT}" != "human" ]]; then
+    ACTION="doctor"
+  fi
 }
 
 main() {
   parse_args "$@"
 
+  if action_requires_lock "${ACTION:-menu}"; then
+    acquire_installer_lock
+  fi
+
   case "${ACTION:-menu}" in
     ""|menu) show_menu ;;
+    first-run|start-here|quickstart|setup-wizard) run_first_run_wizard ;;
+    public-vm-quickstart|public-setup) run_public_vm_quickstart ;;
+    local-dev-quickstart|local-setup) run_local_dev_quickstart ;;
+    set-domain) prompt_and_save_public_domain ;;
+    show-config) show_config_summary ;;
+    guided-setup) run_guided_setup ;;
     setup|install) run_install ;;
     repair) run_repair ;;
     status) run_status ;;
@@ -5629,17 +9677,31 @@ main() {
     runtime-status) run_runtime_status ;;
     install-status) run_installation_status ;;
     service-summary) run_service_summary ;;
-    doctor|full-status) run_full_status ;;
+    doctor|full-status)
+      case "$DOCTOR_FORMAT" in
+        plain) run_doctor_plain ;;
+        json) run_doctor_json ;;
+        *) run_full_status ;;
+      esac
+      ;;
+    support-bundle|support) create_support_bundle ;;
     start) run_start ;;
     stop) run_stop ;;
     uninstall) run_uninstall_menu ;;
     advanced) show_advanced_menu ;;
     access) show_access_instructions ;;
+    verify-access) verify_access ;;
+    next-step) show_next_step ;;
+    local-ssl-wizard|ssl-wizard) run_local_ssl_wizard ;;
     access-menu) show_access_menu ;;
     backup-menu) run_backup_maintenance_menu ;;
     app-library|apps) show_app_library_menu ;;
+    app-install-wizard|app-wizard) run_app_install_wizard ;;
+    app-install-guide) show_app_install_guide ;;
+    app-rollback-guide) show_app_rollback_guide ;;
     list-apps) show_installed_apps ;;
     app-status) run_app_status ;;
+    app-compatibility|app-compat|app-preflight) show_app_compatibility_matrix ;;
     install-crm) install_app_profile crm ;;
     install-hrms) install_app_profile hrms ;;
     install-helpdesk) install_app_profile helpdesk ;;
@@ -5687,10 +9749,31 @@ main() {
     environment-check|where-am-i) show_environment_check ;;
     site-config) show_site_config ;;
     storage-status) show_storage_status ;;
+    storage-debug) storage_debug ;;
     expand-root-storage) expand_root_storage ;;
     verify-storage) verify_storage ;;
     domain-config) show_domain_config ;;
     production-readiness) show_production_readiness ;;
+    production-plan|prod-plan) show_production_plan ;;
+    production-domain-plan|prod-domain-plan) show_production_domain_plan ;;
+    public-vm-readiness|public-readiness) show_public_vm_readiness ;;
+    production-ssl-plan|prod-ssl-plan) show_production_ssl_plan ;;
+    production-firewall-plan|prod-firewall-plan) show_production_firewall_plan ;;
+    firewall-hardening-status|firewall-status|hardening-status) show_firewall_hardening_status ;;
+    vm-firewall-plan|ufw-plan) vm_firewall_plan ;;
+    configure-vm-firewall) configure_vm_firewall ;;
+    vm-firewall-status|ufw-status) show_vm_firewall_status ;;
+    configure-fail2ban) configure_fail2ban ;;
+    fail2ban-status) show_fail2ban_status ;;
+    security-hardening-wizard|vm-firewall-wizard) security_hardening_wizard ;;
+    ufw-ssh-admin-only) configure_ufw_ssh_admin_only ;;
+    production-ssl-wizard|ssl-provider-wizard) production_ssl_wizard ;;
+    configure-production-ssl) configure_production_ssl ;;
+    configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl) configure_cloudflare_origin_ssl ;;
+    cloudflare-origin-ssl-status) show_cloudflare_origin_ssl_status ;;
+    cloudflare-origin-guide) show_cloudflare_origin_guide ;;
+    production-ssl-status) show_production_ssl_status ;;
+    disable-production-ssl) disable_production_ssl ;;
     production-domain-guide) show_production_domain_guide ;;
     production-ssl-guide) show_production_ssl_guide ;;
     repair-site-config) repair_site_config ;;
