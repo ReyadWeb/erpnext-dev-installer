@@ -1,56 +1,29 @@
-# ROADMAP
+# Roadmap v0.8.13
 
-## Current: v0.9.10
+## Completed in v0.8.13
 
-Stable developer installer baseline with production readiness/planning classification, structured production domain planning, public VM readiness checks, production SSL/firewall planning, conservative Nginx/Let's Encrypt HTTPS implementation, staging-to-production certificate replacement hotfix, Cloudflare Origin CA SSL provider workflow, Cloudflare PEM paste UX hotfix, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
+- Generic root storage detection.
+- Generic root storage expansion for common Ubuntu VM layouts.
+- Setup-time expansion prompt.
+- Storage status and verification commands.
 
-Completed:
+## Next recommended patch
 
-- ERPNext/Frappe v16 install
-- custom local `.test` site names
-- autostart service
-- runtime and doctor checks
-- `doctor --plain` safe copy/paste diagnostics
-- `doctor --json` structured diagnostics
-- `support-bundle` redacted troubleshooting archive
-- `app-compatibility` optional app branch compatibility matrix
-- compatibility warnings in `app-install-wizard`
-- `production-readiness` environment classification
-- `production-plan` planning checklist
-- `production-domain-plan` structured DNS/domain planning
-- root-run guided setup hotfix for fresh public/cloud VMs
-- `public-vm-readiness` public DNS/access/listener readiness
-- `production-ssl-plan` production SSL path planning
-- `production-firewall-plan` public VM firewall exposure planning
-- `configure-production-ssl` Nginx + Let's Encrypt HTTPS implementation
-- `production-ssl-status` production HTTPS status checks
-- `disable-production-ssl` managed production HTTPS rollback
-- Let’s Encrypt staging-to-production replacement detection
-- Cloudflare Origin CA SSL provider workflow
-- Cloudflare Origin CA PEM paste UX hotfix
-- Cloudflare-aware production SSL status
-- `firewall-hardening-status` post-HTTPS listener checks
-- Cloud firewall vs local listener wording and external validation guidance
-- SSL provider wizard
-- certificate issuer/status reporting for production SSL
-- root storage expansion
-- corrected post-expansion storage decision logic
-- guided setup flow
-- access verification
-- local SSL wizard
-- trusted mkcert replacement path
-- optional app checkpoint workflow
-- private installer logs and safer credential handling
+### v0.9.0 Guided Install Workflow
 
-## Next recommended work
+Planned flow:
 
-### v1.0.0-rc1
+1. Install ERPNext.
+2. Register local domain on the HOST `/etc/hosts`.
+3. Verify HTTP access.
+4. Configure local SSL.
+5. Verify HTTPS.
+6. Configure trusted browser SSL with mkcert guidance.
+7. Install optional apps after the base system is confirmed.
 
-- backup/restore hardening
-- backup verification, restore warnings, off-VM backup guidance, and retention planning
+The goal is a step-by-step installer that tells the user exactly when to run commands inside the VM and when to run commands on the HOST.
 
-### v1.0.0
+## Later production track
 
-- final QA pass
-- documentation cleanup
-- release checklist and GitHub tag workflow
+- Keep the developer installer separate from production automation.
+- Reuse the same domain-first design for future production domain and SSL workflows.
