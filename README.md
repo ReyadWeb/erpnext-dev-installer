@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.9.1
+# ERPNext Developer Installer v0.9.2
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -28,9 +28,9 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh next-step
 ```
 
-## v0.9.1 focus
+## v0.9.2 focus
 
-v0.9.1 adds structured production domain planning and fixes production readiness install detection. It does not convert the developer VM into production; it classifies the environment, shows the planning checklist, and provides DNS/domain guidance before any production hardening or migration work.
+v0.9.2 is a first-public-VM hotfix. It fixes root-run guided setup on fresh cloud VMs where the installer previously stopped at the Frappe/Bench installation phase with `-H: command not found`. It keeps the production planning/domain features from v0.9.1 and does not convert the developer VM into production.
 
 Run:
 

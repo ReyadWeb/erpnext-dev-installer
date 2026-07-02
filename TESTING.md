@@ -1,4 +1,4 @@
-# TESTING v0.9.1
+# TESTING v0.9.2
 
 ## Syntax
 
@@ -11,7 +11,7 @@ grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="0.9.1"
+SCRIPT_VERSION="0.9.2"
 ```
 
 ## Help command
@@ -280,4 +280,29 @@ Expected:
 ./install-erpnext-dev.sh support-bundle
 ./install-erpnext-dev.sh verify-access
 ./install-erpnext-dev.sh ssl-status
+```
+
+## v0.9.2 hotfix test
+
+Fresh public/root VM scenario:
+
+```bash
+SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh guided-setup
+```
+
+Expected:
+
+- system package installation can complete
+- `frappe` user is prepared
+- installer enters the Node/Python/Bench/Frappe/ERPNext phase as the `frappe` user
+- it must not fail with `-H: command not found` when launched as root
+
+Regression checks:
+
+```bash
+bash -n install-erpnext-dev.sh
+./install-erpnext-dev.sh production-domain-plan
+./install-erpnext-dev.sh production-readiness
+./install-erpnext-dev.sh doctor --json > /tmp/doctor.json
+python3 -m json.tool /tmp/doctor.json
 ```

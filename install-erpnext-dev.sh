@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.9.1"
+SCRIPT_VERSION="0.9.2"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1022,6 +1022,18 @@ export PATH="$HOME/.local/bin:$PATH"; export NVM_DIR="$HOME/.nvm"; if [ -s "$NVM
 EOF_PREFIX
 }
 
+frappe_login_bash() {
+  # Read a Bash script from stdin and execute it as the frappe user.
+  # This must work both when the installer is run as root and when it is run
+  # by a sudo-capable non-root user. Do not prefix sudo options with an empty
+  # $SUDO value; root would otherwise try to execute "-H" as a command.
+  if [[ "${EUID}" -eq 0 ]]; then
+    su - "$FRAPPE_USER" -s /bin/bash
+  else
+    sudo -H -u "$FRAPPE_USER" bash
+  fi
+}
+
 run_as_frappe() {
   local cmd="$1"
   local prefix
@@ -1936,7 +1948,7 @@ EOF_HELPER
 install_frappe_stack_as_user() {
   log "Installing Node, Python, Bench, Frappe, and ERPNext as ${FRAPPE_USER}"
 
-  $SUDO -H -u "$FRAPPE_USER" bash <<EOF_USER
+  frappe_login_bash <<EOF_USER
 set -Eeuo pipefail
 
 export HOME="${FRAPPE_HOME}"

@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## v0.9.2
+
+### Fixed
+
+- Fixed root-run guided setup on fresh public/cloud VMs.
+- The Frappe/Bench installation phase no longer expands an empty `$SUDO` prefix into an invalid `-H` command when the installer is launched as `root`.
+- Added a dedicated `frappe_login_bash` helper so stdin heredoc install blocks run correctly both as root and as a sudo-capable non-root user.
+
+### Notes
+
+- This is a hotfix from the first real Hetzner VM test.
+- Production SSL planning moves to the next roadmap patch.
+
 ## v0.9.1
 
 ### Added
