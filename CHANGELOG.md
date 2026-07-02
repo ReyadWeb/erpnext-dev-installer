@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## v0.9.14
+
+### Added
+
+- Added `ssl-mode-status` to show the current SSL provider, DNS state, active certificate path, and recommended SSL mode for the current deployment.
+- Added `ssl-mode-guide` / `ssl-compatibility` with a compact SSL compatibility matrix for local self-signed/mkcert, Let’s Encrypt, and Cloudflare Origin CA.
+- Added `setup-effort-guide` / `setup-step-count` to show how many shell commands and guided inputs are expected for local VM, public Let’s Encrypt, public Cloudflare, and existing-install workflows.
+
+### Improved
+
+- Production SSL wizard now displays the recommended SSL mode before asking the user to choose a provider.
+- Public VM quickstart now includes a quick link to SSL mode guidance and setup step counts.
+- First-run wizard now includes setup effort and SSL mode guidance.
+
 ## v0.9.13
 
 ### Fixed

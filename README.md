@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v0.9.13
+# ERPNext Developer Installer v0.9.14
 
 Local developer installer for ERPNext/Frappe on Ubuntu 24.04/26.04 VMs.
 
@@ -41,6 +41,9 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh production-readiness
 ./install-erpnext-dev.sh production-plan
 ./install-erpnext-dev.sh production-ssl-wizard
+./install-erpnext-dev.sh ssl-mode-status
+./install-erpnext-dev.sh ssl-mode-guide
+./install-erpnext-dev.sh setup-effort-guide
 ./install-erpnext-dev.sh security-hardening-wizard
 ./install-erpnext-dev.sh vm-firewall-status
 ./install-erpnext-dev.sh fail2ban-status
@@ -49,6 +52,20 @@ chmod +x install-erpnext-dev.sh
 ./install-erpnext-dev.sh doctor --json
 ./install-erpnext-dev.sh support-bundle
 ./install-erpnext-dev.sh next-step
+```
+
+## v0.9.14 focus
+
+v0.9.14 adds SSL mode guidance and setup effort reporting before the backup/restore release candidate. The installer can now show which SSL path fits the current deployment: local self-signed/mkcert for local VMs, Let’s Encrypt for public DNS-only VMs, or Cloudflare Origin CA for Cloudflare-proxied VMs. It also shows how many shell commands and guided inputs are expected for each setup type.
+
+New commands:
+
+```bash
+./install-erpnext-dev.sh ssl-mode-status
+./install-erpnext-dev.sh ssl-mode-guide
+./install-erpnext-dev.sh ssl-compatibility
+./install-erpnext-dev.sh setup-effort-guide
+./install-erpnext-dev.sh setup-step-count
 ```
 
 ## v0.9.13 focus
@@ -123,6 +140,9 @@ Run:
 ./install-erpnext-dev.sh production-readiness
 ./install-erpnext-dev.sh production-plan
 ./install-erpnext-dev.sh production-ssl-wizard
+./install-erpnext-dev.sh ssl-mode-status
+./install-erpnext-dev.sh ssl-mode-guide
+./install-erpnext-dev.sh setup-effort-guide
 ./install-erpnext-dev.sh security-hardening-wizard
 ./install-erpnext-dev.sh vm-firewall-status
 ./install-erpnext-dev.sh fail2ban-status
@@ -138,6 +158,9 @@ Run:
 ./install-erpnext-dev.sh fail2ban-status
 ./install-erpnext-dev.sh security-hardening-wizard
 ./install-erpnext-dev.sh production-ssl-wizard
+./install-erpnext-dev.sh ssl-mode-status
+./install-erpnext-dev.sh ssl-mode-guide
+./install-erpnext-dev.sh setup-effort-guide
 ./install-erpnext-dev.sh configure-production-ssl
 ./install-erpnext-dev.sh configure-cloudflare-origin-ssl
 ./install-erpnext-dev.sh cloudflare-origin-ssl-status
@@ -193,6 +216,9 @@ Use the provider wizard when you want a smooth SSL choice instead of remembering
 
 ```bash
 SITE_NAME=erp.flowmaya.com PRODUCTION_DOMAIN=erp.flowmaya.com ./install-erpnext-dev.sh production-ssl-wizard
+./install-erpnext-dev.sh ssl-mode-status
+./install-erpnext-dev.sh ssl-mode-guide
+./install-erpnext-dev.sh setup-effort-guide
 ```
 
 Options:

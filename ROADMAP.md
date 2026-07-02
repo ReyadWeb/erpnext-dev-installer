@@ -1,11 +1,14 @@
 # ROADMAP
 
-## Current: v0.9.13
+## Current: v0.9.14
 
-Stable developer installer baseline with first-run onboarding, quickstart status hotfixes, one-command GitHub quickstarts, terminal UX cleanup, compact menus/help, production readiness/planning classification, structured production domain planning, public VM readiness checks, production SSL/firewall planning, conservative Nginx/Let's Encrypt HTTPS implementation, staging-to-production certificate replacement hotfix, Cloudflare Origin CA SSL provider workflow, Cloudflare PEM paste UX hotfix, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
+Stable developer installer baseline with SSL mode guidance, setup effort/step-count reporting, first-run onboarding, quickstart status hotfixes, one-command GitHub quickstarts, terminal UX cleanup, compact menus/help, production readiness/planning classification, structured production domain planning, public VM readiness checks, production SSL/firewall planning, conservative Nginx/Let's Encrypt HTTPS implementation, staging-to-production certificate replacement hotfix, Cloudflare Origin CA SSL provider workflow, Cloudflare PEM paste UX hotfix, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
 
 Completed:
 
+- SSL mode status and compatibility guide
+- setup effort / step-count guide for local VM, public Let’s Encrypt, public Cloudflare, and existing installs
+- SSL provider wizard recommendation summary
 - first-run onboarding wizard
 - quickstart status hotfix for existing Cloudflare Origin CA installs
 - automatic public-vm session classification when a real production domain is saved

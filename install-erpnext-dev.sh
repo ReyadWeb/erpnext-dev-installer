@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="0.9.13"
+SCRIPT_VERSION="0.9.14"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -109,7 +109,7 @@ acquire_installer_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
       return 0
       ;;
     *)
@@ -2631,7 +2631,8 @@ run_public_vm_quickstart() {
     echo "4) Configure HTTPS"
     echo "5) Security hardening"
     echo "6) Final status / support bundle"
-    echo "7) Exit"
+    echo "7) SSL mode guide / setup steps"
+    echo "8) Exit"
     echo
     read -r -p "Choose an option: " choice
 
@@ -2647,9 +2648,10 @@ run_public_vm_quickstart() {
         show_firewall_hardening_status
         ui_next "./install-erpnext-dev.sh support-bundle" "Take a cloud snapshot after validation."
         ;;
-      7) return 0 ;;
+      7) show_ssl_mode_status; show_setup_effort_guide ;;
+      8) return 0 ;;
       *)
-        if menu_invalid_choice "$choice" "type 7 to exit"; then :; else
+        if menu_invalid_choice "$choice" "type 8 to exit"; then :; else
           [[ $? -eq 2 ]] && return 0
         fi
         ;;
@@ -2672,7 +2674,8 @@ run_first_run_wizard() {
     echo "2) Public VM / production-candidate"
     echo "3) Existing install / maintenance menu"
     echo "4) Show saved config"
-    echo "5) Exit"
+    echo "5) Setup effort / SSL mode guide"
+    echo "6) Exit"
     echo
     read -r -p "Choose an option: " choice
 
@@ -2681,9 +2684,10 @@ run_first_run_wizard() {
       2) run_public_vm_quickstart ;;
       3) show_menu ;;
       4) show_config_summary ;;
-      5) return 0 ;;
+      5) show_setup_effort_guide; show_ssl_mode_guide ;;
+      6) return 0 ;;
       *)
-        if menu_invalid_choice "$choice" "type 5 to exit"; then :; else
+        if menu_invalid_choice "$choice" "type 6 to exit"; then :; else
           [[ $? -eq 2 ]] && return 0
         fi
         ;;
@@ -3210,6 +3214,8 @@ show_public_vm_readiness() {
   echo "  ./install-erpnext-dev.sh backup-files"
   echo "  ./install-erpnext-dev.sh production-ssl-plan"
   echo "  ./install-erpnext-dev.sh production-ssl-wizard"
+  echo "  ./install-erpnext-dev.sh ssl-mode-status"
+  echo "  ./install-erpnext-dev.sh setup-effort-guide"
   echo "  ./install-erpnext-dev.sh configure-production-ssl"
   echo "  ./install-erpnext-dev.sh configure-cloudflare-origin-ssl"
   echo "  ./install-erpnext-dev.sh production-ssl-status"
@@ -4625,19 +4631,140 @@ show_cloudflare_origin_ssl_status() {
   echo "============================================================"
 }
 
+
+ssl_mode_context() {
+  local vm_ip domain dns_ip provider local_mode recommendation detail
+  vm_ip="$(get_vm_ip 2>/dev/null || echo unknown)"
+  domain="${PRODUCTION_DOMAIN:-}"
+  provider="$(active_production_ssl_provider 2>/dev/null || echo "not configured")"
+  dns_ip=""
+  recommendation="local-dev"
+  detail="Use local self-signed/mkcert SSL or plain HTTP for a dev VM."
+
+  if [[ -n "$domain" ]] && validate_production_domain_value "$domain" >/dev/null 2>&1; then
+    dns_ip="$(resolve_ipv4_first "$domain")"
+    if [[ "$provider" == "Cloudflare Origin CA" ]]; then
+      recommendation="cloudflare-origin-ca"
+      detail="Cloudflare Origin CA is active. Keep DNS proxied and Cloudflare SSL/TLS on Full (strict)."
+    elif [[ -n "$dns_ip" && "$dns_ip" == "$vm_ip" ]]; then
+      recommendation="letsencrypt"
+      detail="DNS resolves directly to this VM. Let's Encrypt HTTP-01 is the recommended public SSL path."
+    elif [[ -n "$dns_ip" && "$dns_ip" != "$vm_ip" ]]; then
+      recommendation="cloudflare-origin-ca"
+      detail="DNS does not resolve to the origin IP. If this is Cloudflare proxy, use Cloudflare Origin CA."
+    else
+      recommendation="public-domain-pending"
+      detail="Domain is set but DNS is unresolved. Configure DNS before production SSL."
+    fi
+  elif [[ "$SITE_NAME" == *.test || "$SITE_NAME" == *.local || "${DEPLOYMENT_MODE:-development}" == "development" ]]; then
+    recommendation="local-dev"
+    detail="Local/dev site detected. Use local self-signed/mkcert SSL; do not use public SSL providers."
+  fi
+
+  printf '%s|%s|%s|%s|%s\n' "$recommendation" "$detail" "$provider" "${dns_ip:-unresolved}" "$vm_ip"
+}
+
+show_ssl_mode_status() {
+  require_sudo
+  local ctx mode detail provider dns_ip vm_ip prod_pair prod_status prod_detail local_state
+  ctx="$(ssl_mode_context)"
+  mode="${ctx%%|*}"; ctx="${ctx#*|}"
+  detail="${ctx%%|*}"; ctx="${ctx#*|}"
+  provider="${ctx%%|*}"; ctx="${ctx#*|}"
+  dns_ip="${ctx%%|*}"; ctx="${ctx#*|}"
+  vm_ip="$ctx"
+  prod_pair="$(production_ssl_readiness_detail 2>/dev/null || echo 'WARN|not configured')"
+  prod_status="${prod_pair%%|*}"
+  prod_detail="${prod_pair#*|}"
+  if ssl_is_configured 2>/dev/null; then
+    local_state="configured"
+  else
+    local_state="not configured"
+  fi
+
+  ui_box_start "SSL Mode Status"
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "Production domain" "$([[ -n "${PRODUCTION_DOMAIN:-}" ]] && echo OK || echo INFO)" "${PRODUCTION_DOMAIN:-not set}"
+  status_line "Deployment mode" "INFO" "${DEPLOYMENT_MODE:-development}"
+  status_line "VM IP" "INFO" "$vm_ip"
+  status_line "DNS result" "INFO" "$dns_ip"
+  status_line "Active provider" "INFO" "$provider"
+  status_line "Production SSL" "$prod_status" "$prod_detail"
+  status_line "Local SSL" "INFO" "$local_state"
+  status_line "Recommended mode" "OK" "$mode"
+  ui_box_end
+  echo "Reason: $detail"
+  ui_next "./install-erpnext-dev.sh ssl-mode-guide" "./install-erpnext-dev.sh production-ssl-wizard"
+}
+
+show_ssl_mode_guide() {
+  ui_box_start "SSL Mode Guide"
+  echo "Use the SSL mode that matches the deployment path."
+  echo
+  printf '  %-24s %-18s %s\n' "Mode" "Best for" "Requirement"
+  printf '  %-24s %-18s %s\n' "------------------------" "------------------" "------------------------------"
+  printf '  %-24s %-18s %s\n' "local self-signed/mkcert" "Local VM" ".test/.local or internal dev hostname"
+  printf '  %-24s %-18s %s\n' "Let's Encrypt" "Public VM" "DNS A record points directly to VM; 80 open"
+  printf '  %-24s %-18s %s\n' "Cloudflare Origin CA" "Cloudflare VM" "DNS proxied; Cloudflare SSL/TLS Full (strict)"
+  ui_box_end
+  echo "Rules:"
+  echo "  - Local VM: use local SSL only."
+  echo "  - Public DNS-only VM: use Let's Encrypt."
+  echo "  - Cloudflare proxied VM: use Cloudflare Origin CA."
+  echo "  - Do not use Cloudflare Origin CA for direct browser-to-origin access."
+  echo
+  echo "Commands:"
+  echo "  ./install-erpnext-dev.sh ssl-mode-status"
+  echo "  ./install-erpnext-dev.sh production-ssl-wizard"
+  echo "  ./install-erpnext-dev.sh local-ssl-wizard"
+}
+
+show_setup_effort_guide() {
+  ui_box_start "Setup Effort / Step Count"
+  echo "The goal is one shell command, then guided menu inputs."
+  echo
+  printf '  %-28s %-12s %-18s %s\n' "Case" "Commands" "Required inputs" "Notes"
+  printf '  %-28s %-12s %-18s %s\n' "----------------------------" "------------" "------------------" "------------------------------"
+  printf '  %-28s %-12s %-18s %s\n' "Local VM, HTTP" "1" "1-2" "Use local-dev-quickstart"
+  printf '  %-28s %-12s %-18s %s\n' "Local VM, local SSL" "1" "2-4" "Add local-ssl-wizard"
+  printf '  %-28s %-12s %-18s %s\n' "Public VM, Let's Encrypt" "1" "6-8" "Domain, install, SSL, hardening"
+  printf '  %-28s %-12s %-18s %s\n' "Public VM, Cloudflare" "1" "9-11" "Includes cert/key paste"
+  printf '  %-28s %-12s %-18s %s\n' "Existing install" "1" "1-3" "Use public-vm-quickstart/status"
+  ui_box_end
+  echo "One-command public VM entry point:"
+  echo "  curl -fsSL \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=\$(date +%s)\" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh public-vm-quickstart"
+  echo
+  echo "One-command local VM entry point:"
+  echo "  curl -fsSL \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=\$(date +%s)\" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh local-dev-quickstart"
+  echo
+  echo "Interpretation: commands are shell commands typed by the user. Inputs are menu choices, confirmations, domain/email, and certificate paste steps."
+}
+
 production_ssl_wizard() {
-  local choice
+  local choice ctx mode detail provider dns_ip vm_ip
+  ctx="$(ssl_mode_context)"
+  mode="${ctx%%|*}"; ctx="${ctx#*|}"
+  detail="${ctx%%|*}"; ctx="${ctx#*|}"
+  provider="${ctx%%|*}"; ctx="${ctx#*|}"
+  dns_ip="${ctx%%|*}"; ctx="${ctx#*|}"
+  vm_ip="$ctx"
   echo
   echo "============================================================"
   echo "Production SSL Provider Wizard"
   echo "============================================================"
   echo "Choose how this public ERPNext VM should handle HTTPS."
   echo
+  status_line "Recommended mode" "INFO" "$mode"
+  status_line "Active provider" "INFO" "$provider"
+  status_line "DNS / VM" "INFO" "DNS=${dns_ip}; VM=${vm_ip}"
+  echo "Reason: $detail"
+  echo
   echo "1) Let's Encrypt certificate directly on this VM"
   echo "2) Cloudflare Origin CA certificate for Cloudflare Full (strict)"
   echo "3) Show current production SSL status"
   echo "4) Show Cloudflare Origin CA guide"
-  echo "5) Back"
+  echo "5) Show SSL mode guide/status"
+  echo "6) Back"
   echo
   read -r -p "Choose an option: " choice
   case "$choice" in
@@ -4645,7 +4772,8 @@ production_ssl_wizard() {
     2) configure_cloudflare_origin_ssl ;;
     3) show_production_ssl_status ;;
     4) show_cloudflare_origin_guide ;;
-    5|"") return 0 ;;
+    5) show_ssl_mode_status; show_ssl_mode_guide ;;
+    6|"") return 0 ;;
     *) warn "Invalid option: ${choice}" ; return 1 ;;
   esac
 }
@@ -9551,6 +9679,7 @@ Start here:
   local-dev-quickstart Minimal-input local VM setup using erp.test
   set-domain          Save public domain and site config
   show-config         Show saved installer config
+  setup-effort-guide  Show commands/input count by setup type
 
 Core:
   guided-setup        Guided install / repair workflow
@@ -9564,6 +9693,8 @@ Production / HTTPS:
   production-readiness    Production-candidate check
   production-ssl-wizard   Choose Let's Encrypt or Cloudflare Origin CA
   production-ssl-status   HTTPS/Nginx/certificate status
+  ssl-mode-status         Recommended SSL mode for current config
+  ssl-mode-guide          SSL compatibility matrix
   public-vm-readiness     Public VM DNS/access/listener check
 
 Security:
@@ -9678,7 +9809,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -9811,6 +9942,9 @@ main() {
     cloudflare-origin-ssl-status) show_cloudflare_origin_ssl_status ;;
     cloudflare-origin-guide) show_cloudflare_origin_guide ;;
     production-ssl-status) show_production_ssl_status ;;
+    ssl-mode-status) show_ssl_mode_status ;;
+    ssl-mode-guide|ssl-compatibility) show_ssl_mode_guide ;;
+    setup-effort-guide|setup-step-count) show_setup_effort_guide ;;
     disable-production-ssl) disable_production_ssl ;;
     production-domain-guide) show_production_domain_guide ;;
     production-ssl-guide) show_production_ssl_guide ;;

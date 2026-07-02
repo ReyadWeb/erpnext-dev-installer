@@ -1,3 +1,23 @@
+# TESTING
+
+## v0.9.14 validation
+
+```bash
+bash -n install-erpnext-dev.sh
+./install-erpnext-dev.sh help
+./install-erpnext-dev.sh ssl-mode-guide
+./install-erpnext-dev.sh setup-effort-guide
+./install-erpnext-dev.sh ssl-mode-status
+printf '5\n6\n' | ./install-erpnext-dev.sh first-run
+printf '7\n8\n' | ./install-erpnext-dev.sh public-vm-quickstart
+```
+
+Expected:
+
+- `ssl-mode-guide` shows local self-signed/mkcert, Let’s Encrypt, and Cloudflare Origin CA modes.
+- `setup-effort-guide` shows command/input counts for local VM, public Let’s Encrypt, public Cloudflare, and existing installs.
+- Production SSL wizard shows a recommended SSL mode before provider selection.
+
 # TESTING v0.9.13
 
 ## Syntax
