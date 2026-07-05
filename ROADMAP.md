@@ -1,181 +1,293 @@
 # Roadmap
 
+This roadmap is focused on making the ERPNext Developer Installer mature enough to install, manage, monitor, secure, back up, and maintain ERPNext/Frappe VMs reliably.
 
-Current focus: make the README easier to scan by adding a visual banner, a Start here section, and direct one-command install paths.
+The current priority remains the **VM-based installer and production operations toolkit**. A Docker-based ERPNext/Frappe installation method is planned as a separate future track, but it should not distract from hardening the VM workflow first.
 
-Completed in v1.1.9:
+---
 
-- Consistent menu footer for submenus.
-- Main menu quit-only footer.
-- Numbered Back/Exit entries removed from active menus.
-- Documentation and validation tests for the menu pattern.
+## Roadmap principles
 
+- **VM reliability first:** the current installer must become a dependable production VM management toolkit before adding another install method.
+- **Safe operations:** prefer preflight checks, dry-runs, summaries, confirmations, and rollback guidance before any risky action.
+- **Separation of concerns:** installation, backup, restore, monitoring, security, updates, diagnostics, and documentation should each have clear commands.
+- **Production clarity:** every command should clearly say whether it is intended for local testing, public production, or restore rehearsal.
+- **Generic provider support:** avoid locking the workflow to one cloud provider; document provider-specific examples only as examples.
+- **Docker later:** Docker support should be a separate approach with separate assumptions, backup logic, and operational checks.
 
-## v1.1.10 README start-here improvement
+---
 
-Status: built.
+## Current baseline
 
-- Add a wide README banner image.
-- Add a dedicated Start here section near the top of the README.
-- Provide one-command paths for guided menu, local VM install, public VM install, and operations.
-- Include Debian-family package update/bootstrap commands for fresh VMs.
-- Add a README menu/table of contents for faster navigation.
+The current VM installer already covers the core install path and many first-layer operations.
 
-## v1.1.9 menu navigation consistency
+Completed or available:
 
-Status: built.
+- Local VM quickstart using `.test` domains such as `erp.test`.
+- Public VPS/cloud VM quickstart using a real domain or subdomain.
+- Reusable installer path at `/root/install-erpnext-dev.sh`.
+- ERPNext/Frappe install, runtime checks, and access verification.
+- Local SSL guide and mkcert workflow.
+- Production SSL paths, including Cloudflare Origin CA and public HTTPS checks.
+- Firewall hardening, UFW status, and Fail2Ban checks.
+- Local backups, backup verification, backup status, retention planning, and cleanup.
+- Off-VM rsync backup configuration, dry-run, run, and status.
+- Production health check and optional local health-check timer.
+- Credentials-info helper and safer credential handling.
+- Optional app wizard and compatibility checks.
+- Diagnostics, `doctor`, command audit, and redacted support bundles.
+- README start-here section, architecture diagrams, testing docs, and changelog separation.
 
-- Standardize all interactive submenu navigation with `b/B` for Back and `q/Q` for Quit.
-- Keep numbered choices reserved for actions only.
-- Use a separated footer under menu items for clear terminal UX.
-- Keep the main menu quit-only with `q) Quit`.
+Main gaps before calling the production VM operations mature:
 
-## v1.1.7 documentation cleanup
+- Better log review and failure diagnostics.
+- More complete backup capacity planning and remote target checks.
+- Safer restore rehearsal workflows.
+- Update/upgrade preflight and controlled maintenance workflow.
+- Alerting, notifications, and repeated monitoring beyond local status checks.
+- Stronger VM security audit and hardening recommendations.
+- Production maintenance reports for handover and ongoing operations.
 
-- Keep README focused on setup, local VM testing, public VM setup, production operations, backup workflows, SSL modes, security hardening, and diagnostics.
-- Keep version history and release notes in CHANGELOG.md only.
-- Keep detailed validation scenarios in TESTING.md.
+---
 
+## Active direction: production VM maturity
 
-## v1.1.4 — Off-VM rsync hotfix
+### Phase 1 — production diagnostics and maintainability
 
-Status: built.
+Goal: make it easy to understand the state of the VM and identify issues quickly.
 
-- Fixed rsync SSH command construction for off-VM backup dry-runs and real runs.
-- Placeholder backup targets are rejected so the example target is not saved/tested as real configuration.
+Planned work:
 
-## v1.1.3 — Off-VM backup automation
+- **Log review and diagnostics**
+  - Add commands to review ERPNext, supervisor/systemd, Nginx, MariaDB, Redis, backup, and SSL-related logs.
+  - Provide compact summaries instead of dumping large logs by default.
+  - Include safe copy/paste modes for support.
 
-Status: superseded by v1.1.4 hotfix.
+- **VM state report**
+  - Produce a single management report with site name, domain, services, ports, disk, memory, backup state, SSL state, firewall state, and health status.
+  - Keep secrets redacted.
 
-- Added rsync-over-SSH off-VM backup planning, configuration, dry-run, run, status, and wizard commands.
+- **Maintenance dashboard / operations menu refinement**
+  - Improve the production operations menu into a clear maintenance console.
+  - Group tasks by Health, Backups, Restore, SSL, Security, Updates, Apps, and Diagnostics.
 
-## v1.1.1 — Production operations command hotfix
+- **Backup capacity planning**
+  - Estimate current complete-backup size.
+  - Estimate required space for 3, 7, 14, and custom retention counts.
+  - Warn when local or remote storage is too small for the configured policy.
 
-Status: built.
+Candidate commands:
 
-- Production operations commands registered and validated in the main command dispatcher.
-- `production-ops-wizard`, scheduled backup commands, and `restore-preflight` are available.
+```bash
+/root/install-erpnext-dev.sh log-review
+/root/install-erpnext-dev.sh vm-state-report
+/root/install-erpnext-dev.sh maintenance-dashboard
+/root/install-erpnext-dev.sh backup-size-estimate
+/root/install-erpnext-dev.sh backup-capacity-plan
+```
 
-## v1.1.0 — Production operations
+---
 
-Status: superseded by v1.1.1 hotfix.
+### Phase 2 — backup and restore maturity
 
-- Scheduled local backups with systemd timer.
-- Production operations wizard.
-- Restore preflight and restore rehearsal guidance.
-- Production checklist includes scheduled-backup status.
+Goal: make backups trustworthy, testable, and easier to restore on a disposable VM.
 
-## Next candidates
+Planned work:
 
-- Off-VM backup automation targets such as rsync/SFTP or object storage.
-- Safer restore automation on disposable VM targets.
-- Monitoring and alerting integration.
+- **Off-VM target improvements**
+  - Support SSH port selection for storage boxes and providers that do not use port 22.
+  - Improve SSH key guidance and remote directory checks.
+  - Add remote free-space and permission checks.
 
-# ROADMAP
+- **Object storage track**
+  - Add future support for `rclone`-based targets such as S3-compatible storage, Backblaze B2, Wasabi, or other object storage.
+  - Keep this separate from rsync so each target type has a clear workflow.
 
-## Current: v1.0.0
+- **Restore rehearsal workflow**
+  - Guide restore testing on a separate VM, not on production.
+  - Validate backup files, site name, database restore, files restore, app availability, and login.
 
-Stable v1.0.0 release with stable `/root/install-erpnext-dev.sh` reuse after one-command setup, initial backup prompt in public VM final status, production-mode access guidance, public-aware next-step recommendations, release-readiness summary, command audit, final QA wizard, release-notes guide, complete backup-set verification, Cloudflare-aware production checklist, and backup/restore hardening, production checklist, SSL mode guidance, setup effort/step-count reporting, first-run onboarding, quickstart status hotfixes, one-command GitHub quickstarts, terminal UX cleanup, compact menus/help, production readiness/planning classification, structured production domain planning, public VM readiness checks, production SSL/firewall planning, conservative Nginx/Let's Encrypt HTTPS implementation, staging-to-production certificate replacement hotfix, Cloudflare Origin CA SSL provider workflow, Cloudflare PEM paste UX hotfix, share-safe diagnostics, redacted support bundles, optional app compatibility preflight checks, and the first public cloud VM install hotfix.
+- **Backup reports**
+  - Show newest backup, backup age, complete set status, storage use, off-VM sync status, and restore-test status.
 
-Completed:
+Candidate commands:
 
-- stable reusable installer copy at `/root/install-erpnext-dev.sh` during quickstart
-- public VM final status initial-backup prompt
-- production-mode `verify-access` guidance using HTTPS and backend port-blocking tests
-- public-aware `next-step` recommendations
-- release-readiness final QA summary
-- final QA wizard
-- command audit of major workflows
-- v1.0.0 release-notes guide
-- latest complete backup-set selection
-- `.tar` and `.tar.gz` public/private file backup verification
-- Cloudflare-aware HTTPS status in production checklist
-- post-backup result summary
-- backup status inventory
-- latest backup file verification without restore
-- off-VM backup copy guidance
-- restore rehearsal guide for disposable VMs
-- production checklist for go-live readiness
-- backup hardening wizard
+```bash
+/root/install-erpnext-dev.sh configure-rsync-backup-target
+/root/install-erpnext-dev.sh off-vm-capacity-check
+/root/install-erpnext-dev.sh configure-object-backup-target
+/root/install-erpnext-dev.sh restore-rehearsal-wizard
+/root/install-erpnext-dev.sh backup-report
+```
 
-- SSL mode status and compatibility guide
-- setup effort / step-count guide for local VM, public Let’s Encrypt, public Cloudflare, and existing installs
-- SSL provider wizard recommendation summary
-- first-run onboarding wizard
-- quickstart status hotfix for existing Cloudflare Origin CA installs
-- automatic public-vm session classification when a real production domain is saved
-- safer wizard handling when shell commands are pasted into menu prompts
-- public VM quickstart for domain -> install -> HTTPS -> security
-- local VM quickstart using `erp.test` defaults
-- domain prompt and saved config workflow
-- official one-command GitHub entry points
-- terminal UX cleanup for small default terminal windows
-- compact categorized `help` output
-- shorter main menu with production/security shortcuts
-- quieter production-domain workflow by suppressing local `.test` warning when `PRODUCTION_DOMAIN` is set
-- compact bottom result summaries for UFW and Fail2Ban action commands
-- ERPNext/Frappe v16 install
-- custom local `.test` site names
-- autostart service
-- runtime and doctor checks
-- `doctor --plain` safe copy/paste diagnostics
-- `doctor --json` structured diagnostics
-- `support-bundle` redacted troubleshooting archive
-- `app-compatibility` optional app branch compatibility matrix
-- compatibility warnings in `app-install-wizard`
-- `production-readiness` environment classification
-- `production-plan` planning checklist
-- `production-domain-plan` structured DNS/domain planning
-- root-run guided setup hotfix for fresh public/cloud VMs
-- `public-vm-readiness` public DNS/access/listener readiness
-- `production-ssl-plan` production SSL path planning
-- `production-firewall-plan` public VM firewall exposure planning
-- `configure-production-ssl` Nginx + Let's Encrypt HTTPS implementation
-- `production-ssl-status` production HTTPS status checks
-- `disable-production-ssl` managed production HTTPS rollback
-- Let’s Encrypt staging-to-production replacement detection
-- Cloudflare Origin CA SSL provider workflow
-- Cloudflare Origin CA PEM paste UX hotfix
-- Cloudflare-aware production SSL status
-- `firewall-hardening-status` post-HTTPS listener checks
-- Cloud firewall vs local listener wording and external validation guidance
-- SSL provider wizard
-- certificate issuer/status reporting for production SSL
-- root storage expansion
-- corrected post-expansion storage decision logic
-- guided setup flow
-- access verification
-- local SSL wizard
-- trusted mkcert replacement path
-- optional app checkpoint workflow
-- private installer logs and safer credential handling
+---
 
-## Next recommended work
+### Phase 3 — monitoring, alerting, and security hardening
 
-### Post-v1.0.0
+Goal: move from manual checks to reliable ongoing monitoring and practical security posture checks.
 
-- backup retention policy helper (complete in v1.1.2)
-- scheduled backup helper (complete in v1.1.0/v1.1.1)
-- off-VM backup automation
-- restore automation improvements after additional rehearsal testing
-- health monitoring and log review
+Planned work:
 
-## v1.1.3 Completed - Off-VM Backup Automation
+- **Monitoring and alerts**
+  - Continue local health checks.
+  - Add optional alert targets such as email/webhook later.
+  - Track failures for services, HTTPS, disk usage, stale backups, and off-VM backup failures.
 
-- rsync-over-SSH off-VM backup target configuration.
-- Off-VM backup dry run and manual sync.
-- Off-VM backup status and production checklist integration.
+- **Service recovery planning**
+  - Keep automatic recovery conservative.
+  - Prefer status, guidance, and manual confirmation before restarting critical services.
+  - Add optional controlled restart helpers where safe.
 
-Next recommended phase: v1.1.4 health monitoring and service watchdog.
+- **Security audit**
+  - Review SSH exposure, root login status, password auth, UFW, Fail2Ban, open ports, Nginx exposure, SSL status, unattended upgrades, and reboot requirements.
+  - Provide clear recommended fixes without applying destructive changes silently.
 
+- **Patch/reboot awareness**
+  - Detect pending security updates and required reboot.
+  - Provide maintenance-window guidance.
 
-## v1.1.5 Completed - Health Monitoring and Service Recovery Planning
+Candidate commands:
 
-- Added compact production health check.
-- Added optional systemd health check timer.
-- Added health timer status and disable commands.
-- Added manual service recovery plan.
-- Integrated health monitoring into Production Operations and Production Checklist.
+```bash
+/root/install-erpnext-dev.sh monitoring-status
+/root/install-erpnext-dev.sh configure-alerts
+/root/install-erpnext-dev.sh security-audit
+/root/install-erpnext-dev.sh patch-status
+/root/install-erpnext-dev.sh reboot-plan
+```
 
-Next recommended phase: v1.1.7 log review and diagnostics, or v1.2.0 object storage/rclone backup targets.
+---
+
+### Phase 4 — production lifecycle and updates
+
+Goal: make production maintenance safer and more repeatable.
+
+Planned work:
+
+- **Update preflight**
+  - Check disk space, backups, app branches, uncommitted customizations, service state, Python/Node/MariaDB compatibility, and snapshot recommendation before updates.
+
+- **Controlled update workflow**
+  - Guide through backup, snapshot reminder, app compatibility check, update, migrate, build, restart, and post-update validation.
+
+- **App and customization inventory**
+  - Report installed apps, branches, versions, custom apps, and potential compatibility risks.
+
+- **Production handover report**
+  - Generate a redacted operations report for client/internal handover.
+
+Candidate commands:
+
+```bash
+/root/install-erpnext-dev.sh update-preflight
+/root/install-erpnext-dev.sh safe-update-wizard
+/root/install-erpnext-dev.sh app-inventory
+/root/install-erpnext-dev.sh production-report
+```
+
+---
+
+### Phase 5 — multi-VM and migration support
+
+Goal: support more realistic operations where local, staging, restore, and production VMs coexist.
+
+Planned work:
+
+- Local-to-production planning.
+- Production-to-restore VM validation.
+- Staging VM update testing.
+- Configuration export/import for installer settings.
+- Multi-site awareness where appropriate.
+
+Candidate commands:
+
+```bash
+/root/install-erpnext-dev.sh config-export
+/root/install-erpnext-dev.sh config-import
+/root/install-erpnext-dev.sh staging-plan
+/root/install-erpnext-dev.sh migration-plan
+```
+
+---
+
+## Later track: Docker-based ERPNext/Frappe installation
+
+Docker support is planned, but it should be treated as a separate install and operations approach. It should not replace or complicate the current VM-based installer.
+
+Planned Docker research and implementation items:
+
+- Review the official ERPNext/Frappe Docker deployment path.
+- Define supported Docker scenarios:
+  - local Docker test environment,
+  - single-server production Docker deployment,
+  - reverse proxy and HTTPS with a real domain,
+  - backup and restore for Docker volumes and database containers,
+  - app installation and updates in a containerized stack.
+- Compare Docker vs VM-native stack:
+  - resource use,
+  - operational complexity,
+  - backup/restore approach,
+  - update strategy,
+  - troubleshooting experience,
+  - production reliability.
+- Build a separate Docker quickstart only after the VM production-operations workflow is mature enough.
+
+Possible future commands:
+
+```bash
+/root/install-erpnext-dev.sh docker-plan
+/root/install-erpnext-dev.sh docker-local-quickstart
+/root/install-erpnext-dev.sh docker-production-quickstart
+/root/install-erpnext-dev.sh docker-backup-plan
+```
+
+Target status: **later agenda item**.
+
+---
+
+## Near-term priority order
+
+Recommended next patches:
+
+1. **v1.1.13 — Log review and diagnostics**
+   - Add compact log summaries and safe support output.
+
+2. **v1.1.14 — VM state report and maintenance dashboard**
+   - Add one command to show the complete operational state of the VM.
+
+3. **v1.1.15 — Backup capacity and remote target preflight**
+   - Estimate backup growth and validate remote storage before relying on it.
+
+4. **v1.1.16 — Security audit and patch/reboot status**
+   - Make VM security and maintenance posture easier to review.
+
+5. **v1.2.0 — Restore rehearsal workflow**
+   - Mature backup confidence by testing restores on a disposable VM.
+
+6. **v1.2.x — Object storage backup target**
+   - Add rclone/object-storage support after rsync flow is stable.
+
+Docker work should start only after these VM production operations are stable.
+
+---
+
+## Definition of production-operations maturity
+
+The VM track can be considered mature when the installer can clearly answer these questions:
+
+- Is ERPNext running and reachable?
+- Is HTTPS healthy?
+- Are only intended ports exposed?
+- Are local backups complete and recent?
+- Are off-VM backups configured and recent?
+- Is there enough storage for the retention policy?
+- Has a restore rehearsal been completed recently?
+- Are services healthy?
+- Are logs clean enough or are there actionable warnings?
+- Are security basics in place?
+- Are updates pending?
+- Is a reboot required?
+- Is there a safe update plan?
+- Can a redacted support bundle/report be generated?
+
+Once these are reliably covered, the VM-based installer will be ready for broader production use and the Docker track can be started with a stable operations model already established.

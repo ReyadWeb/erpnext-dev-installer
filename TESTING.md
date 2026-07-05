@@ -979,3 +979,21 @@ bash -n install-erpnext-dev.sh
 
 Expected: no numbered `Back`, `Exit`, or `Quit` menu entries are printed from active menu definitions.
 
+
+
+## Roadmap documentation validation
+
+Use this after roadmap-only documentation patches:
+
+```bash
+grep -n "production VM maturity" ROADMAP.md
+grep -n "Docker-based ERPNext/Frappe installation" ROADMAP.md
+grep -n "Near-term priority order" ROADMAP.md
+grep -n "Definition of production-operations maturity" ROADMAP.md
+```
+
+Expected:
+
+- Docker is listed as a later, separate track.
+- VM management, monitoring, security, backup, restore, and update safety remain the near-term priority.
+- The roadmap does not mix changelog history into future planning.

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.12
+
+- Reworked `ROADMAP.md` into a clearer production-maturity plan.
+- Added a future Docker-based ERPNext/Frappe installation track as a separate later approach, not a replacement for the current VM installer.
+- Prioritized VM management, monitoring, backup, restore, update, and security hardening work before expanding into Docker deployment.
+- Organized upcoming work into staged phases: diagnostics, backup/restore maturity, monitoring/security, production lifecycle, fleet management, and later Docker support.
+
 ## v1.1.10
 
 - Added a README hero/banner image for a cleaner project landing section.
