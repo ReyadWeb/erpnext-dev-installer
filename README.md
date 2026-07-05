@@ -1,6 +1,8 @@
-# ERPNext Developer Installer v1.1.9
+# ERPNext Developer Installer v1.1.10
 
-A guided installer and operations toolkit for ERPNext/Frappe on Ubuntu VMs.
+![ERPNext Installer Banner](docs/assets/erp_installer_readme_banner.png)
+
+A guided installer and operations toolkit for ERPNext/Frappe on Ubuntu and Debian-family VMs.
 
 It supports two main setup paths:
 
@@ -10,6 +12,102 @@ It supports two main setup paths:
 The project also includes production operations helpers for SSL, firewall hardening, scheduled backups, backup retention, off-VM backup planning, health checks, restore preflight, optional app installation, diagnostics, and support bundles.
 
 > Version history is maintained in [`CHANGELOG.md`](CHANGELOG.md). This README intentionally focuses on installation, operations, and usage.
+
+---
+
+## Start here
+
+Use this section when you want to install quickly without reading the full README first.
+
+These commands assume a fresh **Debian-family Linux VM** such as Ubuntu or Debian, with `sudo` access.
+
+### Option A — open the guided installer menu
+
+Use this if you want the installer to guide you through the available setup paths:
+
+```bash
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=$(date +%s)" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh menu
+```
+
+### Option B — local VM development install
+
+Use this inside a fresh local VM for testing or development:
+
+```bash
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=$(date +%s)" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh local-dev-quickstart
+```
+
+Recommended local hostname:
+
+```text
+erp.test
+```
+
+### Option C — public VPS / cloud VM install
+
+Use this inside a fresh public VM when you have a real domain or subdomain ready:
+
+```bash
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=$(date +%s)" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh public-vm-quickstart
+```
+
+Recommended public hostname:
+
+```text
+erp.example.com
+```
+
+### Option D — existing install operations menu
+
+Use this on a VM where the installer was already used and you want production operations, backups, health checks, SSL, or diagnostics:
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=$(date +%s)" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo cp /tmp/install-erpnext-dev.sh /root/install-erpnext-dev.sh && sudo chmod +x /root/install-erpnext-dev.sh && sudo /root/install-erpnext-dev.sh production-ops-wizard
+```
+
+### Option E — optional apps wizard
+
+Use this only after the core ERPNext install is healthy:
+
+```bash
+sudo /root/install-erpnext-dev.sh app-install-wizard
+```
+
+After any quickstart finishes, use this stable path for follow-up commands:
+
+```bash
+/root/install-erpnext-dev.sh
+```
+
+Examples:
+
+```bash
+/root/install-erpnext-dev.sh doctor --plain
+/root/install-erpnext-dev.sh verify-access
+/root/install-erpnext-dev.sh credentials-info
+/root/install-erpnext-dev.sh production-ops-wizard
+```
+
+---
+
+## README menu
+
+- [Start here](#start-here)
+- [Architecture diagrams](#architecture-diagrams)
+- [Quick decision guide](#quick-decision-guide)
+- [Interactive menu navigation](#interactive-menu-navigation)
+- [One-command local VM test](#one-command-local-vm-test)
+- [One-command public VPS / cloud VM setup](#one-command-public-vps--cloud-vm-setup)
+- [Reusable script path](#reusable-script-path)
+- [Accessing ERPNext credentials](#accessing-erpnext-credentials)
+- [Production operations](#production-operations)
+- [Backups and restore safety](#backups-and-restore-safety)
+- [Optional Frappe apps](#optional-frappe-apps)
+- [SSL mode guide](#ssl-mode-guide)
+- [Security hardening](#security-hardening)
+- [Diagnostics and support](#diagnostics-and-support)
+- [Documentation files](#documentation-files)
+- [Production caution](#production-caution)
 
 ---
 
@@ -64,10 +162,10 @@ The main menu shows only `q) Quit` because there is no parent menu to return to.
 
 ## One-command local VM test
 
-Run this inside a fresh local Ubuntu VM:
+Run this inside a fresh local Ubuntu/Debian-family VM:
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=$(date +%s)" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh local-dev-quickstart
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=$(date +%s)" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh local-dev-quickstart
 ```
 
 The quickstart copies the installer to a reusable path inside the VM:
@@ -149,10 +247,10 @@ Recommended local VM test order:
 
 ## One-command public VPS / cloud VM setup
 
-Run this inside a fresh public Ubuntu VM:
+Run this inside a fresh public Ubuntu/Debian-family VM:
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=$(date +%s)" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh public-vm-quickstart
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=$(date +%s)" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh public-vm-quickstart
 ```
 
 Use a real subdomain, for example:

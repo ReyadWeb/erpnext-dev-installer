@@ -1,3 +1,42 @@
+# v1.1.10 validation
+
+Validate the README Start here section, banner asset, and script version.
+
+```bash
+chmod +x install-erpnext-dev.sh
+bash -n install-erpnext-dev.sh
+grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
+grep -n "Start here" README.md
+grep -n "README menu" README.md
+grep -n "erp_installer_readme_banner.png" README.md
+test -f docs/assets/erp_installer_readme_banner.png
+grep -n "apt-get update" README.md
+grep -n "local-dev-quickstart" README.md
+grep -n "public-vm-quickstart" README.md
+grep -n "production-ops-wizard" README.md
+```
+
+Expected:
+
+```text
+SCRIPT_VERSION="1.1.10"
+README contains the Start here section
+README contains a menu/table of contents
+README references docs/assets/erp_installer_readme_banner.png
+README includes Debian-family system update/bootstrap commands
+README includes one-command paths for menu, local VM, public VM, and operations
+```
+
+Quick smoke test for the guided menu command path:
+
+```bash
+printf 'q\n' | ./install-erpnext-dev.sh menu
+```
+
+Expected: the main menu opens and accepts `q`/`Q` to quit.
+
+---
+
 # v1.1.9 validation
 
 Validate the credential-info command and docs update:

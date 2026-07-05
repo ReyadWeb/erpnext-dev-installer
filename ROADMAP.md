@@ -1,7 +1,7 @@
 # Roadmap
 
 
-Current focus: make the installer interface more predictable by standardizing menu navigation as numeric actions plus `b/B` for Back and `q/Q` for Quit.
+Current focus: make the README easier to scan by adding a visual banner, a Start here section, and direct one-command install paths.
 
 Completed in v1.1.9:
 
@@ -9,6 +9,17 @@ Completed in v1.1.9:
 - Main menu quit-only footer.
 - Numbered Back/Exit entries removed from active menus.
 - Documentation and validation tests for the menu pattern.
+
+
+## v1.1.10 README start-here improvement
+
+Status: built.
+
+- Add a wide README banner image.
+- Add a dedicated Start here section near the top of the README.
+- Provide one-command paths for guided menu, local VM install, public VM install, and operations.
+- Include Debian-family package update/bootstrap commands for fresh VMs.
+- Add a README menu/table of contents for faster navigation.
 
 ## v1.1.9 menu navigation consistency
 

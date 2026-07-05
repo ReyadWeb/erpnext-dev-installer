@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.10
+
+- Added a README hero/banner image for a cleaner project landing section.
+- Added a dedicated `Start here` section for users who want to install quickly without reading the full README.
+- Added one-command start paths for the guided menu, local VM quickstart, public VPS/cloud VM quickstart, existing-install operations, and optional apps.
+- Added Debian-family system update/bootstrap commands using `apt-get update`, `apt-get upgrade`, `curl`, and `ca-certificates`.
+- Added a README menu/table of contents so users can jump directly to the needed section.
+- Updated quickstart documentation to make the stable `/root/install-erpnext-dev.sh` follow-up path clearer.
+
 ## v1.1.9
 
 - Standardized interactive menu navigation controls.
