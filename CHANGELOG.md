@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.7
+
+- Improved local SSL and mkcert guide wording.
+- Follow-up commands now use `/root/install-erpnext-dev.sh` in local SSL instructions so users are not blocked by scripts downloaded to `/tmp`.
+- Replaced distro-specific HOST wording with generic Linux HOST wording.
+- Improved mkcert Option 2 checklist with clearer HOST vs VM steps.
+- Replaced placeholder `USER@VM_IP` examples with a suggested VM SSH user when available.
+
 ## v1.1.6
 
 - Reorganized `README.md` into a usage-focused guide instead of a version-history document.

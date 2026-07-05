@@ -1,6 +1,6 @@
 # Roadmap
 
-## v1.1.6 documentation cleanup
+## v1.1.7 documentation cleanup
 
 - Keep README focused on setup, local VM testing, public VM setup, production operations, backup workflows, SSL modes, security hardening, and diagnostics.
 - Keep version history and release notes in CHANGELOG.md only.
@@ -148,4 +148,4 @@ Next recommended phase: v1.1.4 health monitoring and service watchdog.
 - Added manual service recovery plan.
 - Integrated health monitoring into Production Operations and Production Checklist.
 
-Next recommended phase: v1.1.6 log review and diagnostics, or v1.2.0 object storage/rclone backup targets.
+Next recommended phase: v1.1.7 log review and diagnostics, or v1.2.0 object storage/rclone backup targets.

@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v1.1.6
+# ERPNext Developer Installer v1.1.7
 
 A guided installer and operations toolkit for ERPNext/Frappe on Ubuntu VMs.
 
@@ -46,6 +46,14 @@ Run this inside a fresh local Ubuntu VM:
 curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/install-erpnext-dev.sh?cache_bust=$(date +%s)" -o /tmp/install-erpnext-dev.sh && chmod +x /tmp/install-erpnext-dev.sh && sudo /tmp/install-erpnext-dev.sh local-dev-quickstart
 ```
 
+The quickstart copies the installer to a reusable path inside the VM:
+
+```bash
+/root/install-erpnext-dev.sh
+```
+
+Use that path for follow-up commands, including SSL setup and optional app installation. Do not use `./install-erpnext-dev.sh` unless you are in the directory that contains the script.
+
 Recommended local site name:
 
 ```text
@@ -81,6 +89,14 @@ If local HTTPS is enabled, also test:
 ```bash
 curl -Ik https://erp.test
 ```
+
+For trusted local HTTPS with mkcert, run the guide inside the VM:
+
+```bash
+/root/install-erpnext-dev.sh mkcert-guide
+```
+
+The guide separates HOST commands from VM commands. In short: generate and trust the certificate on the Linux HOST, copy the cert/key into the VM with `scp`, then run `/root/install-erpnext-dev.sh configure-local-ssl` inside the VM.
 
 Expected local result:
 

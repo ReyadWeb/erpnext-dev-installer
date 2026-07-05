@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="1.1.6"
+SCRIPT_VERSION="1.1.7"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -203,6 +203,23 @@ installer_display_item() {
     item="${item/#.\/install-erpnext-dev.sh/${INSTALLER_CANONICAL_PATH}}"
   fi
   printf '%s' "$item"
+}
+
+installer_cmd() {
+  local subcmd="${1:-}"
+  if [[ -x "${INSTALLER_CANONICAL_PATH:-}" ]]; then
+    printf '%s' "${INSTALLER_CANONICAL_PATH}${subcmd:+ $subcmd}"
+  else
+    printf '%s' "./install-erpnext-dev.sh${subcmd:+ $subcmd}"
+  fi
+}
+
+suggested_vm_ssh_user() {
+  if [[ -n "${SUDO_USER:-}" && "${SUDO_USER:-}" != "root" ]]; then
+    printf '%s' "$SUDO_USER"
+  else
+    id -un 2>/dev/null || printf 'USER'
+  fi
 }
 
 menu_invalid_choice() {
@@ -846,9 +863,9 @@ show_environment_check() {
     status_line "ERPNext VM context" "OK" "this looks like the ERPNext VM"
     echo
     echo "VM-only actions are allowed here, including:"
-    echo "  ./install-erpnext-dev.sh ssl-status"
-    echo "  ./install-erpnext-dev.sh configure-local-ssl"
-    echo "  ./install-erpnext-dev.sh install-local-ssl-cert"
+    echo "  $(installer_cmd ssl-status)"
+    echo "  $(installer_cmd configure-local-ssl)"
+    echo "  $(installer_cmd install-local-ssl-cert)"
   else
     status_line "ERPNext VM context" "WARN" "not detected"
     echo
@@ -880,7 +897,7 @@ show_vm_only_guard_message() {
   warn "The command '${action}' must be run inside the ERPNext VM."
   echo
   echo "This script did not detect the ERPNext bench, service, helper, or credentials on this machine."
-  echo "To avoid changing the Linux Mint HOST by mistake, the command was blocked before sudo work."
+  echo "To avoid changing the Linux HOST by mistake, the command was blocked before sudo work."
   echo
   echo "Current machine:"
   echo "  Hostname: $(hostname 2>/dev/null || echo unknown)"
@@ -2278,7 +2295,7 @@ show_access_instructions() {
   echo
   echo "The friendly URL only works after your HOST machine maps ${SITE_NAME} to this VM IP."
   echo
-  echo "Run this on your Linux Mint HOST machine, not inside the VM:"
+  echo "Run this on your Linux HOST machine, not inside the VM:"
   echo
   echo "  sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts"
   echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
@@ -2995,13 +3012,14 @@ Planned local architecture:
       -> Socket.io on 127.0.0.1:9000
 
 Planned local SSL commands:
-  ./install-erpnext-dev.sh ssl-status
-  ./install-erpnext-dev.sh local-ssl-guide
-  ./install-erpnext-dev.sh local-ssl-wizard
-  ./install-erpnext-dev.sh mkcert-guide
-  ./install-erpnext-dev.sh verify-local-ssl
-  ./install-erpnext-dev.sh configure-local-ssl
-  ./install-erpnext-dev.sh disable-local-ssl
+  Use /root/install-erpnext-dev.sh after the one-command quickstart copies the installer there.
+  /root/install-erpnext-dev.sh ssl-status
+  /root/install-erpnext-dev.sh local-ssl-guide
+  /root/install-erpnext-dev.sh local-ssl-wizard
+  /root/install-erpnext-dev.sh mkcert-guide
+  /root/install-erpnext-dev.sh verify-local-ssl
+  /root/install-erpnext-dev.sh configure-local-ssl
+  /root/install-erpnext-dev.sh disable-local-ssl
 
 Recommended local certificate direction:
   - Use mkcert or a local CA workflow.
@@ -3173,7 +3191,7 @@ Production needs:
   - backup/restore testing
 
 Current local SSL remains separate:
-  ./install-erpnext-dev.sh configure-local-ssl
+  /root/install-erpnext-dev.sh configure-local-ssl
 ============================================================
 EOF_PROD_SSL
 }
@@ -5256,11 +5274,18 @@ ssl_nginx_enabled_path() {
 }
 
 show_local_ssl_guide() {
-  local vm_ip cert_path key_path escaped_site
+  local vm_ip cert_path key_path escaped_site vm_ssh_user cmd_self cmd_mkcert cmd_configure cmd_status cmd_verify cmd_disable
   vm_ip="$(get_vm_ip)"
   cert_path="$(ssl_cert_path)"
   key_path="$(ssl_key_path)"
-  escaped_site="${SITE_NAME//./\\.}"
+  escaped_site="${SITE_NAME//./\.}"
+  vm_ssh_user="$(suggested_vm_ssh_user)"
+  cmd_self="${INSTALLER_CANONICAL_PATH} create-self-signed-local-cert"
+  cmd_mkcert="${INSTALLER_CANONICAL_PATH} mkcert-guide"
+  cmd_configure="${INSTALLER_CANONICAL_PATH} configure-local-ssl"
+  cmd_status="${INSTALLER_CANONICAL_PATH} ssl-status"
+  cmd_verify="${INSTALLER_CANONICAL_PATH} verify-local-ssl"
+  cmd_disable="${INSTALLER_CANONICAL_PATH} disable-local-ssl"
 
   cat <<EOF_LOCAL_SSL
 
@@ -5282,44 +5307,53 @@ Direct Bench access remains available:
   http://${SITE_NAME}:8000
   http://${vm_ip}:8000
 
+Reusable installer path inside the VM:
+  ${INSTALLER_CANONICAL_PATH}
+
 Expected certificate paths inside the VM:
   Certificate: ${cert_path}
   Private key: ${key_path}
 
 Option 1: Quick self-signed test certificate
-  This is the fastest way to prove the reverse proxy works.
-  Browsers will show a certificate warning. That is expected.
+  Fastest way to confirm the reverse proxy works.
+  Browser warnings are expected because the cert is not trusted by the host browser.
 
-  ./install-erpnext-dev.sh create-self-signed-local-cert
-  ./install-erpnext-dev.sh configure-local-ssl
-  ./install-erpnext-dev.sh ssl-status
+  Inside the VM, run:
+    ${cmd_self}
+    ${cmd_configure}
+    ${cmd_status}
 
-  Test from the HOST:
+  From the HOST, test:
     curl -kI https://${SITE_NAME}
 
 Option 2: Trusted local certificate with mkcert
-  This is the better browser experience because the host browser trusts the certificate.
-  For the full checklist, run:
-    ./install-erpnext-dev.sh mkcert-guide
+  Best browser experience for local testing.
 
-  Summary on your Linux Mint/Ubuntu HOST:
+  Follow this checklist:
+    1) On the HOST, install mkcert and trust the local CA.
+    2) On the HOST, generate ${SITE_NAME}.crt and ${SITE_NAME}.key.
+    3) On the HOST, copy both files into this VM.
+    4) Inside the VM, install the files and enable local HTTPS.
+    5) On the HOST, confirm /etc/hosts and test HTTPS.
+
+  Full checklist:
+    ${cmd_mkcert}
+
+  HOST commands:
     mkcert -install
     mkcert -cert-file ${SITE_NAME}.crt -key-file ${SITE_NAME}.key ${SITE_NAME} ${vm_ip} localhost 127.0.0.1
+    scp ${SITE_NAME}.crt ${SITE_NAME}.key ${vm_ssh_user}@${vm_ip}:/tmp/
 
-  Copy the generated certificate and key into the VM:
-    scp ${SITE_NAME}.crt ${SITE_NAME}.key USER@${vm_ip}:/tmp/
-
-  Inside the VM, install the certificate files:
+  VM commands:
     sudo mkdir -p ${SSL_CERT_DIR}
     sudo cp /tmp/${SITE_NAME}.crt ${cert_path}
     sudo cp /tmp/${SITE_NAME}.key ${key_path}
     sudo chown root:root ${cert_path} ${key_path}
     sudo chmod 644 ${cert_path}
     sudo chmod 600 ${key_path}
-
-  Then configure HTTPS:
-    ./install-erpnext-dev.sh configure-local-ssl
-    ./install-erpnext-dev.sh ssl-status
+    ${cmd_configure}
+    ${cmd_status}
+    ${cmd_verify}
 
 Host /etc/hosts still needs to map ${SITE_NAME} to this VM IP:
   sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts
@@ -5337,19 +5371,25 @@ Expected behavior after local SSL is configured:
   http://${SITE_NAME}:8000  -> direct Bench fallback still works
 
 Rollback:
-  ./install-erpnext-dev.sh disable-local-ssl
-  ./install-erpnext-dev.sh ssl-rollback-guide
+  ${cmd_disable}
+  ${INSTALLER_CANONICAL_PATH} ssl-rollback-guide
 
 ============================================================
 EOF_LOCAL_SSL
 }
 
 show_mkcert_local_ssl_guide() {
-  local vm_ip cert_path key_path escaped_site
+  local vm_ip cert_path key_path escaped_site vm_ssh_user cmd_install cmd_configure cmd_verify cmd_disable cmd_env
   vm_ip="$(get_vm_ip)"
   cert_path="$(ssl_cert_path)"
   key_path="$(ssl_key_path)"
-  escaped_site="${SITE_NAME//./\\.}"
+  escaped_site="${SITE_NAME//./\.}"
+  vm_ssh_user="$(suggested_vm_ssh_user)"
+  cmd_install="${INSTALLER_CANONICAL_PATH} install-local-ssl-cert"
+  cmd_configure="${INSTALLER_CANONICAL_PATH} configure-local-ssl"
+  cmd_verify="${INSTALLER_CANONICAL_PATH} verify-local-ssl"
+  cmd_disable="${INSTALLER_CANONICAL_PATH} disable-local-ssl"
+  cmd_env="${INSTALLER_CANONICAL_PATH} environment-check"
 
   cat <<EOF_MKCERT
 
@@ -5361,37 +5401,37 @@ Goal:
   Use https://${SITE_NAME} without browser warnings on the HOST machine.
 
 Important:
-  The browser trust must happen on the HOST machine where the browser runs,
-  not only inside the ERPNext VM.
+  - Run mkcert on the HOST where the browser runs.
+  - Run installer SSL commands inside the ERPNext VM.
+  - The reusable installer path inside the VM is: ${INSTALLER_CANONICAL_PATH}
+  - If unsure which machine you are on, run: ${cmd_env}
 
-Safety rule:
-  Run mkcert and curl browser tests on the HOST.
-  Run install-local-ssl-cert, configure-local-ssl, ssl-status, and verify-local-ssl inside the ERPNext VM.
-  If unsure, run: ./install-erpnext-dev.sh environment-check
+Checklist:
 
-1) On the Linux Mint/Ubuntu HOST, install mkcert:
+1) On the HOST, install mkcert dependencies:
 
   sudo apt update
   sudo apt install -y libnss3-tools
 
-  # Install mkcert from your distro package manager if available, or from the
-  # official mkcert release package for your OS.
+  Install mkcert from your OS package manager or the official mkcert release package.
 
-2) On the HOST, create and trust the local CA:
+2) On the HOST, trust the local CA:
 
   mkcert -install
 
-3) On the HOST, generate a certificate for this VM/site:
+3) On the HOST, generate the certificate and key:
 
   mkcert -cert-file ${SITE_NAME}.crt -key-file ${SITE_NAME}.key ${SITE_NAME} ${vm_ip} localhost 127.0.0.1
 
-4) Copy the cert/key from HOST to VM:
+4) On the HOST, copy the cert/key into the VM:
 
-  scp ${SITE_NAME}.crt ${SITE_NAME}.key USER@${vm_ip}:/tmp/
+  scp ${SITE_NAME}.crt ${SITE_NAME}.key ${vm_ssh_user}@${vm_ip}:/tmp/
+
+  If your VM uses a different SSH user, replace '${vm_ssh_user}' with that user.
 
 5) Inside the VM, install the cert/key safely:
 
-  ./install-erpnext-dev.sh install-local-ssl-cert
+  ${cmd_install}
 
   This copies from:
     /tmp/${SITE_NAME}.crt
@@ -5405,8 +5445,8 @@ Safety rule:
 
 6) Inside the VM, enable/reload the HTTPS reverse proxy:
 
-  ./install-erpnext-dev.sh configure-local-ssl
-  ./install-erpnext-dev.sh verify-local-ssl
+  ${cmd_configure}
+  ${cmd_verify}
 
 7) On the HOST, confirm DNS/hosts and HTTPS:
 
@@ -5422,688 +5462,11 @@ Expected:
   http://${SITE_NAME}:8000  -> direct Bench fallback still works
 
 Rollback:
-  ./install-erpnext-dev.sh disable-local-ssl
-  ./install-erpnext-dev.sh ssl-rollback-guide
+  ${cmd_disable}
+  ${INSTALLER_CANONICAL_PATH} ssl-rollback-guide
 
 ============================================================
 EOF_MKCERT
-}
-
-
-show_browser_trust_check_guide() {
-  local vm_ip escaped_site
-  vm_ip="$(get_vm_ip)"
-  escaped_site="${SITE_NAME//./\\.}"
-
-  cat <<EOF_BROWSER_TRUST
-
-============================================================
-Browser Trust / Trusted Certificate Check
-============================================================
-
-Purpose:
-  Confirm whether https://${SITE_NAME} is only working with curl -k
-  or is trusted by the HOST browser/curl normally.
-
-Run these on the HOST machine, not inside the VM:
-
-1) Confirm hostname resolution:
-  getent hosts ${SITE_NAME}
-
-2) If needed, update /etc/hosts:
-  sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts
-  echo "${vm_ip} ${SITE_NAME}" | sudo tee -a /etc/hosts
-
-3) Test HTTPS without bypassing certificate validation:
-  curl -I https://${SITE_NAME}
-
-Expected for trusted mkcert/local CA:
-  HTTP/2 200
-
-Expected for self-signed certificate:
-  curl: (60) SSL certificate problem
-
-4) Test HTTPS with validation bypass, for self-signed testing only:
-  curl -kI https://${SITE_NAME}
-
-5) Browser test:
-  Open https://${SITE_NAME}
-
-If the browser warns about the certificate:
-  - The reverse proxy may still be working.
-  - The certificate is not trusted by the HOST browser yet.
-  - Use: ./install-erpnext-dev.sh mkcert-guide
-
-Important:
-  Certificate trust must be installed on the HOST machine where the browser runs.
-  Trusting a CA inside the VM alone does not make the host browser trust it.
-
-============================================================
-EOF_BROWSER_TRUST
-}
-
-install_local_ssl_cert() {
-  require_erpnext_vm_context "install-local-ssl-cert" || return 1
-  require_sudo
-
-  local src_cert src_key cert_path key_path stamp
-  src_cert="${LOCAL_SSL_CERT_SOURCE:-/tmp/${SITE_NAME}.crt}"
-  src_key="${LOCAL_SSL_KEY_SOURCE:-/tmp/${SITE_NAME}.key}"
-  cert_path="$(ssl_cert_path)"
-  key_path="$(ssl_key_path)"
-
-  echo
-  echo "============================================================"
-  echo "Install / Replace Local SSL Certificate"
-  echo "============================================================"
-  echo "Source certificate: ${src_cert}"
-  echo "Source private key: ${src_key}"
-  echo "Target certificate: ${cert_path}"
-  echo "Target private key: ${key_path}"
-  echo
-
-  if [[ ! -f "$src_cert" || ! -f "$src_key" ]]; then
-    warn "Source certificate or key was not found."
-    echo
-    echo "Default expected source files inside the VM:"
-    echo "  /tmp/${SITE_NAME}.crt"
-    echo "  /tmp/${SITE_NAME}.key"
-    echo
-    echo "Generate trusted local certificates on the HOST with mkcert, then copy them to the VM."
-    echo "Existing VM cert/key files will be backed up automatically when the files are installed."
-    show_local_ssl_wizard_host_mkcert_steps
-    echo
-    echo "You can override the VM source paths like this:"
-    echo "  LOCAL_SSL_CERT_SOURCE=/path/to/${SITE_NAME}.crt LOCAL_SSL_KEY_SOURCE=/path/to/${SITE_NAME}.key ./install-erpnext-dev.sh install-local-ssl-cert"
-    echo
-    echo "For the full workflow, run: ./install-erpnext-dev.sh mkcert-guide"
-    echo "============================================================"
-    return 1
-  fi
-
-  $SUDO mkdir -p "$SSL_CERT_DIR"
-
-  stamp="$(date +%Y%m%d_%H%M%S)"
-  if [[ -f "$cert_path" ]]; then
-    warn "Existing certificate found. Backing up to ${cert_path}.bak.${stamp}"
-    $SUDO cp "$cert_path" "${cert_path}.bak.${stamp}"
-  fi
-  if [[ -f "$key_path" ]]; then
-    warn "Existing key found. Backing up to ${key_path}.bak.${stamp}"
-    $SUDO cp "$key_path" "${key_path}.bak.${stamp}"
-  fi
-
-  $SUDO install -o root -g root -m 644 "$src_cert" "$cert_path"
-  $SUDO install -o root -g root -m 600 "$src_key" "$key_path"
-
-  ok "Certificate installed with safe permissions"
-
-  if command -v nginx >/dev/null 2>&1 && [[ -L "$(ssl_nginx_enabled_path)" || -f "$(ssl_nginx_enabled_path)" ]]; then
-    log "Testing and reloading Nginx with the new certificate"
-    if $SUDO nginx -t; then
-      $SUDO systemctl reload nginx || true
-      ok "Nginx reloaded"
-    else
-      warn "Nginx config test failed. The certificate was copied, but Nginx was not reloaded."
-      warn "Check manually: sudo nginx -t"
-    fi
-  else
-    echo
-    echo "Next step:"
-    echo "  ./install-erpnext-dev.sh configure-local-ssl"
-  fi
-
-  echo
-  echo "Verify:"
-  echo "  ./install-erpnext-dev.sh ssl-status"
-  echo "  ./install-erpnext-dev.sh verify-local-ssl"
-  echo "============================================================"
-}
-
-verify_ssl_rollback() {
-  require_erpnext_vm_context "verify-ssl-rollback" || return 1
-
-  local enabled_path available_path cert_path key_path bench_head https_head http_head
-  enabled_path="$(ssl_nginx_enabled_path)"
-  available_path="$(ssl_nginx_available_path)"
-  cert_path="$(ssl_cert_path)"
-  key_path="$(ssl_key_path)"
-
-  echo
-  echo "============================================================"
-  echo "Verify Local SSL Rollback / Disable State"
-  echo "============================================================"
-
-  if [[ -L "$enabled_path" || -f "$enabled_path" ]]; then
-    status_line "SSL site enabled" "WARN" "$enabled_path is still enabled"
-  else
-    status_line "SSL site enabled" "OK" "disabled"
-  fi
-
-  [[ -f "$available_path" ]] && status_line "Saved SSL config" "INFO" "$available_path kept for reuse" || status_line "Saved SSL config" "INFO" "not present"
-  [[ -f "$cert_path" ]] && status_line "SSL certificate" "INFO" "$cert_path kept for reuse" || status_line "SSL certificate" "INFO" "not present"
-  [[ -f "$key_path" ]] && status_line "SSL private key" "INFO" "$key_path kept for reuse" || status_line "SSL private key" "INFO" "not present"
-
-  if port_listens 443; then
-    status_line "Port 443" "INFO" "listening; another/default Nginx site may still be active"
-  else
-    status_line "Port 443" "OK" "not listening"
-  fi
-
-  if port_listens 8000; then
-    status_line "Direct Bench fallback" "OK" "127.0.0.1:8000 listening"
-  else
-    status_line "Direct Bench fallback" "WARN" "127.0.0.1:8000 not listening"
-  fi
-
-  echo
-  echo "Local response checks from inside the VM:"
-  http_head="$(curl_head_status "http://${SITE_NAME}/" "$SITE_NAME" 80 "127.0.0.1" || true)"
-  https_head="$(curl_head_status "https://${SITE_NAME}/" "$SITE_NAME" 443 "127.0.0.1" || true)"
-  bench_head="$(curl_head_status "http://127.0.0.1:8000/" "" "" "" || true)"
-  echo "  http://${SITE_NAME}       -> ${http_head:-no response}"
-  echo "  https://${SITE_NAME}      -> ${https_head:-no response}"
-  echo "  http://127.0.0.1:8000    -> ${bench_head:-no response}"
-
-  echo
-  echo "Re-enable later with:"
-  echo "  ./install-erpnext-dev.sh configure-local-ssl"
-  echo "============================================================"
-}
-
-show_ssl_rollback_guide() {
-  local available_path enabled_path cert_path key_path
-  available_path="$(ssl_nginx_available_path)"
-  enabled_path="$(ssl_nginx_enabled_path)"
-  cert_path="$(ssl_cert_path)"
-  key_path="$(ssl_key_path)"
-
-  cat <<EOF_SSL_ROLLBACK
-
-============================================================
-Local SSL Rollback / Disable Guide
-============================================================
-
-Safe rollback command:
-  ./install-erpnext-dev.sh disable-local-ssl
-
-What it does:
-  - Removes the enabled Nginx site symlink:
-    ${enabled_path}
-  - Reloads Nginx if the configuration is valid
-  - Keeps the saved config and certificate files for later reuse
-
-What it does NOT change:
-  - ERPNext dev service
-  - Bench ports 8000/9000
-  - MariaDB / Redis
-  - Site data
-  - Certificate files
-
-Direct fallback should remain available:
-  http://${SITE_NAME}:8000
-
-Manual cleanup if you want to remove files later:
-  sudo rm -f ${enabled_path}
-  sudo rm -f ${available_path}
-  sudo rm -f ${cert_path} ${key_path}
-  sudo nginx -t && sudo systemctl reload nginx
-
-============================================================
-EOF_SSL_ROLLBACK
-}
-
-verify_local_ssl() {
-  require_erpnext_vm_context "verify-local-ssl" || return 1
-  echo
-  echo "============================================================"
-  echo "Verify Local SSL / HTTPS"
-  echo "============================================================"
-  show_ssl_status
-  echo
-  echo "Host-side verification commands:"
-  echo "  curl -I http://${SITE_NAME}"
-  echo "  curl -kI https://${SITE_NAME}     # self-signed test"
-  echo "  curl -I https://${SITE_NAME}      # trusted mkcert test"
-  echo "  curl -I http://${SITE_NAME}:8000"
-  echo "============================================================"
-}
-
-ssl_is_configured() {
-  local cert_path key_path enabled_path https_head
-  cert_path="$(ssl_cert_path)"
-  key_path="$(ssl_key_path)"
-  enabled_path="$(ssl_nginx_enabled_path)"
-
-  [[ -f "$cert_path" && -f "$key_path" ]] || return 1
-  [[ -L "$enabled_path" || -f "$enabled_path" ]] || return 1
-  port_listens 443 || return 1
-
-  https_head="$(curl_head_status "https://${SITE_NAME}/" "$SITE_NAME" 443 "127.0.0.1" || true)"
-  [[ "$https_head" == HTTP/* ]]
-}
-
-ssl_cert_is_self_signed() {
-  local cert_path subject issuer
-  cert_path="${1:-$(ssl_cert_path)}"
-
-  [[ -f "$cert_path" ]] || return 1
-  command -v openssl >/dev/null 2>&1 || return 1
-
-  subject="$(openssl x509 -in "$cert_path" -noout -subject 2>/dev/null | sed 's/^subject=//; s/^ *//')"
-  issuer="$(openssl x509 -in "$cert_path" -noout -issuer 2>/dev/null | sed 's/^issuer=//; s/^ *//')"
-
-  [[ -n "$subject" && "$subject" == "$issuer" ]]
-}
-
-
-show_local_ssl_wizard_host_mkcert_steps() {
-  local vm_ip escaped_site cert_path key_path
-  vm_ip="$(get_vm_ip)"
-  escaped_site="${SITE_NAME//./\\.}"
-  cert_path="$(ssl_cert_path)"
-  key_path="$(ssl_key_path)"
-
-  echo
-  echo "Run these on the HOST machine:"
-  echo "  sudo apt update && sudo apt install -y libnss3-tools mkcert"
-  echo "  mkcert -install"
-  echo "  mkcert -cert-file ${SITE_NAME}.crt -key-file ${SITE_NAME}.key ${SITE_NAME} ${vm_ip} localhost 127.0.0.1"
-  echo "  scp ${SITE_NAME}.crt ${SITE_NAME}.key USER@${vm_ip}:/tmp/"
-  echo
-  echo "Then run inside this VM:"
-  echo "  ./install-erpnext-dev.sh local-ssl-wizard"
-  echo "  # choose the mkcert replace/install option"
-  echo
-  echo "Replacement safety:"
-  echo "  Existing VM cert/key files are backed up before replacement."
-  echo "  Browser trust still belongs on the HOST where mkcert -install was run."
-  echo
-  echo "Target VM paths:"
-  echo "  ${cert_path}"
-  echo "  ${key_path}"
-  echo
-  echo "HOST /etc/hosts must also contain:"
-  echo "  sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts"
-  echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
-}
-
-show_local_ssl_wizard_host_tests() {
-  local vm_ip escaped_site
-  vm_ip="$(get_vm_ip)"
-  escaped_site="${SITE_NAME//./\\.}"
-
-  echo
-  echo "HOST checks:"
-  echo "  sudo sed -i '/[[:space:]]${escaped_site}\$/d' /etc/hosts"
-  echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
-  echo "  curl -I http://${SITE_NAME}"
-  echo "  curl -kI https://${SITE_NAME}     # self-signed test"
-  echo "  curl -I https://${SITE_NAME}      # trusted mkcert test"
-  echo "  curl -I http://${SITE_NAME}:8000"
-}
-
-run_local_ssl_wizard() {
-  require_erpnext_vm_context "local-ssl-wizard" || return 1
-  require_sudo
-
-  local vm_ip direct_head friendly_head choice reply src_cert src_key cert_path cert_mode
-  vm_ip="$(get_vm_ip)"
-  src_cert="/tmp/${SITE_NAME}.crt"
-  src_key="/tmp/${SITE_NAME}.key"
-  cert_path="$(ssl_cert_path)"
-  cert_mode="not installed"
-
-  echo
-  echo "============================================================"
-  echo "Local SSL Wizard"
-  echo "============================================================"
-  echo "Goal: https://${SITE_NAME}"
-  echo "This runs inside the ERPNext VM. Browser trust is configured on the HOST."
-  echo "============================================================"
-
-  if ! port_listens 8000; then
-    status_line "Bench web" "WARN" "127.0.0.1:8000 not listening"
-    if [[ -t 0 && "$ASSUME_YES" -ne 1 ]]; then
-      read -r -p "Start ERPNext service now? [Y/n]: " reply
-      reply="${reply:-Y}"
-      if [[ "$reply" =~ ^[Yy]$ ]]; then
-        start_erpnext_service || return 1
-      else
-        warn "Start ERPNext first, then rerun local-ssl-wizard."
-        echo "============================================================"
-        return 1
-      fi
-    else
-      start_erpnext_service || return 1
-    fi
-  fi
-
-  direct_head="$(curl_head_status "http://127.0.0.1:8000/" "" "" "" || true)"
-  friendly_head="$(curl_head_status "http://${SITE_NAME}:8000/" "$SITE_NAME" 8000 "127.0.0.1" || true)"
-
-  [[ "$direct_head" == HTTP/* ]] && status_line "Direct Bench" "OK" "$direct_head" || status_line "Direct Bench" "WARN" "no response"
-  [[ "$friendly_head" == HTTP/* ]] && status_line "Site host header" "OK" "$friendly_head" || status_line "Site host header" "WARN" "no response"
-
-  if [[ "$direct_head" != HTTP/* ]]; then
-    warn "ERPNext direct HTTP must work before SSL is configured."
-    echo "Run: ./install-erpnext-dev.sh verify-access"
-    echo "============================================================"
-    return 1
-  fi
-
-  if [[ -f "$cert_path" ]]; then
-    if ssl_cert_is_self_signed "$cert_path"; then
-      cert_mode="self-signed/local test certificate"
-    else
-      cert_mode="existing certificate, not self-signed"
-    fi
-  fi
-
-  if ssl_is_configured; then
-    status_line "Local HTTPS" "OK" "already configured"
-    status_line "Certificate mode" "INFO" "$cert_mode"
-    echo
-    echo "Choose SSL action:"
-    echo "  1) Keep current SSL and show HOST checks"
-    echo "  2) Replace/install trusted mkcert certificate from HOST files in /tmp"
-    echo "  3) Regenerate quick self-signed certificate"
-    echo "  4) Show SSL status only"
-    echo
-
-    if [[ "$ASSUME_YES" -eq 1 ]]; then
-      choice="1"
-    else
-      read -r -p "Choose [1-4]: " choice
-      choice="${choice:-1}"
-    fi
-
-    case "$choice" in
-      1)
-        show_local_ssl_wizard_host_tests
-        ;;
-      2)
-        if [[ -f "$src_cert" && -f "$src_key" ]]; then
-          status_line "mkcert files" "OK" "found in /tmp"
-          install_local_ssl_cert
-          configure_local_ssl
-          verify_local_ssl
-          show_local_ssl_wizard_host_tests
-        else
-          status_line "mkcert files" "INFO" "not found in /tmp"
-          warn "No certificate was replaced. Generate/copy mkcert files first, then rerun this wizard."
-          show_local_ssl_wizard_host_mkcert_steps
-        fi
-        ;;
-      3)
-        create_self_signed_local_cert
-        configure_local_ssl
-        verify_local_ssl
-        show_local_ssl_wizard_host_tests
-        echo
-        warn "Self-signed SSL works for testing, but browsers will show a warning."
-        ;;
-      4)
-        show_ssl_status
-        ;;
-      *)
-        warn "Invalid choice. No changes made."
-        ;;
-    esac
-
-    echo "============================================================"
-    return 0
-  fi
-
-  echo
-  echo "Choose SSL mode:"
-  echo "  1) Quick self-signed certificate"
-  echo "  2) Trusted mkcert certificate from HOST"
-  echo "  3) Show status only"
-  echo
-
-  if [[ "$ASSUME_YES" -eq 1 ]]; then
-    choice="1"
-  else
-    read -r -p "Choose [1-3]: " choice
-    choice="${choice:-1}"
-  fi
-
-  case "$choice" in
-    1)
-      create_self_signed_local_cert
-      configure_local_ssl
-      verify_local_ssl
-      show_local_ssl_wizard_host_tests
-      echo
-      warn "Self-signed SSL works for testing, but browsers will show a warning."
-      echo "For trusted browser SSL, run: ./install-erpnext-dev.sh local-ssl-wizard and choose mkcert."
-      ;;
-    2)
-      if [[ -f "$src_cert" && -f "$src_key" ]]; then
-        status_line "mkcert files" "OK" "found in /tmp"
-        install_local_ssl_cert
-        configure_local_ssl
-        verify_local_ssl
-        show_local_ssl_wizard_host_tests
-      else
-        status_line "mkcert files" "INFO" "not found in /tmp"
-        show_local_ssl_wizard_host_mkcert_steps
-      fi
-      ;;
-    3)
-      show_ssl_status
-      ;;
-    *)
-      warn "Invalid choice. No changes made."
-      ;;
-  esac
-
-  echo "============================================================"
-}
-
-ssl_file_permissions() {
-  local file_path="$1"
-  if [[ -e "$file_path" ]]; then
-    stat -c '%U:%G %a' "$file_path" 2>/dev/null || echo "exists"
-  else
-    echo "missing"
-  fi
-}
-
-ssl_cert_summary() {
-  local cert_path="$1"
-  if [[ -f "$cert_path" ]] && command -v openssl >/dev/null 2>&1; then
-    local subject issuer dates san enddate end_epoch now_epoch days_left cert_type
-    subject="$(openssl x509 -in "$cert_path" -noout -subject 2>/dev/null | sed 's/^subject=//')"
-    issuer="$(openssl x509 -in "$cert_path" -noout -issuer 2>/dev/null | sed 's/^issuer=//')"
-    dates="$(openssl x509 -in "$cert_path" -noout -dates 2>/dev/null | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
-    san="$(openssl x509 -in "$cert_path" -noout -ext subjectAltName 2>/dev/null | tail -n +2 | tr -d '\n' | sed 's/^[[:space:]]*//')"
-    enddate="$(openssl x509 -in "$cert_path" -noout -enddate 2>/dev/null | sed 's/^notAfter=//')"
-    [[ -n "$subject" ]] && echo "  Subject: ${subject}"
-    [[ -n "$issuer" ]] && echo "  Issuer:  ${issuer}"
-    [[ -n "$dates" ]] && echo "  Dates:   ${dates}"
-    [[ -n "$san" ]] && echo "  SAN:     ${san}"
-
-    if [[ -n "$subject" && -n "$issuer" && "$subject" == "$issuer" ]]; then
-      cert_type="self-signed"
-    else
-      cert_type="CA-signed or locally trusted CA"
-    fi
-    echo "  Type:    ${cert_type}"
-
-    if [[ -n "$enddate" ]] && command -v date >/dev/null 2>&1; then
-      end_epoch="$(date -d "$enddate" +%s 2>/dev/null || true)"
-      now_epoch="$(date +%s 2>/dev/null || true)"
-      if [[ -n "$end_epoch" && -n "$now_epoch" ]]; then
-        days_left=$(( (end_epoch - now_epoch) / 86400 ))
-        if (( days_left < 0 )); then
-          echo "  Expiry:  EXPIRED ($days_left days)"
-        elif (( days_left <= 30 )); then
-          echo "  Expiry:  WARNING (${days_left} days left)"
-        else
-          echo "  Expiry:  OK (${days_left} days left)"
-        fi
-      fi
-    fi
-  fi
-}
-
-ssl_key_permission_status() {
-  local key_path="$1"
-  local mode owner group
-  [[ -f "$key_path" ]] || return 0
-  mode="$(stat -c '%a' "$key_path" 2>/dev/null || true)"
-  owner="$(stat -c '%U' "$key_path" 2>/dev/null || true)"
-  group="$(stat -c '%G' "$key_path" 2>/dev/null || true)"
-  if [[ "$owner" == "root" && "$group" == "root" && "$mode" == "600" ]]; then
-    status_line "SSL key permissions" "OK" "root:root 600"
-  else
-    status_line "SSL key permissions" "WARN" "current ${owner}:${group} ${mode}; recommended root:root 600"
-  fi
-}
-
-curl_head_status() {
-  local url="$1"
-  local resolve_host="$2"
-  local resolve_port="$3"
-  local resolve_ip="$4"
-
-  if ! command -v curl >/dev/null 2>&1; then
-    echo "curl missing"
-    return 1
-  fi
-
-  if [[ -n "$resolve_host" && -n "$resolve_port" && -n "$resolve_ip" ]]; then
-    curl -kIsS --max-time 5 --resolve "${resolve_host}:${resolve_port}:${resolve_ip}" "$url" 2>/dev/null | awk 'NR==1 {print; exit}'
-  else
-    curl -kIsS --max-time 5 "$url" 2>/dev/null | awk 'NR==1 {print; exit}'
-  fi
-}
-
-show_ssl_status() {
-  require_erpnext_vm_context "ssl-status" || return 1
-  local cert_path key_path available_path enabled_path vm_ip nginx_state
-  local http_head https_head bench_head cert_perms key_perms
-  cert_path="$(ssl_cert_path)"
-  key_path="$(ssl_key_path)"
-  available_path="$(ssl_nginx_available_path)"
-  enabled_path="$(ssl_nginx_enabled_path)"
-  vm_ip="$(get_vm_ip)"
-
-  if command -v nginx >/dev/null 2>&1; then
-    nginx_state="installed: $(nginx -v 2>&1 | sed 's/^nginx version: //')"
-  else
-    nginx_state="not installed"
-  fi
-
-  echo
-  echo "============================================================"
-  echo "Local SSL / HTTPS Status"
-  echo "============================================================"
-  status_line "Nginx" "INFO" "$nginx_state"
-
-  if systemctl list-unit-files nginx.service >/dev/null 2>&1; then
-    if systemctl is-active --quiet nginx 2>/dev/null; then
-      status_line "Nginx service" "OK" "running"
-    else
-      status_line "Nginx service" "WARN" "not running"
-    fi
-  else
-    status_line "Nginx service" "INFO" "not available"
-  fi
-
-  if [[ -f "$available_path" ]]; then
-    status_line "Nginx SSL config" "OK" "$available_path"
-  else
-    status_line "Nginx SSL config" "WARN" "missing at $available_path"
-  fi
-
-  if [[ -L "$enabled_path" || -f "$enabled_path" ]]; then
-    status_line "Nginx SSL enabled" "OK" "$enabled_path"
-  else
-    status_line "Nginx SSL enabled" "WARN" "not enabled"
-  fi
-
-  cert_perms="$(ssl_file_permissions "$cert_path")"
-  key_perms="$(ssl_file_permissions "$key_path")"
-
-  if [[ -f "$cert_path" ]]; then
-    status_line "SSL certificate" "OK" "$cert_path (${cert_perms})"
-  else
-    status_line "SSL certificate" "WARN" "missing at $cert_path"
-  fi
-
-  if [[ -f "$key_path" ]]; then
-    status_line "SSL private key" "OK" "$key_path (${key_perms})"
-    ssl_key_permission_status "$key_path"
-  else
-    status_line "SSL private key" "WARN" "missing at $key_path"
-  fi
-
-  if [[ -f "$cert_path" ]]; then
-    if ssl_cert_is_self_signed "$cert_path"; then
-      status_line "Certificate trust" "WARN" "self-signed; browser warning is expected unless the HOST trusts this certificate/CA"
-    else
-      status_line "Certificate trust" "INFO" "not self-signed; if this is mkcert, trust must be installed on the HOST"
-    fi
-    echo
-    echo "Certificate details:"
-    ssl_cert_summary "$cert_path"
-  fi
-
-  if port_listens 80; then
-    status_line "HTTP reverse proxy" "OK" "port 80 listening"
-  else
-    status_line "HTTP reverse proxy" "INFO" "port 80 not listening"
-  fi
-
-  if port_listens 443; then
-    status_line "HTTPS reverse proxy" "OK" "port 443 listening"
-  else
-    status_line "HTTPS reverse proxy" "INFO" "port 443 not listening"
-  fi
-
-  if port_listens 8000; then
-    status_line "Bench web" "OK" "127.0.0.1:8000 listening"
-  else
-    status_line "Bench web" "WARN" "127.0.0.1:8000 not listening"
-  fi
-
-  if port_listens 9000; then
-    status_line "Socket.io" "OK" "127.0.0.1:9000 listening"
-  else
-    status_line "Socket.io" "WARN" "127.0.0.1:9000 not listening"
-  fi
-
-  echo
-  echo "Local HTTP tests from inside the VM:"
-  http_head="$(curl_head_status "http://${SITE_NAME}/" "$SITE_NAME" 80 "127.0.0.1" || true)"
-  https_head="$(curl_head_status "https://${SITE_NAME}/" "$SITE_NAME" 443 "127.0.0.1" || true)"
-  bench_head="$(curl_head_status "http://127.0.0.1:8000/" "" "" "" || true)"
-  echo "  http://${SITE_NAME}       -> ${http_head:-no response}"
-  echo "  https://${SITE_NAME}      -> ${https_head:-no response}"
-  echo "  http://127.0.0.1:8000    -> ${bench_head:-no response}"
-
-  echo
-  echo "Host test commands:"
-  echo "  curl -I http://${SITE_NAME}"
-  echo "  curl -kI https://${SITE_NAME}"
-  echo "  curl -I http://${SITE_NAME}:8000"
-  echo
-  echo "URLs:"
-  echo "  Direct Bench:     http://${vm_ip}:8000"
-  echo "  Friendly Bench:   http://${SITE_NAME}:8000"
-  echo "  Local HTTPS:      https://${SITE_NAME}"
-  echo
-
-  if [[ -f "$available_path" && ( -L "$enabled_path" || -f "$enabled_path" ) && -f "$cert_path" && -f "$key_path" ]] && port_listens 443; then
-    ok "Local HTTPS appears configured. For self-signed certs, browser warning is expected unless the CA is trusted."
-  else
-    warn "Local HTTPS is not fully configured yet. Run: ./install-erpnext-dev.sh local-ssl-guide"
-  fi
-
-  echo "============================================================"
 }
 
 create_self_signed_local_cert() {
@@ -6155,8 +5518,8 @@ create_self_signed_local_cert() {
   ok "Self-signed local certificate created"
   echo
   echo "Next steps:"
-  echo "  ./install-erpnext-dev.sh configure-local-ssl"
-  echo "  ./install-erpnext-dev.sh ssl-status"
+  echo "  $(installer_cmd configure-local-ssl)"
+  echo "  $(installer_cmd ssl-status)"
   echo
   echo "Host test:"
   echo "  curl -kI https://${SITE_NAME}"
@@ -6420,7 +5783,7 @@ Install examples inside each VM:
   SITE_NAME=school.test ./install-erpnext-dev.sh setup
   SITE_NAME=client-a.test ./install-erpnext-dev.sh setup
 
-Host /etc/hosts examples on your Linux Mint host:
+Host /etc/hosts examples on your Linux host:
 
   192.168.122.61 erp1.test
   192.168.122.62 erp2.test

@@ -859,3 +859,22 @@ journalctl -u erpnext-dev-health-check.service --no-pager -n 80
 ```
 
 Expected: health check returns a compact status table; timer status shows enabled/active after configuration; service recovery plan is guidance-only and does not restart services.
+
+
+## Local SSL guide validation
+
+After a local VM install, validate that follow-up commands use the reusable installer path:
+
+```bash
+/root/install-erpnext-dev.sh local-ssl-guide
+/root/install-erpnext-dev.sh mkcert-guide
+```
+
+Expected:
+
+```text
+Reusable installer path inside the VM: /root/install-erpnext-dev.sh
+HOST commands and VM commands are separated clearly
+No `USER@VM_IP` placeholder is shown for the scp example
+HOST wording is generic and does not mention a specific Linux distribution
+```
