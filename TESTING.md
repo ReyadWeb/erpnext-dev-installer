@@ -1192,8 +1192,8 @@ grep -n "curl_head_status" install-erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="1.1.17"
-ERPNext Developer Installer v1.1.17
+SCRIPT_VERSION="1.1.18"
+ERPNext Developer Installer v1.1.18
 curl_head_status function exists before verify_access uses it
 ```
 
@@ -1206,3 +1206,68 @@ sudo /root/install-erpnext-dev.sh doctor --plain
 ```
 
 Expected: `verify-access` should not print `curl_head_status: command not found`. HTTP checks should return OK/WARN/INFO status lines only.
+
+
+## v1.1.18 Validation - Expanded App Library and Two-Column Menus
+
+Package validation:
+
+```bash
+bash -n install-erpnext-dev.sh
+grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
+./install-erpnext-dev.sh version
+./install-erpnext-dev.sh help | grep -E "install-builder|install-lms|install-wiki|install-print-designer|install-drive|install-raven"
+```
+
+Expected:
+
+```text
+SCRIPT_VERSION="1.1.18"
+ERPNext Developer Installer v1.1.18
+All new app install commands appear in help output.
+```
+
+Menu validation:
+
+```bash
+printf 'q
+' | ./install-erpnext-dev.sh app-library
+```
+
+Expected: App Library prints in two columns and includes:
+
+```text
+Install Frappe Builder
+Install Frappe Learning / LMS
+Install Frappe Wiki
+Install Frappe Print Designer
+Install Frappe Drive
+Install Raven Team Chat
+```
+
+VM validation after updating `/root/install-erpnext-dev.sh`:
+
+```bash
+sudo /root/install-erpnext-dev.sh version
+sudo /root/install-erpnext-dev.sh app-library
+sudo /root/install-erpnext-dev.sh app-status
+sudo /root/install-erpnext-dev.sh app-compatibility
+sudo /root/install-erpnext-dev.sh doctor --plain
+```
+
+Expected:
+
+- `app-library` uses the compact two-column layout.
+- `app-status`, `app-compatibility`, and `doctor --plain` include the expanded curated app list.
+- Advanced apps such as Drive and Raven show compatibility warnings before install.
+
+Recommended manual app-install smoke test order:
+
+```bash
+sudo /root/install-erpnext-dev.sh install-payments
+sudo /root/install-erpnext-dev.sh app-status
+sudo /root/install-erpnext-dev.sh doctor --plain
+sudo /root/install-erpnext-dev.sh verify-access
+```
+
+Continue with only one additional optional app at a time after a VM snapshot or backup checkpoint.

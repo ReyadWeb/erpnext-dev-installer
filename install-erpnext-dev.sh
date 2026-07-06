@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="1.1.17"
+SCRIPT_VERSION="1.1.18"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -139,7 +139,7 @@ acquire_installer_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-custom-app|repair-app-registry)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-wiki|install-print-designer|install-drive|install-raven|install-custom-app|repair-app-registry)
       return 0
       ;;
     *)
@@ -197,6 +197,27 @@ menu_footer() {
 '
   fi
   echo
+}
+
+print_two_column_menu() {
+  # Print compact numbered menus for small terminal windows.
+  # Each argument should already be formatted as "N) Label".
+  local width="${MENU_COLUMN_WIDTH:-46}"
+  local items=("$@")
+  local total="${#items[@]}"
+  local half i left right
+
+  half=$(( (total + 1) / 2 ))
+
+  for ((i = 0; i < half; i++)); do
+    left="${items[$i]}"
+    right="${items[$((i + half))]:-}"
+    printf "%-${width}s" "$left"
+    if [[ -n "$right" ]]; then
+      printf "%s" "$right"
+    fi
+    printf "\n"
+  done
 }
 
 ui_note() {
@@ -6976,10 +6997,11 @@ doctor_collect() {
     doctor_add_check "Credentials file" "WARN" "missing"
   fi
 
-  local optional_item optional_app optional_label optional_detail
-  for optional_item in "crm:Frappe CRM" "hrms:Frappe HR / HRMS" "telephony:Frappe Telephony" "helpdesk:Frappe Helpdesk" "insights:Frappe Insights" "payments:Frappe Payments" "webshop:Frappe Webshop / E-Commerce"; do
-    optional_app="${optional_item%%:*}"
-    optional_label="${optional_item#*:}"
+  local optional_profile optional_app optional_label optional_detail
+  for optional_profile in $(app_profile_list); do
+    app_profile_defaults "$optional_profile" || continue
+    optional_app="$LIB_APP_NAME"
+    optional_label="$LIB_APP_DISPLAY"
     optional_detail="$(doctor_optional_app_detail "$DOCTOR_BENCH_DIR" "$optional_app")"
     DOCTOR_OPTIONAL_APPS+=("$optional_app")
     DOCTOR_OPTIONAL_LABELS+=("$optional_label")
@@ -7542,6 +7564,14 @@ run_full_status() {
 # App Library
 # ============================================================
 
+app_profile_list() {
+  echo "crm hrms payments webshop builder lms wiki print_designer drive raven insights telephony helpdesk"
+}
+
+app_profile_branch_overrides() {
+  echo "CRM_BRANCH, HRMS_BRANCH, PAYMENTS_BRANCH, WEBSHOP_BRANCH, BUILDER_BRANCH, LMS_BRANCH, WIKI_BRANCH, PRINT_DESIGNER_BRANCH, DRIVE_BRANCH, RAVEN_BRANCH, INSIGHTS_BRANCH, TELEPHONY_BRANCH, HELPDESK_BRANCH"
+}
+
 app_profile_defaults() {
   local profile="$1"
 
@@ -7608,6 +7638,54 @@ app_profile_defaults() {
       LIB_APP_REPO="https://github.com/frappe/webshop"
       LIB_APP_BRANCH="${WEBSHOP_BRANCH:-develop}"
       LIB_APP_NOTES="Open-source eCommerce storefront app for ERPNext-backed catalogs and orders. For Frappe/ERPNext v16, upstream guidance currently points to the develop branch."
+      ;;
+    builder|frappe-builder)
+      LIB_APP_KEY="builder"
+      LIB_APP_DISPLAY="Frappe Builder"
+      LIB_APP_NAME="builder"
+      LIB_APP_REPO="https://github.com/frappe/builder"
+      LIB_APP_BRANCH="${BUILDER_BRANCH:-}"
+      LIB_APP_NOTES="Low-code website builder for Frappe. Uses the repository default branch unless BUILDER_BRANCH is set."
+      ;;
+    lms|learning)
+      LIB_APP_KEY="lms"
+      LIB_APP_DISPLAY="Frappe Learning / LMS"
+      LIB_APP_NAME="lms"
+      LIB_APP_REPO="https://github.com/frappe/lms"
+      LIB_APP_BRANCH="${LMS_BRANCH:-}"
+      LIB_APP_NOTES="Learning management app for courses, lessons, batches, and knowledge sharing. Uses the repository default branch unless LMS_BRANCH is set."
+      ;;
+    wiki|frappe-wiki)
+      LIB_APP_KEY="wiki"
+      LIB_APP_DISPLAY="Frappe Wiki"
+      LIB_APP_NAME="wiki"
+      LIB_APP_REPO="https://github.com/frappe/wiki"
+      LIB_APP_BRANCH="${WIKI_BRANCH:-}"
+      LIB_APP_NOTES="Documentation and knowledge-base app for text-heavy content, revisions, and publishing workflows. Uses the repository default branch unless WIKI_BRANCH is set."
+      ;;
+    print_designer|print-designer|printdesigner)
+      LIB_APP_KEY="print_designer"
+      LIB_APP_DISPLAY="Frappe Print Designer"
+      LIB_APP_NAME="print_designer"
+      LIB_APP_REPO="https://github.com/frappe/print_designer"
+      LIB_APP_BRANCH="${PRINT_DESIGNER_BRANCH:-}"
+      LIB_APP_NOTES="Visual print-format designer for ERPNext/Frappe invoices, quotes, delivery notes, and other print formats. Uses the repository default branch unless PRINT_DESIGNER_BRANCH is set."
+      ;;
+    drive|frappe-drive)
+      LIB_APP_KEY="drive"
+      LIB_APP_DISPLAY="Frappe Drive"
+      LIB_APP_NAME="drive"
+      LIB_APP_REPO="https://github.com/frappe/drive"
+      LIB_APP_BRANCH="${DRIVE_BRANCH:-}"
+      LIB_APP_NOTES="File storage, sharing, and collaboration app. Treat as advanced for ERPNext stacks and test on a disposable VM snapshot first."
+      ;;
+    raven|chat)
+      LIB_APP_KEY="raven"
+      LIB_APP_DISPLAY="Raven Team Chat"
+      LIB_APP_NAME="raven"
+      LIB_APP_REPO="https://github.com/The-Commit-Company/raven"
+      LIB_APP_BRANCH="${RAVEN_BRANCH:-}"
+      LIB_APP_NOTES="Open-source team messaging app built on Frappe with ERPNext/FrappeHR integrations. Treat as advanced and test notifications/access paths carefully."
       ;;
     *)
       return 1
@@ -7792,7 +7870,7 @@ for token in raw.replace("\r", "\n").replace(",", "\n").split():
 items = [x for x in items if x in valid_set]
 
 ordered = []
-preferred = ("frappe", "erpnext", "crm", "hrms", "payments", "webshop", "telephony", "helpdesk", "insights")
+preferred = ("frappe", "erpnext", "crm", "hrms", "payments", "webshop", "builder", "lms", "wiki", "print_designer", "drive", "raven", "insights", "telephony", "helpdesk")
 
 # Keep core and curated apps in a predictable order for cleaner diagnostics.
 for name in preferred:
@@ -7892,19 +7970,10 @@ run_app_status() {
   echo "Bench: ${bench_dir}"
   echo
 
-  local app_items=(
-    "crm:Frappe CRM"
-    "hrms:Frappe HR / HRMS"
-    "telephony:Frappe Telephony"
-    "helpdesk:Frappe Helpdesk"
-    "insights:Frappe Insights"
-    "payments:Frappe Payments"
-    "webshop:Frappe Webshop / E-Commerce"
-  )
-
-  for item in "${app_items[@]}"; do
-    app="${item%%:*}"
-    label="${item#*:}"
+  for profile in $(app_profile_list); do
+    app_profile_defaults "$profile" || continue
+    app="$LIB_APP_NAME"
+    label="$LIB_APP_DISPLAY"
 
     if site_app_installed "$app"; then
       status_line "$label" "OK" "installed on ${SITE_NAME}"
@@ -8185,6 +8254,28 @@ assess_app_compatibility() {
         APP_COMPAT_DETAIL="Frappe Webshop target is ${branch_text}; verify upstream compatibility before use."
       fi
       ;;
+    builder|lms|wiki|print_designer)
+      if [[ -z "$branch" ]]; then
+        APP_COMPAT_STATUS="WARN"
+        APP_COMPAT_DETAIL="${display} uses the repository default branch, so compatibility can change as upstream moves."
+        APP_COMPAT_RECOMMENDATION="Use on a dev VM or set a branch override after confirming the correct branch for your Frappe/ERPNext version."
+      elif [[ -n "$target_major" ]]; then
+        APP_COMPAT_STATUS="OK"
+        APP_COMPAT_DETAIL="Target branch ${branch_text} is version-pinned and matches the detected core major version."
+      else
+        APP_COMPAT_STATUS="INFO"
+        APP_COMPAT_DETAIL="${display} target is ${branch_text}; verify upstream compatibility before important data."
+      fi
+      ;;
+    drive|raven)
+      APP_COMPAT_STATUS="WARN"
+      if [[ -z "$branch" ]]; then
+        APP_COMPAT_DETAIL="${display} is an advanced/collaboration app using the repository default branch. Compatibility and operational requirements may change."
+      else
+        APP_COMPAT_DETAIL="${display} is an advanced/collaboration app targeting ${branch_text}. Verify compatibility and operational requirements before production use."
+      fi
+      APP_COMPAT_RECOMMENDATION="Install only on a disposable VM snapshot first; validate login, permissions, background jobs, assets, and notifications if applicable."
+      ;;
     *)
       APP_COMPAT_STATUS="WARN"
       APP_COMPAT_DETAIL="Custom app compatibility cannot be verified by this installer."
@@ -8269,7 +8360,7 @@ show_app_compatibility_matrix() {
   echo "The install command still verifies remote branch availability before downloading."
   echo
 
-  for profile in crm hrms payments webshop insights telephony helpdesk; do
+  for profile in $(app_profile_list); do
     app_profile_defaults "$profile" || continue
     assess_app_compatibility "$bench_dir" "$LIB_APP_NAME" "$LIB_APP_DISPLAY" "$LIB_APP_BRANCH" "$LIB_APP_REPO" "false"
     app_state="$(app_install_state_detail "$bench_dir" "$LIB_APP_NAME")"
@@ -8278,7 +8369,7 @@ show_app_compatibility_matrix() {
 
   echo
   echo "Detailed check for one app is shown automatically before install."
-  echo "Branch overrides: CRM_BRANCH, HRMS_BRANCH, PAYMENTS_BRANCH, WEBSHOP_BRANCH, INSIGHTS_BRANCH, TELEPHONY_BRANCH, HELPDESK_BRANCH."
+  echo "Branch overrides: $(app_profile_branch_overrides)."
   echo "============================================================"
 }
 
@@ -8288,7 +8379,7 @@ print_app_compatibility_snapshot() {
 
   echo
   echo "Compatibility snapshot:"
-  for profile in crm hrms payments webshop insights telephony helpdesk; do
+  for profile in $(app_profile_list); do
     app_profile_defaults "$profile" || continue
     assess_app_compatibility "$bench_dir" "$LIB_APP_NAME" "$LIB_APP_DISPLAY" "$LIB_APP_BRANCH" "$LIB_APP_REPO" "false"
     summary="target=${APP_COMPAT_TARGET_BRANCH}; $(app_install_state_detail "$bench_dir" "$LIB_APP_NAME")"
@@ -8371,9 +8462,10 @@ show_app_install_guide() {
   echo "Recommended order:"
   echo "  1) Payments before Webshop if you plan to test online checkout"
   echo "  2) Webshop / E-Commerce after ERPNext items and prices are ready"
-  echo "  3) CRM, HRMS, or Insights if needed"
-  echo "  4) Telephony before Helpdesk, unless the wizard installs it"
-  echo "  5) Helpdesk after Telephony dependency is ready"
+  echo "  3) CRM, HRMS, Insights, Builder, LMS, Wiki, or Print Designer as needed"
+  echo "  4) Drive and Raven only on a disposable VM snapshot first"
+  echo "  5) Telephony before Helpdesk, unless the wizard installs it"
+  echo "  6) Helpdesk after Telephony dependency is ready"
   echo
   echo "Safety workflow:"
   echo "  - Install one optional app at a time."
@@ -8546,17 +8638,7 @@ run_app_install_wizard() {
     echo "============================================================"
     echo "Optional App Install Wizard"
     echo "============================================================"
-    echo "1) Show optional app status"
-    echo "2) Show optional app compatibility"
-    echo "3) Install Frappe CRM"
-    echo "4) Install Frappe HR / HRMS"
-    echo "5) Install Frappe Payments"
-    echo "6) Install Frappe Webshop / E-Commerce"
-    echo "7) Install Frappe Insights"
-    echo "8) Install Frappe Telephony"
-    echo "9) Install Frappe Helpdesk"
-    echo "10) Install custom app from Git URL"
-    echo "11) Rollback guide"
+    print_two_column_menu       "1) Show optional app status"       "2) Show optional app compatibility"       "3) Install Frappe CRM"       "4) Install Frappe HR / HRMS"       "5) Install Frappe Payments"       "6) Install Frappe Webshop / E-Commerce"       "7) Install Frappe Builder"       "8) Install Frappe Learning / LMS"       "9) Install Frappe Wiki"       "10) Install Frappe Print Designer"       "11) Install Frappe Drive"       "12) Install Raven Team Chat"       "13) Install Frappe Insights"       "14) Install Frappe Telephony"       "15) Install Frappe Helpdesk"       "16) Install custom app from Git URL"       "17) Rollback guide"
     echo
     echo "Install one app at a time. The wizard will offer a backup checkpoint first."
     menu_footer
@@ -8569,11 +8651,17 @@ run_app_install_wizard() {
       4) install_app_profile hrms; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
       5) install_app_profile payments; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
       6) install_app_profile webshop; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      7) install_app_profile insights; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      8) install_app_profile telephony; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      9) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      10) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      11) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      7) install_app_profile builder; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      8) install_app_profile lms; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      9) install_app_profile wiki; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      10) install_app_profile print_designer; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      11) install_app_profile drive; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      12) install_app_profile raven; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      13) install_app_profile insights; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      14) install_app_profile telephony; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      15) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      16) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      17) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *) warn "Invalid option" ;;
@@ -8726,20 +8814,7 @@ show_app_library_menu() {
     echo "============================================================"
     echo "App Library"
     echo "============================================================"
-    echo "1) Optional App Install Wizard"
-    echo "2) Show optional app status"
-    echo "3) Show optional app compatibility"
-    echo "4) Show installed apps"
-    echo "5) Optional app install guide"
-    echo "6) Rollback guide"
-    echo "7) Install Frappe CRM"
-    echo "8) Install Frappe HR / HRMS"
-    echo "9) Install Frappe Payments"
-    echo "10) Install Frappe Webshop / E-Commerce"
-    echo "11) Install Frappe Helpdesk"
-    echo "12) Install Frappe Telephony"
-    echo "13) Install Frappe Insights"
-    echo "14) Install custom app from Git URL"
+    print_two_column_menu       "1) Optional App Install Wizard"       "2) Show optional app status"       "3) Show optional app compatibility"       "4) Show installed apps"       "5) Optional app install guide"       "6) Rollback guide"       "7) Install Frappe CRM"       "8) Install Frappe HR / HRMS"       "9) Install Frappe Payments"       "10) Install Frappe Webshop / E-Commerce"       "11) Install Frappe Builder"       "12) Install Frappe Learning / LMS"       "13) Install Frappe Wiki"       "14) Install Frappe Print Designer"       "15) Install Frappe Drive"       "16) Install Raven Team Chat"       "17) Install Frappe Helpdesk"       "18) Install Frappe Telephony"       "19) Install Frappe Insights"       "20) Install custom app from Git URL"
     echo
     echo "Notes: install one app at a time and keep a backup checkpoint."
     menu_footer
@@ -8756,10 +8831,16 @@ show_app_library_menu() {
       8) install_app_profile hrms; pause_after_screen "Press Enter to return to App Library..." ;;
       9) install_app_profile payments; pause_after_screen "Press Enter to return to App Library..." ;;
       10) install_app_profile webshop; pause_after_screen "Press Enter to return to App Library..." ;;
-      11) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Library..." ;;
-      12) install_app_profile telephony; pause_after_screen "Press Enter to return to App Library..." ;;
-      13) install_app_profile insights; pause_after_screen "Press Enter to return to App Library..." ;;
-      14) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Library..." ;;
+      11) install_app_profile builder; pause_after_screen "Press Enter to return to App Library..." ;;
+      12) install_app_profile lms; pause_after_screen "Press Enter to return to App Library..." ;;
+      13) install_app_profile wiki; pause_after_screen "Press Enter to return to App Library..." ;;
+      14) install_app_profile print_designer; pause_after_screen "Press Enter to return to App Library..." ;;
+      15) install_app_profile drive; pause_after_screen "Press Enter to return to App Library..." ;;
+      16) install_app_profile raven; pause_after_screen "Press Enter to return to App Library..." ;;
+      17) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Library..." ;;
+      18) install_app_profile telephony; pause_after_screen "Press Enter to return to App Library..." ;;
+      19) install_app_profile insights; pause_after_screen "Press Enter to return to App Library..." ;;
+      20) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Library..." ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *) warn "Invalid option" ;;
@@ -10627,7 +10708,7 @@ show_command_audit() {
   status_line "Off-VM backup" "OK" "off-vm-backup-plan, configure-rsync-backup-target, run-off-vm-backup"
   status_line "Health monitoring" "OK" "health-check, configure-health-check-timer, health-check-status"
   status_line "Restore safety" "OK" "restore-rehearsal-guide, restore-preflight, restore-db, restore-full"
-  status_line "Optional apps" "OK" "app-install-wizard, app-status, app-compatibility, install-payments, install-webshop"
+  status_line "Optional apps" "OK" "app-install-wizard, app-status, app-compatibility, install-payments, install-webshop, install-builder, install-lms, install-wiki, install-print-designer, install-drive, install-raven"
   ui_box_end
   ui_next "$(installer_cmd release-readiness)" "$(installer_cmd help)"
 }
@@ -11207,6 +11288,12 @@ Apps:
   app-compatibility   Optional app compatibility matrix
   install-payments    Install Frappe Payments
   install-webshop     Install Frappe Webshop / E-Commerce
+  install-builder     Install Frappe Builder
+  install-lms         Install Frappe Learning / LMS
+  install-wiki        Install Frappe Wiki
+  install-print-designer Install Frappe Print Designer
+  install-drive       Install Frappe Drive
+  install-raven       Install Raven Team Chat
 
 Guides:
   production-domain-plan   DNS/domain plan
@@ -11395,6 +11482,12 @@ main() {
     install-insights) install_app_profile insights ;;
     install-payments) install_app_profile payments ;;
     install-webshop|install-ecommerce) install_app_profile webshop ;;
+    install-builder) install_app_profile builder ;;
+    install-lms) install_app_profile lms ;;
+    install-wiki) install_app_profile wiki ;;
+    install-print-designer) install_app_profile print_designer ;;
+    install-drive) install_app_profile drive ;;
+    install-raven) install_app_profile raven ;;
     install-custom-app) install_custom_app_interactive ;;
     repair-app-registry) repair_app_registry ;;
     backup) create_site_backup false ;;

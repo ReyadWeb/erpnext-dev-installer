@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.18 - Expanded app library and compact two-column menus
+
+- Added curated optional app profiles for Frappe Builder, Frappe Learning / LMS, Frappe Wiki, Frappe Print Designer, Frappe Drive, and Raven Team Chat.
+- Added direct install commands: `install-builder`, `install-lms`, `install-wiki`, `install-print-designer`, `install-drive`, and `install-raven`.
+- Expanded optional app status, doctor output, app compatibility matrix, app registry normalization, and branch override help to include the new profiles.
+- Changed the App Library and Optional App Install Wizard to use a compact two-column terminal layout for smaller terminal windows.
+- Kept the existing safe app-install workflow: one app at a time, backup checkpoint prompt, compatibility warning, app install, migrate/build/clear-cache, and post-install validation.
+
 ## v1.1.17 - Access verification helper correction
 
 - Fixed `verify-access` by adding the missing `curl_head_status` helper.
