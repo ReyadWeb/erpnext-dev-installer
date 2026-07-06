@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.1.17 - Access verification helper correction
+
+- Fixed `verify-access` by adding the missing `curl_head_status` helper.
+- Kept HTTP/HTTPS verification safe: failed HTTP checks now show WARN/INFO instead of shell errors.
+- Confirmed `version` / `--version` support remains available from v1.1.16.
+- Kept README structure unchanged except for the version title.
+
+## v1.1.16 - App Library menu and version command correction
+
+- Fixed App Library labels so Payments and Webshop appear as direct menu items.
+- Aligned App Library menu numbering with the underlying app install actions.
+- Added `version` / `--version` command support so version checks do not fail with “Unknown argument”.
+- Kept README structure unchanged except for the version title.
+
+
 ## v1.1.15
 
 - Added Frappe Payments to the optional app library, install wizard, status checks, compatibility matrix, command parser, and direct `install-payments` command.

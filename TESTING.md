@@ -1140,3 +1140,69 @@ sudo /root/install-erpnext-dev.sh verify-access
 
 Expected: each app creates a backup checkpoint prompt, downloads the app, registers it in `sites/apps.txt`, installs it on the active site, runs migrate/build/clear-cache, and leaves the ERPNext desk accessible.
 
+
+
+## v1.1.16 Validation - App Library and Version Command
+
+Run after copying the package into the repository:
+
+```bash
+bash -n install-erpnext-dev.sh
+grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
+./install-erpnext-dev.sh version
+./install-erpnext-dev.sh --version
+grep -n "Install Frappe Payments\|Install Frappe Webshop" install-erpnext-dev.sh
+```
+
+Expected:
+
+```text
+SCRIPT_VERSION="1.1.16"
+ERPNext Developer Installer v1.1.16
+App Library shows Payments and Webshop as direct install options.
+```
+
+VM validation:
+
+```bash
+sudo /root/install-erpnext-dev.sh version
+sudo /root/install-erpnext-dev.sh app-library
+sudo /root/install-erpnext-dev.sh app-install-wizard
+```
+
+Confirm that both the App Library menu and the Optional App Install Wizard expose:
+
+```text
+Install Frappe Payments
+Install Frappe Webshop / E-Commerce
+```
+
+
+## v1.1.17 Validation - Access Verification Helper
+
+Run after copying the package into the repository:
+
+```bash
+bash -n install-erpnext-dev.sh
+grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
+./install-erpnext-dev.sh version
+grep -n "curl_head_status" install-erpnext-dev.sh
+```
+
+Expected:
+
+```text
+SCRIPT_VERSION="1.1.17"
+ERPNext Developer Installer v1.1.17
+curl_head_status function exists before verify_access uses it
+```
+
+VM validation after updating `/root/install-erpnext-dev.sh`:
+
+```bash
+sudo /root/install-erpnext-dev.sh version
+sudo /root/install-erpnext-dev.sh verify-access
+sudo /root/install-erpnext-dev.sh doctor --plain
+```
+
+Expected: `verify-access` should not print `curl_head_status: command not found`. HTTP checks should return OK/WARN/INFO status lines only.
