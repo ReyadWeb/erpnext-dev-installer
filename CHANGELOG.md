@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.19 - Concise app installation menus
+
+- Renamed the App Library heading to App Installation Library so the menu context carries the install meaning.
+- Shortened App Library and App Installation Wizard labels by removing repeated “Install”, “Frappe”, and “Show” wording.
+- Kept direct install actions and command names unchanged; only the terminal menu labels were simplified.
+- Improved `print_two_column_menu` so column width adapts to the current terminal width and falls back to one column on very narrow terminals.
+- Shortened long menu labels such as Raven Team Chat and Custom app from Git URL to reduce wrapping in small terminal windows.
+
 ## v1.1.18 - Expanded app library and compact two-column menus
 
 - Added curated optional app profiles for Frappe Builder, Frappe Learning / LMS, Frappe Wiki, Frappe Print Designer, Frappe Drive, and Raven Team Chat.

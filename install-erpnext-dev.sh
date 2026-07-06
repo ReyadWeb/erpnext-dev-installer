@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="1.1.18"
+SCRIPT_VERSION="1.1.19"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -200,12 +200,35 @@ menu_footer() {
 }
 
 print_two_column_menu() {
-  # Print compact numbered menus for small terminal windows.
+  # Print compact numbered menus for terminal windows.
   # Each argument should already be formatted as "N) Label".
-  local width="${MENU_COLUMN_WIDTH:-46}"
   local items=("$@")
   local total="${#items[@]}"
-  local half i left right
+  local cols width half i left right
+
+  cols="$(tput cols 2>/dev/null || echo 100)"
+  if ! [[ "$cols" =~ ^[0-9]+$ ]]; then
+    cols=100
+  fi
+
+  # Very narrow terminals are more readable as one column.
+  if (( cols < 76 )); then
+    for left in "${items[@]}"; do
+      printf "%s
+" "$left"
+    done
+    return 0
+  fi
+
+  if [[ -n "${MENU_COLUMN_WIDTH:-}" ]]; then
+    width="${MENU_COLUMN_WIDTH}"
+  elif (( cols >= 110 )); then
+    width=48
+  elif (( cols >= 96 )); then
+    width=42
+  else
+    width=36
+  fi
 
   half=$(( (total + 1) / 2 ))
 
@@ -216,7 +239,8 @@ print_two_column_menu() {
     if [[ -n "$right" ]]; then
       printf "%s" "$right"
     fi
-    printf "\n"
+    printf "
+"
   done
 }
 
@@ -8636,32 +8660,34 @@ run_app_install_wizard() {
     app_wizard_preflight "$bench_dir"
     echo
     echo "============================================================"
-    echo "Optional App Install Wizard"
+    echo "App Installation Wizard"
     echo "============================================================"
-    print_two_column_menu       "1) Show optional app status"       "2) Show optional app compatibility"       "3) Install Frappe CRM"       "4) Install Frappe HR / HRMS"       "5) Install Frappe Payments"       "6) Install Frappe Webshop / E-Commerce"       "7) Install Frappe Builder"       "8) Install Frappe Learning / LMS"       "9) Install Frappe Wiki"       "10) Install Frappe Print Designer"       "11) Install Frappe Drive"       "12) Install Raven Team Chat"       "13) Install Frappe Insights"       "14) Install Frappe Telephony"       "15) Install Frappe Helpdesk"       "16) Install custom app from Git URL"       "17) Rollback guide"
+    echo "Choose one app to install. Status and guide tools are listed first."
+    echo
+    print_two_column_menu       "1) App status"       "2) Compatibility"       "3) CRM"       "4) HR / HRMS"       "5) Payments"       "6) Webshop / E-Commerce"       "7) Builder"       "8) Learning / LMS"       "9) Wiki"       "10) Print Designer"       "11) Drive"       "12) Raven Chat"       "13) Insights"       "14) Telephony"       "15) Helpdesk"       "16) Custom Git app"       "17) Rollback guide"
     echo
     echo "Install one app at a time. The wizard will offer a backup checkpoint first."
     menu_footer
     read -r -p "Choose an option: " choice
 
     case "$choice" in
-      1) run_app_status; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      2) show_app_compatibility_matrix; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      3) install_app_profile crm; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      4) install_app_profile hrms; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      5) install_app_profile payments; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      6) install_app_profile webshop; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      7) install_app_profile builder; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      8) install_app_profile lms; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      9) install_app_profile wiki; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      10) install_app_profile print_designer; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      11) install_app_profile drive; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      12) install_app_profile raven; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      13) install_app_profile insights; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      14) install_app_profile telephony; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      15) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      16) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
-      17) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Install Wizard..." ;;
+      1) run_app_status; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      2) show_app_compatibility_matrix; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      3) install_app_profile crm; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      4) install_app_profile hrms; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      5) install_app_profile payments; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      6) install_app_profile webshop; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      7) install_app_profile builder; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      8) install_app_profile lms; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      9) install_app_profile wiki; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      10) install_app_profile print_designer; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      11) install_app_profile drive; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      12) install_app_profile raven; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      13) install_app_profile insights; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      14) install_app_profile telephony; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      15) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      16) install_custom_app_interactive; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      17) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *) warn "Invalid option" ;;
@@ -8812,11 +8838,13 @@ show_app_library_menu() {
   while true; do
     echo
     echo "============================================================"
-    echo "App Library"
+    echo "App Installation Library"
     echo "============================================================"
-    print_two_column_menu       "1) Optional App Install Wizard"       "2) Show optional app status"       "3) Show optional app compatibility"       "4) Show installed apps"       "5) Optional app install guide"       "6) Rollback guide"       "7) Install Frappe CRM"       "8) Install Frappe HR / HRMS"       "9) Install Frappe Payments"       "10) Install Frappe Webshop / E-Commerce"       "11) Install Frappe Builder"       "12) Install Frappe Learning / LMS"       "13) Install Frappe Wiki"       "14) Install Frappe Print Designer"       "15) Install Frappe Drive"       "16) Install Raven Team Chat"       "17) Install Frappe Helpdesk"       "18) Install Frappe Telephony"       "19) Install Frappe Insights"       "20) Install custom app from Git URL"
+    echo "Choose an app to install, or use the status/guide tools."
     echo
-    echo "Notes: install one app at a time and keep a backup checkpoint."
+    print_two_column_menu       "1) Wizard"       "2) App status"       "3) Compatibility"       "4) Installed apps"       "5) Guide"       "6) Rollback guide"       "7) CRM"       "8) HR / HRMS"       "9) Payments"       "10) Webshop / E-Commerce"       "11) Builder"       "12) Learning / LMS"       "13) Wiki"       "14) Print Designer"       "15) Drive"       "16) Raven Chat"       "17) Helpdesk"       "18) Telephony"       "19) Insights"       "20) Custom Git app"
+    echo
+    echo "Notes: one app at a time; keep a backup checkpoint."
     menu_footer
     read -r -p "Choose an option: " app_choice
 

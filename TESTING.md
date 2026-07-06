@@ -1,3 +1,28 @@
+# v1.1.19 validation
+
+Validate concise app installation menu labels and responsive two-column rendering.
+
+```bash
+chmod +x install-erpnext-dev.sh
+bash -n install-erpnext-dev.sh
+grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
+./install-erpnext-dev.sh version
+printf 'q\n' | ./install-erpnext-dev.sh app-library
+printf 'q\n' | ./install-erpnext-dev.sh app-install-wizard
+```
+
+Expected:
+
+```text
+SCRIPT_VERSION="1.1.19"
+App Installation Library title is shown
+App Installation Wizard title is shown
+Menu labels are concise: Wizard, App status, Compatibility, CRM, HR / HRMS, Payments, Webshop / E-Commerce, Builder, Learning / LMS, Wiki, Print Designer, Drive, Raven Chat, Helpdesk, Telephony, Insights, Custom Git app
+Menu labels do not repeat "Install Frappe" for every app
+Menu labels do not use "Show" for status/list actions
+Two-column rendering fits normal small terminal widths without wrapping common labels
+```
+
 # v1.1.14 validation
 
 Validate the safer preflight command flow, storage-first install sequence, sudo/path command output, and version bump.
