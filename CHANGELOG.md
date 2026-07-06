@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.13
+
+- Added a blocking install environment preflight for safer fresh VM installs.
+- Added CPU checks before ERPNext installation; VMs below the safe minimum are now blocked.
+- Changed low RAM and low root disk from warning-only to blocking failures when below safe minimums.
+- Added `/tmp` free-space validation so package/build temp-space problems are caught before installation.
+- Added `install-preflight` and `environment-preflight` commands for standalone validation before running a quickstart.
+- Added a red `INSTALL BLOCKED` summary explaining exactly why installation cannot proceed and what VM resources to increase.
+- Added an explicit expert-only override: `ERPNEXT_ALLOW_UNSAFE_INSTALL=true`.
+
 ## v1.1.12
 
 - Reworked `ROADMAP.md` into a clearer production-maturity plan.

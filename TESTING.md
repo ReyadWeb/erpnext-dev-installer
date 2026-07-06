@@ -1,3 +1,60 @@
+# v1.1.13 validation
+
+Validate the blocking environment preflight and version bump.
+
+```bash
+chmod +x install-erpnext-dev.sh
+bash -n install-erpnext-dev.sh
+grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
+./install-erpnext-dev.sh help | grep -E "install-preflight|environment-preflight|ERPNEXT_ALLOW_UNSAFE_INSTALL"
+./install-erpnext-dev.sh command-audit | grep -E "Preflight|install-preflight"
+```
+
+Expected:
+
+```text
+SCRIPT_VERSION="1.1.13"
+install-preflight is accepted by the dispatcher
+environment-preflight is accepted as an alias
+help shows the expert-only ERPNEXT_ALLOW_UNSAFE_INSTALL override
+command-audit includes the Preflight command group
+```
+
+Fresh VM pre-install check:
+
+```bash
+sudo ./install-erpnext-dev.sh install-preflight
+```
+
+Expected on a healthy VM:
+
+```text
+CPU cores            OK/WARN
+RAM                  OK/WARN
+Root free disk        OK/WARN
+/tmp free disk        OK
+Blockers             OK      0
+OK: Install environment preflight passed
+```
+
+Expected on an undersized VM:
+
+```text
+CPU/RAM/root disk or /tmp row shows FAIL
+INSTALL BLOCKED appears in red on interactive terminals
+The script exits before package installation, bench creation, user creation, or database changes
+```
+
+Developer override smoke test only, not recommended for real users:
+
+```bash
+ERPNEXT_ALLOW_UNSAFE_INSTALL=true sudo -E ./install-erpnext-dev.sh install-preflight
+```
+
+Expected: the preflight still shows FAIL rows, but prints an explicit unsafe-override warning.
+
+---
+
 # v1.1.10 validation
 
 Validate the README Start here section, banner asset, and script version.

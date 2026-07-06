@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="1.1.12"
+SCRIPT_VERSION="1.1.13"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -81,6 +81,18 @@ HEALTH_CHECK_RANDOM_DELAY="${HEALTH_CHECK_RANDOM_DELAY:-10m}"
 HEALTH_CHECK_DISK_WARN_PERCENT="${HEALTH_CHECK_DISK_WARN_PERCENT:-80}"
 HEALTH_CHECK_BACKUP_MAX_AGE_HOURS="${HEALTH_CHECK_BACKUP_MAX_AGE_HOURS:-30}"
 
+# Hard safety gates for fresh installs. These are intentionally conservative because
+# a too-small VM can leave a half-installed ERPNext stack, corrupt user expectations,
+# or create an unstable service that is difficult for beginners to recover.
+MIN_INSTALL_CPU_CORES="${MIN_INSTALL_CPU_CORES:-2}"
+RECOMMENDED_INSTALL_CPU_CORES="${RECOMMENDED_INSTALL_CPU_CORES:-4}"
+MIN_INSTALL_RAM_MB="${MIN_INSTALL_RAM_MB:-4096}"
+RECOMMENDED_INSTALL_RAM_MB="${RECOMMENDED_INSTALL_RAM_MB:-8192}"
+MIN_INSTALL_DISK_GB="${MIN_INSTALL_DISK_GB:-30}"
+RECOMMENDED_INSTALL_DISK_GB="${RECOMMENDED_INSTALL_DISK_GB:-60}"
+MIN_INSTALL_TMP_GB="${MIN_INSTALL_TMP_GB:-4}"
+ERPNEXT_ALLOW_UNSAFE_INSTALL="${ERPNEXT_ALLOW_UNSAFE_INSTALL:-false}"
+
 if [[ -t 1 ]]; then
   BOLD="\033[1m"
   DIM="\033[2m"
@@ -127,7 +139,7 @@ acquire_installer_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|repair-app-registry)
       return 0
       ;;
     *)
@@ -1240,24 +1252,115 @@ check_internet() {
   fi
 }
 
+install_override_enabled() {
+  [[ "${ERPNEXT_ALLOW_UNSAFE_INSTALL,,}" =~ ^(1|true|yes)$ ]]
+}
+
 check_resources() {
   log "Checking VM resources"
 
-  local mem_mb disk_gb
+  local mem_mb disk_gb tmp_gb cpu_cores blockers warnings
   mem_mb="$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)"
   disk_gb="$(df -BG / | awk 'NR==2 {gsub("G", "", $4); print $4}' 2>/dev/null || echo 0)"
+  tmp_gb="$(df -BG /tmp 2>/dev/null | awk 'NR==2 {gsub("G", "", $4); print $4}' || echo 0)"
+  cpu_cores="$(nproc 2>/dev/null || echo 0)"
+  blockers=0
+  warnings=0
 
-  if [[ "$mem_mb" -lt 4096 ]]; then
-    warn "RAM is ${mem_mb} MB. Recommended minimum is 4096 MB; 8192 MB is better."
+  echo
+  echo "Install Environment Preflight"
+  echo "------------------------------------------------------------"
+
+  if [[ ! "$cpu_cores" =~ ^[0-9]+$ || "$cpu_cores" -lt 1 ]]; then
+    status_line "CPU cores" "FAIL" "could not detect CPU count"
+    blockers=$((blockers + 1))
+  elif [[ "$cpu_cores" -lt "$MIN_INSTALL_CPU_CORES" ]]; then
+    status_line "CPU cores" "FAIL" "${cpu_cores} found; minimum is ${MIN_INSTALL_CPU_CORES}. Increase VM vCPU count before installing."
+    blockers=$((blockers + 1))
+  elif [[ "$cpu_cores" -lt "$RECOMMENDED_INSTALL_CPU_CORES" ]]; then
+    status_line "CPU cores" "WARN" "${cpu_cores} found; ${RECOMMENDED_INSTALL_CPU_CORES}+ recommended for smoother builds."
+    warnings=$((warnings + 1))
   else
-    ok "RAM: ${mem_mb} MB"
+    status_line "CPU cores" "OK" "${cpu_cores}"
   fi
 
-  if [[ "$disk_gb" -lt 30 ]]; then
-    warn "Available disk space is ${disk_gb} GB. Recommended minimum is 60 GB."
+  if [[ ! "$mem_mb" =~ ^[0-9]+$ || "$mem_mb" -lt 1 ]]; then
+    status_line "RAM" "FAIL" "could not detect memory"
+    blockers=$((blockers + 1))
+  elif [[ "$mem_mb" -lt "$MIN_INSTALL_RAM_MB" ]]; then
+    status_line "RAM" "FAIL" "${mem_mb} MB found; minimum is ${MIN_INSTALL_RAM_MB} MB. Increase VM RAM before installing."
+    blockers=$((blockers + 1))
+  elif [[ "$mem_mb" -lt "$RECOMMENDED_INSTALL_RAM_MB" ]]; then
+    status_line "RAM" "WARN" "${mem_mb} MB found; ${RECOMMENDED_INSTALL_RAM_MB} MB recommended for ERPNext builds."
+    warnings=$((warnings + 1))
   else
-    ok "Available disk: ${disk_gb} GB"
+    status_line "RAM" "OK" "${mem_mb} MB"
   fi
+
+  if [[ ! "$disk_gb" =~ ^[0-9]+$ || "$disk_gb" -lt 1 ]]; then
+    status_line "Root free disk" "FAIL" "could not detect free disk space on /"
+    blockers=$((blockers + 1))
+  elif [[ "$disk_gb" -lt "$MIN_INSTALL_DISK_GB" ]]; then
+    status_line "Root free disk" "FAIL" "${disk_gb} GB available; minimum is ${MIN_INSTALL_DISK_GB} GB. Expand the VM disk before installing."
+    blockers=$((blockers + 1))
+  elif [[ "$disk_gb" -lt "$RECOMMENDED_INSTALL_DISK_GB" ]]; then
+    status_line "Root free disk" "WARN" "${disk_gb} GB available; ${RECOMMENDED_INSTALL_DISK_GB} GB recommended."
+    warnings=$((warnings + 1))
+  else
+    status_line "Root free disk" "OK" "${disk_gb} GB available"
+  fi
+
+  if [[ ! "$tmp_gb" =~ ^[0-9]+$ || "$tmp_gb" -lt 1 ]]; then
+    status_line "/tmp free disk" "WARN" "could not detect /tmp free space"
+    warnings=$((warnings + 1))
+  elif [[ "$tmp_gb" -lt "$MIN_INSTALL_TMP_GB" ]]; then
+    status_line "/tmp free disk" "FAIL" "${tmp_gb} GB available; minimum is ${MIN_INSTALL_TMP_GB} GB for package/build temp files."
+    blockers=$((blockers + 1))
+  else
+    status_line "/tmp free disk" "OK" "${tmp_gb} GB available"
+  fi
+
+  status_line "Warnings" "$([[ "$warnings" -eq 0 ]] && echo OK || echo WARN)" "${warnings}"
+  status_line "Blockers" "$([[ "$blockers" -eq 0 ]] && echo OK || echo FAIL)" "${blockers}"
+  echo "------------------------------------------------------------"
+
+  if [[ "$blockers" -gt 0 ]]; then
+    echo -e "${RED}INSTALL BLOCKED:${RESET} this VM does not meet the safe minimum requirements."
+    echo "Fix the FAIL rows above before installing ERPNext."
+    echo
+    echo "Minimum safe install requirements:"
+    echo "  CPU:       ${MIN_INSTALL_CPU_CORES}+ cores"
+    echo "  RAM:       ${MIN_INSTALL_RAM_MB}+ MB"
+    echo "  Root disk: ${MIN_INSTALL_DISK_GB}+ GB free"
+    echo "  /tmp disk: ${MIN_INSTALL_TMP_GB}+ GB free"
+    echo
+    echo "Recommended for smoother local development:"
+    echo "  CPU:       ${RECOMMENDED_INSTALL_CPU_CORES}+ cores"
+    echo "  RAM:       ${RECOMMENDED_INSTALL_RAM_MB}+ MB"
+    echo "  Root disk: ${RECOMMENDED_INSTALL_DISK_GB}+ GB free"
+    echo
+    echo "If the only blocker is root disk size and the VM disk was expanded, run:"
+    echo "  $(installer_cmd expand-root-storage)"
+
+    if install_override_enabled; then
+      warn "Unsafe install override is enabled with ERPNEXT_ALLOW_UNSAFE_INSTALL=${ERPNEXT_ALLOW_UNSAFE_INSTALL}. Continuing anyway."
+    else
+      fail "Environment preflight failed. Installation was stopped before making system changes."
+    fi
+  else
+    ok "Install environment preflight passed"
+  fi
+}
+
+run_install_preflight() {
+  require_sudo
+  check_os
+  check_internet
+  check_resources
+  echo
+  ok "This VM is safe to continue with ERPNext installation."
+  echo "Next command:"
+  echo "  $(installer_cmd local-dev-quickstart)"
 }
 
 # ============================================================
@@ -10368,6 +10471,7 @@ show_release_readiness() {
 show_command_audit() {
   ui_box_start "Command Audit / Key Workflows"
   status_line "Start here" "OK" "first-run, public-vm-quickstart, local-dev-quickstart"
+  status_line "Preflight" "OK" "install-preflight, environment-preflight"
   status_line "Config" "OK" "set-domain, show-config, setup-effort-guide"
   status_line "Install/status" "OK" "guided-setup, status, doctor, support-bundle"
   status_line "Credentials" "OK" "credentials-info, sudo cat /home/frappe/erpnext-dev-credentials.txt"
@@ -10570,8 +10674,8 @@ run_install() {
   require_sudo
   check_os
   check_internet
-  maybe_offer_root_storage_expansion
   check_resources
+  maybe_offer_root_storage_expansion
   prompt_for_site_name_if_needed
 
   if path_is_dir "$BENCH_PARENT"; then
@@ -10824,6 +10928,7 @@ show_advanced_menu() {
     echo "43) Verify ERPNext HTTP Access"
     echo "44) App Install Wizard"
     echo "45) App Rollback Guide"
+    echo "46) Install Environment Preflight"
     menu_footer
     read -r -p "Choose an option: " advanced_choice
 
@@ -10873,6 +10978,7 @@ show_advanced_menu() {
       43) verify_access ;;
       44) run_app_install_wizard ;;
       45) show_app_rollback_guide ;;
+      46) run_install_preflight ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *) warn "Invalid option" ;;
@@ -10891,6 +10997,7 @@ Start here:
   first-run           Pick local VM, public VM, or maintenance flow
   public-vm-quickstart Domain -> install -> HTTPS -> security wizard
   local-dev-quickstart Minimal-input local VM setup using erp.test
+  install-preflight   Check OS, internet, CPU, RAM, disk, and /tmp before installing
   set-domain          Save public domain and site config
   show-config         Show saved installer config
   setup-effort-guide  Show commands/input count by setup type
@@ -10903,6 +11010,7 @@ Core:
   next-step           Recommended next action
   doctor --plain      Safe diagnostics
   support-bundle      Redacted troubleshooting archive
+  environment-preflight Alias for install-preflight
 
 Production / HTTPS:
   production-readiness    Production-candidate check
@@ -10996,6 +11104,7 @@ Common environment overrides:
   BACKUP_SCHEDULE_RANDOM_DELAY=30m
   BACKUP_RETENTION_KEEP_COMPLETE=14
   BACKUP_RETENTION_WARN_DISK_PERCENT=80
+  ERPNEXT_ALLOW_UNSAFE_INSTALL=false
   OFF_VM_BACKUP_TARGET=backup@example.com:/srv/erpnext-backups/site/
   OFF_VM_BACKUP_SSH_IDENTITY=/root/.ssh/id_ed25519
   OFF_VM_BACKUP_RSYNC_DELETE=false
@@ -11065,7 +11174,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|credentials-info|credentials|login-info|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|credentials-info|credentials|login-info|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -11092,6 +11201,7 @@ main() {
     first-run|start-here|quickstart|setup-wizard) run_first_run_wizard ;;
     public-vm-quickstart|public-setup) run_public_vm_quickstart ;;
     local-dev-quickstart|local-setup) run_local_dev_quickstart ;;
+    install-preflight|environment-preflight) run_install_preflight ;;
     set-domain) prompt_and_save_public_domain ;;
     show-config) show_config_summary ;;
     guided-setup) run_guided_setup ;;
