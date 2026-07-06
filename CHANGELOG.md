@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.21 - Fit-aware two-column app menus
+
+- Fixed the App Installation Library and App Installation Wizard layout so two-column rendering is based on actual label length instead of a fixed 76-column threshold.
+- Kept concise app menu labels from v1.1.19/v1.1.20 while making the layout work better in smaller terminal windows.
+- Added `MENU_TERMINAL_COLS` testing support for menu layout validation and preserved one-column fallback when labels truly cannot fit.
+- Kept Advanced App Tools behind the safer advanced submenu introduced in v1.1.20.
+
 ## v1.1.20 - Safer advanced app tools
 
 - Moved Custom Git app installation out of the main curated App Installation Library list and into a dedicated Advanced App Tools submenu.

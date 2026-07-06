@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="1.1.20"
+SCRIPT_VERSION="1.1.21"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -202,17 +202,44 @@ menu_footer() {
 print_two_column_menu() {
   # Print compact numbered menus for terminal windows.
   # Each argument should already be formatted as "N) Label".
+  # This function calculates whether the actual labels fit in two columns
+  # instead of falling back based on a fixed terminal-width threshold.
   local items=("$@")
   local total="${#items[@]}"
-  local cols width half i left right
+  local cols half i left right left_len right_len
+  local max_left=0 max_right=0 gap=4 width required
 
-  cols="$(tput cols 2>/dev/null || echo 100)"
-  if ! [[ "$cols" =~ ^[0-9]+$ ]]; then
+  cols="${MENU_TERMINAL_COLS:-}"
+  if [[ -z "$cols" ]]; then
+    cols="$(tput cols 2>/dev/null || true)"
+  fi
+  if ! [[ "$cols" =~ ^[0-9]+$ ]] || (( cols <= 0 )); then
+    cols="${COLUMNS:-100}"
+  fi
+  if ! [[ "$cols" =~ ^[0-9]+$ ]] || (( cols <= 0 )); then
     cols=100
   fi
 
-  # Very narrow terminals are more readable as one column.
-  if (( cols < 76 )); then
+  half=$(( (total + 1) / 2 ))
+
+  for ((i = 0; i < half; i++)); do
+    left="${items[$i]}"
+    right="${items[$((i + half))]:-}"
+    left_len=${#left}
+    right_len=${#right}
+    (( left_len > max_left )) && max_left="$left_len"
+    (( right_len > max_right )) && max_right="$right_len"
+  done
+
+  # Use a smaller gap on tighter terminals. Most app-library labels are short
+  # enough to fit in two columns even around 55-60 terminal columns.
+  required=$((max_left + gap + max_right))
+  if (( required > cols )); then
+    gap=2
+    required=$((max_left + gap + max_right))
+  fi
+
+  if [[ "${MENU_FORCE_ONE_COLUMN:-false}" == "true" ]]; then
     for left in "${items[@]}"; do
       printf "%s
 " "$left"
@@ -220,17 +247,18 @@ print_two_column_menu() {
     return 0
   fi
 
-  if [[ -n "${MENU_COLUMN_WIDTH:-}" ]]; then
-    width="${MENU_COLUMN_WIDTH}"
-  elif (( cols >= 110 )); then
-    width=48
-  elif (( cols >= 96 )); then
-    width=42
-  else
-    width=36
+  if (( required > cols )) && [[ "${MENU_FORCE_TWO_COLUMNS:-false}" != "true" ]]; then
+    for left in "${items[@]}"; do
+      printf "%s
+" "$left"
+    done
+    return 0
   fi
 
-  half=$(( (total + 1) / 2 ))
+  width=$((max_left + gap))
+  if [[ -n "${MENU_COLUMN_WIDTH:-}" && "${MENU_COLUMN_WIDTH}" =~ ^[0-9]+$ ]]; then
+    width="${MENU_COLUMN_WIDTH}"
+  fi
 
   for ((i = 0; i < half; i++)); do
     left="${items[$i]}"

@@ -1,3 +1,50 @@
+# ERPNext Developer Installer Testing Guide
+
+## v1.1.21 Validation - Fit-Aware Two-Column App Menus
+
+Package validation:
+
+```bash
+bash -n install-erpnext-dev.sh
+grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
+./install-erpnext-dev.sh version
+```
+
+Expected:
+
+```text
+SCRIPT_VERSION="1.1.21"
+ERPNext Developer Installer v1.1.21
+```
+
+Menu layout validation:
+
+```bash
+MENU_TERMINAL_COLS=60 printf 'q
+' | ./install-erpnext-dev.sh app-library
+MENU_TERMINAL_COLS=50 printf 'q
+' | ./install-erpnext-dev.sh app-library
+MENU_FORCE_ONE_COLUMN=true printf 'q
+' | ./install-erpnext-dev.sh app-library
+```
+
+Expected:
+
+- At around 50-60 columns, the concise App Installation Library should still render in two columns when the labels fit.
+- `MENU_FORCE_ONE_COLUMN=true` should force one-column output for fallback testing.
+- The menu should still show `20) Advanced tools`, not `20) Custom Git app`.
+
+VM validation after updating `/root/install-erpnext-dev.sh`:
+
+```bash
+sudo /root/install-erpnext-dev.sh version
+sudo /root/install-erpnext-dev.sh app-library
+sudo /root/install-erpnext-dev.sh app-install-wizard
+sudo /root/install-erpnext-dev.sh advanced-app-tools
+```
+
+Expected: app menus fit better in small terminal windows and use two columns whenever the actual labels fit.
+
 # v1.1.20 validation
 
 ## Purpose
