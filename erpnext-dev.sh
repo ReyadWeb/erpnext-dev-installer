@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.35"
+SCRIPT_VERSION="1.1.36"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -291,6 +291,34 @@ menu_footer() {
 '
   fi
   echo
+}
+
+trim_menu_choice() {
+  local value="${1:-}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+menu_read_choice() {
+  # Central interactive-menu input reader.
+  # - trims accidental spaces around q/Q/b/B/numbers
+  # - treats EOF/Ctrl-D/non-interactive empty input as q to avoid endless loops
+  # - accepts full words quit/exit/back for users who type them
+  local __target="$1"
+  local __choice=""
+
+  if ! read -r -p "Choose an option: " __choice; then
+    __choice="q"
+  fi
+
+  __choice="$(trim_menu_choice "$__choice")"
+  case "${__choice,,}" in
+    quit|exit) __choice="q" ;;
+    back) __choice="b" ;;
+  esac
+
+  printf -v "$__target" '%s' "$__choice"
 }
 
 print_two_column_menu() {
@@ -3899,7 +3927,7 @@ run_public_vm_quickstart() {
       "9) Final status / support bundle" \
       "10) SSL mode guide / setup steps"
     menu_footer
-    read -r -p "Choose an option: " choice
+    menu_read_choice choice
 
     case "$choice" in
       1) show_setup_lifecycle_plan ;;
@@ -3940,7 +3968,7 @@ run_first_run_wizard() {
     echo "4) Show saved config"
     echo "5) Setup lifecycle / SSL mode guide"
     menu_footer
-    read -r -p "Choose an option: " choice
+    menu_read_choice choice
 
     case "$choice" in
       1) run_local_dev_quickstart ;;
@@ -5343,7 +5371,7 @@ security_hardening_wizard() {
     echo
     echo "Use Local VM profile for erp.test/dev access. Use Production profile only after real domain + HTTPS are verified."
     menu_footer
-    read -r -p "Choose an option: " choice
+    menu_read_choice choice
     case "$choice" in
       1) security_mode_status ;;
       2) configure_local_vm_firewall ;;
@@ -6330,7 +6358,7 @@ production_ssl_wizard() {
   echo "4) Show Cloudflare Origin CA guide"
   echo "5) Show SSL mode guide/status"
   menu_footer
-  read -r -p "Choose an option: " choice
+  menu_read_choice choice
   case "$choice" in
     1) configure_production_ssl ;;
     2) configure_cloudflare_origin_ssl ;;
@@ -7496,7 +7524,7 @@ run_local_ssl_wizard() {
       "7) Browser trust guide" \
       "8) Disable local HTTPS"
     menu_footer
-    read -r -p "Choose an option: " wizard_choice
+    menu_read_choice wizard_choice
 
     case "$wizard_choice" in
       1)
@@ -7662,7 +7690,7 @@ show_access_menu() {
     echo "27) Production SSL guide"
     echo "28) Environment / location check"
     menu_footer
-    read -r -p "Choose an option: " access_choice
+    menu_read_choice access_choice
 
     case "$access_choice" in
       1) show_access_instructions ;;
@@ -8524,7 +8552,7 @@ show_status_menu() {
     echo "5) Optional App Status"
     echo "6) Full Health Report"
     menu_footer
-    read -r -p "Choose an option: " status_choice
+    menu_read_choice status_choice
 
     case "$status_choice" in
       1) run_status; pause_after_screen "Press Enter to return to Status Menu..." ;;
@@ -10518,7 +10546,7 @@ run_app_install_wizard() {
     echo
     echo "Install one app at a time. The wizard will offer a backup checkpoint first."
     menu_footer
-    read -r -p "Choose an option: " choice
+    menu_read_choice choice
 
     case "$choice" in
       1) run_app_status; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
@@ -10716,7 +10744,7 @@ show_advanced_app_tools_menu() {
     echo
     warn "Custom Git apps are not curated by this toolkit and may break the site if incompatible."
     menu_footer
-    read -r -p "Choose an option: " advanced_app_choice
+    menu_read_choice advanced_app_choice
 
     case "$advanced_app_choice" in
       1) install_custom_app_interactive; pause_after_screen "Press Enter to return to Advanced App Tools..." ;;
@@ -10742,7 +10770,7 @@ show_app_library_menu() {
     echo
     echo "Notes: one app at a time; keep a backup checkpoint."
     menu_footer
-    read -r -p "Choose an option: " app_choice
+    menu_read_choice app_choice
 
     case "$app_choice" in
       1) run_app_install_wizard ;;
@@ -11123,7 +11151,7 @@ run_maintenance_menu() {
     echo "5) Run safe repair"
     echo "6) Show recent service logs"
     menu_footer
-    read -r -p "Choose an option: " maintenance_choice
+    menu_read_choice maintenance_choice
 
     case "$maintenance_choice" in
       1) maintenance_migrate; pause_after_screen "Press Enter to return to Maintenance..." ;;
@@ -12126,7 +12154,7 @@ off_vm_backup_wizard() {
     echo "5) Off-VM backup status"
     echo "6) Disable off-VM backup config"
     menu_footer
-    read -r -p "Choose an option: " off_choice
+    menu_read_choice off_choice
     case "$off_choice" in
       1) show_off_vm_backup_plan; pause_after_screen "Press Enter to return to Off-VM Backup..." ;;
       2) configure_rsync_backup_target; pause_after_screen "Press Enter to return to Off-VM Backup..." ;;
@@ -12455,7 +12483,7 @@ production_ops_wizard() {
     echo "19) Restore preflight"
     echo "20) Support bundle"
     menu_footer
-    read -r -p "Choose an option: " ops_choice
+    menu_read_choice ops_choice
     case "$ops_choice" in
       1) show_release_readiness; pause_after_screen "Press Enter to return to Production Operations..." ;;
       2) run_health_check; pause_after_screen "Press Enter to return to Production Operations..." ;;
@@ -12685,7 +12713,7 @@ final_qa_wizard() {
     echo "5) Release notes draft"
     echo "6) Create support bundle"
     menu_footer
-    read -r -p "Choose an option: " choice
+    menu_read_choice choice
 
     case "$choice" in
       1) show_release_readiness; pause_after_screen "Press Enter to return to Final QA..." ;;
@@ -12722,7 +12750,7 @@ backup_hardening_wizard() {
     echo "12) Retention status"
     echo "13) Cleanup dry run"
     menu_footer
-    read -r -p "Choose an option: " backup_harden_choice
+    menu_read_choice backup_harden_choice
     case "$backup_harden_choice" in
       1) create_site_backup true; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
       2) show_backup_status; pause_after_screen "Press Enter to return to Backup Hardening..." ;;
@@ -12766,7 +12794,7 @@ run_backup_maintenance_menu() {
     echo "14) Cleanup old backups dry run"
     echo "15) Maintenance tasks"
     menu_footer
-    read -r -p "Choose an option: " backup_choice
+    menu_read_choice backup_choice
 
     case "$backup_choice" in
       1) create_site_backup false; pause_after_screen "Press Enter to return to Backup / Maintenance..." ;;
@@ -12965,7 +12993,7 @@ run_uninstall_menu() {
   echo "2) Remove bench files only"
   echo "3) Full purge: remove bench, frappe user, MariaDB/Redis packages"
   menu_footer
-  read -r -p "Choose an option: " choice
+  menu_read_choice choice
 
   case "$choice" in
     1) soft_uninstall ;;
@@ -13015,7 +13043,7 @@ show_service_menu() {
     echo "7) Show recent service logs"
     echo "8) Follow service logs"
     menu_footer
-    read -r -p "Choose an option: " service_choice
+    menu_read_choice service_choice
 
     case "$service_choice" in
       1) enable_autostart_service ;;
@@ -13056,7 +13084,7 @@ show_production_ssl_menu() {
       "11) SSL Mode Guide" \
       "12) Disable Production SSL"
     menu_footer
-    read -r -p "Choose an option: " prod_ssl_choice
+    menu_read_choice prod_ssl_choice
 
     case "$prod_ssl_choice" in
       1) production_ssl_wizard ;;
@@ -13089,7 +13117,7 @@ show_local_ssl_menu() {
     echo
     print_two_column_menu       "1) Local SSL Wizard"       "2) Local SSL Status"       "3) Local SSL Guide"       "4) Trusted mkcert Guide"       "5) Browser Trust Check"       "6) Install/Replace Cert"       "7) Verify Local SSL"       "8) Create Self-Signed Cert"       "9) Configure Local SSL"       "10) Disable Local SSL"       "11) Verify SSL Rollback"       "12) Change Local Domain"       "13) Local Domain / Host DNS Status"       "14) Local Access Doctor"       "15) Print Host /etc/hosts Command"       "16) SSL/HTTPS Roadmap"
     menu_footer
-    read -r -p "Choose an option: " ssl_choice
+    menu_read_choice ssl_choice
 
     case "$ssl_choice" in
       1) run_local_ssl_wizard ;;
@@ -13123,7 +13151,7 @@ show_advanced_menu() {
     echo "============================================================"
     print_two_column_menu       "1) Install / Reinstall"       "2) Repair Environment"       "3) Uninstall / Reset"       "4) Autostart / Service Manager"       "5) Backup / Maintenance"       "6) App Library"       "7) Optional App Status"       "8) Full Health Report"       "9) VM Network Status"       "10) Environment / location check"       "11) KVM Fixed IP Guide"       "12) Multi-Environment Guide"       "13) Local VM HTTPS / SSL"       "14) Local SSL Status"       "15) Local SSL Guide"       "16) Local SSL Wizard"       "17) Trusted mkcert SSL Guide"       "18) Browser Trust Check Guide"       "19) Install/Replace Local SSL Cert"       "20) Verify Local SSL"       "21) Create Self-Signed Local Cert"       "22) Configure Local SSL"       "23) Disable Local SSL"       "24) Verify SSL Rollback"       "25) Storage Status"       "26) Expand Root Storage"       "27) Verify Storage"       "28) Domain Config"       "29) Production Readiness Preview"       "30) Production Domain Guide"       "31) Production SSL Guide"       "32) Public VM Readiness"       "33) Production SSL Plan"       "34) Production Firewall Plan"       "35) Firewall Hardening Status"       "36) Configure Production SSL"       "37) Production SSL Status"       "38) Disable Production SSL"       "39) Start Bench in Foreground"       "40) Show Service Logs"       "41) Access Submenu"       "42) Next Step"       "43) Verify ERPNext HTTP Access"       "44) App Install Wizard"       "45) App Rollback Guide"       "46) Install Environment Preflight"       "47) Change Local Domain"
     menu_footer
-    read -r -p "Choose an option: " advanced_choice
+    menu_read_choice advanced_choice
 
     case "$advanced_choice" in
       1) run_install ;;
@@ -13180,6 +13208,113 @@ show_advanced_menu() {
   done
 }
 
+menu_navigation_self_test() {
+  # Safe smoke test for interactive menus. It checks navigation input only.
+  # It does not choose install, SSL, firewall, backup, app, or destructive actions.
+  local script rc out failures=0 tested=0
+  local action input
+  script="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || printf '%s' "${BASH_SOURCE[0]}")"
+
+  ui_box_start "Menu Navigation Self-Test"
+  echo "Testing q/Q and b/B handling for non-destructive menu entry points."
+  echo
+
+  local quit_actions=(
+    menu
+    first-run
+    advanced
+    access
+    status-menu
+    local-ssl-menu
+    production-ssl-menu
+    app-library
+    advanced-app-tools
+    backup-menu
+    maintenance
+    backup-hardening-wizard
+    off-vm-backup-wizard
+    production-ops-wizard
+    security-hardening-wizard
+    final-qa-wizard
+    uninstall
+  )
+
+  for action in "${quit_actions[@]}"; do
+    for input in q Q; do
+      tested=$((tested + 1))
+      out="$(printf '%s\n' "$input" | timeout 5 bash "$script" "$action" 2>&1)"
+      rc=$?
+      if (( rc != 0 )) || printf '%s\n' "$out" | grep -Eqi 'Invalid option|command not found|unbound variable|syntax error'; then
+        failures=$((failures + 1))
+        status_line "${action} ${input}" "FAIL" "q/Q did not exit cleanly"
+      fi
+    done
+  done
+
+  local back_actions=(
+    first-run
+    advanced
+    access
+    status-menu
+    local-ssl-menu
+    production-ssl-menu
+    app-library
+    advanced-app-tools
+    backup-menu
+    maintenance
+    backup-hardening-wizard
+    off-vm-backup-wizard
+    production-ops-wizard
+    security-hardening-wizard
+    final-qa-wizard
+  )
+
+  for action in "${back_actions[@]}"; do
+    for input in b B; do
+      tested=$((tested + 1))
+      out="$(printf '%s\n' "$input" | timeout 5 bash "$script" "$action" 2>&1)"
+      rc=$?
+      if (( rc != 0 )) || printf '%s\n' "$out" | grep -Eqi 'Invalid option|command not found|unbound variable|syntax error'; then
+        failures=$((failures + 1))
+        status_line "${action} ${input}" "FAIL" "b/B did not return cleanly"
+      fi
+    done
+  done
+
+  # Test a few nested submenu paths where prior bugs could drop the user into shell.
+  local nested_tests=(
+    "advanced|4|q"
+    "advanced|5|q"
+    "advanced|6|q"
+    "advanced|13|q"
+    "menu|8|q"
+    "menu|9|q"
+    "menu|12|q"
+    "menu|13|q"
+  )
+  local row root select quit
+  for row in "${nested_tests[@]}"; do
+    IFS='|' read -r root select quit <<< "$row"
+    tested=$((tested + 1))
+    out="$(printf '%s\n%s\n' "$select" "$quit" | timeout 5 bash "$script" "$root" 2>&1)"
+    rc=$?
+    if (( rc != 0 )) || printf '%s\n' "$out" | grep -Eqi 'command not found|unbound variable|syntax error'; then
+      failures=$((failures + 1))
+      status_line "${root}->${select}->${quit}" "FAIL" "nested menu quit failed"
+    fi
+  done
+
+  status_line "Tests executed" "INFO" "$tested"
+  if (( failures == 0 )); then
+    status_line "Menu navigation" "OK" "q/Q and b/B handled cleanly in tested menus"
+  else
+    status_line "Menu navigation" "FAIL" "${failures} failure(s) detected"
+    ui_box_end
+    return 1
+  fi
+  ui_box_end
+}
+
 show_help() {
   cat <<EOF_HELP
 ${APP_NAME} v${SCRIPT_VERSION}
@@ -13203,6 +13338,7 @@ Core:
   install-cli         Install or repair the erpnext-dev command
   repair-cli          Alias for install-cli
   update-toolkit      Download latest erpnext-dev.sh from GitHub and update /opt copy
+  menu-self-test      Validate q/Q and b/B handling across interactive menus
   guided-setup        Guided install / repair workflow
   status              Compact ERPNext status
   verify-access       HTTP access checks
@@ -13366,7 +13502,7 @@ show_menu() {
     echo "============================================================"
     print_two_column_menu       "1) Start here / setup wizard"       "2) Public VM quickstart"       "3) Local VM quickstart"       "4) Status"       "5) Start service"       "6) Stop service"       "7) Verify access"       "8) Local VM HTTPS / SSL"       "9) Production HTTPS / SSL"       "10) Security profiles"       "11) Backup / maintenance"       "12) Optional apps"       "13) Advanced"       "14) Final QA"       "15) Production operations"       "16) Help"
     menu_footer quit-only
-    read -r -p "Choose an option: " choice
+    menu_read_choice choice
 
     case "$choice" in
       1) run_first_run_wizard ;;
@@ -13406,7 +13542,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -13435,6 +13571,7 @@ main() {
     install-cli) install_toolkit_cli ;;
     repair-cli) repair_toolkit_cli ;;
     update-toolkit) update_toolkit ;;
+    menu-self-test|menu-navigation-self-test) menu_navigation_self_test ;;
     first-run|start-here|quickstart|setup-wizard) run_first_run_wizard ;;
     public-vm-quickstart|public-setup) run_public_vm_quickstart ;;
     local-dev-quickstart|local-setup) run_local_dev_quickstart ;;

@@ -1,5 +1,32 @@
 # Testing
 
+## v1.1.36 menu navigation hardening
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh --help | grep -E "menu-self-test|local-domain-status|local-access-doctor"
+./erpnext-dev.sh menu-self-test
+printf 'q\n' | MENU_TERMINAL_COLS=100 ./erpnext-dev.sh menu
+printf 'Q\n' | MENU_TERMINAL_COLS=100 ./erpnext-dev.sh local-ssl-menu
+printf 'b\n' | MENU_TERMINAL_COLS=100 ./erpnext-dev.sh production-ssl-menu
+printf 'B\n' | MENU_TERMINAL_COLS=100 ./erpnext-dev.sh advanced
+```
+
+Expected:
+
+```text
+ERPNext Developer Toolkit v1.1.36
+Menu navigation              OK
+```
+
+Validation points:
+
+- `q` and `Q` exit cleanly from the main menu and all tested submenus.
+- `b` and `B` return cleanly from submenus that support Back.
+- Nested menu paths, such as main menu -> Local VM HTTPS / SSL -> `q`, do not drop numeric input back to the shell.
+- The only remaining raw `read -r -p "Choose an option:"` call is inside `menu_read_choice`; all menu prompts use the shared handler.
+
 ## v1.1.35 dynamic local DNS and access checks
 
 ```bash

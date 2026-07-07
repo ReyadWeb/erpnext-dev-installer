@@ -1,4 +1,4 @@
-# ERPNext Developer Toolkit v1.1.32
+# ERPNext Developer Toolkit v1.1.36
 
 ![ERPNext Toolkit Banner](docs/assets/erp_installer_readme_banner.png)
 
@@ -12,6 +12,8 @@ It supports two main setup paths:
 The project also includes production operations helpers for SSL, firewall hardening, scheduled backups, backup retention, off-VM backup planning, health checks, restore preflight, optional app installation, diagnostics, support bundles, and safe maintenance workflows.
 
 The day-to-day menu exposes **Local VM HTTPS / SSL**, **Production HTTPS / SSL**, and **Optional apps** as first-level actions after installation.
+
+Interactive menus use a shared navigation reader: `q`/`Q` quits, `b`/`B` goes back where supported, and `sudo erpnext-dev menu-self-test` validates the menu navigation paths without running destructive actions.
 
 > Version history is maintained in [`CHANGELOG.md`](CHANGELOG.md). This README intentionally focuses on current installation, operations, and usage.
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.36 - Central menu navigation hardening
+
+- Added a central `menu_read_choice` handler for all interactive menu prompts so `q`, `Q`, `b`, and `B` are handled consistently across menus and submenus.
+- The shared handler trims accidental whitespace and accepts `quit`, `exit`, and `back` as friendly aliases.
+- End-of-file / empty piped input is treated as quit so menus do not hang or leak back into the shell during scripted validation.
+- Added `menu-self-test` / `menu-navigation-self-test` to safely smoke-test top-level menus, submenus, and nested menu paths for `q/Q` and `b/B` behavior.
+- Updated testing coverage so menu navigation regressions are caught before release.
+
 ## v1.1.35 - Dynamic local host DNS and access doctor
 
 - Added dynamic VM IP detection for local host mapping. The toolkit no longer assumes `192.168.122.x`; it detects the active VM IP from routing/interface data and supports KVM NAT, bridged LAN, VirtualBox/UTM-style NAT, and other private networks.

@@ -1,3 +1,10 @@
+## v1.1.36 completed menu navigation hardening
+
+- All interactive menu prompts now use a shared input reader.
+- `q`/`Q` quits consistently, `b`/`B` goes back where supported, and full words such as `quit`, `exit`, and `back` are normalized.
+- Added a non-destructive `menu-self-test` command to validate top-level menus, submenus, and common nested menu paths before release.
+- This reduces the risk of a submenu crash causing later typed menu numbers to be interpreted by the shell as commands.
+
 ## v1.1.35 completed local DNS/access root fix
 
 - Local VM host mapping now uses dynamic VM IP detection instead of assuming a fixed `192.168.122.x` address.
