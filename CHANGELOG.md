@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.31 - Menu UX and local SSL visibility
+
+- Promoted **Local VM HTTPS / SSL** to the main menu so local SSL is visible immediately after installation, alongside Optional Apps.
+- Added a dedicated `local-ssl-menu` command and submenu for local SSL wizard, status, guide, mkcert guidance, browser trust checks, certificate install/replace, verification, disable, and rollback verification.
+- Changed the long Advanced menu to render with the existing two-column menu helper so the full option list fits normal terminal windows.
+- Updated the post-install prompt to show the local SSL menu, optional app wizard, and next-step command before opening the main menu.
+- Updated help and documentation so local VM HTTPS is clearly separated from production HTTPS.
+
 ## v1.1.30 - Logging and lock permission hardening
 
 - Fixed root/non-root log collisions by replacing timestamp-only `/tmp` log names with unique `mktemp` log files.

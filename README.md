@@ -1,4 +1,4 @@
-# ERPNext Developer Toolkit v1.1.30
+# ERPNext Developer Toolkit v1.1.31
 
 ![ERPNext Toolkit Banner](docs/assets/erp_installer_readme_banner.png)
 
@@ -10,6 +10,8 @@ It supports two main setup paths:
 - **Public VPS / cloud VM** using a real domain or subdomain such as `erp.example.com`.
 
 The project also includes production operations helpers for SSL, firewall hardening, scheduled backups, backup retention, off-VM backup planning, health checks, restore preflight, optional app installation, diagnostics, support bundles, and safe maintenance workflows.
+
+The day-to-day menu now exposes **Local VM HTTPS / SSL** and **Optional apps** as first-level actions after installation.
 
 > Version history is maintained in [`CHANGELOG.md`](CHANGELOG.md). This README intentionally focuses on current installation, operations, and usage.
 
@@ -765,10 +767,13 @@ sudo erpnext-dev production-ssl-wizard
 Local SSL commands:
 
 ```bash
+sudo erpnext-dev local-ssl-menu
 sudo erpnext-dev local-ssl-wizard
 sudo erpnext-dev verify-local-ssl
 sudo erpnext-dev disable-local-ssl
 ```
+
+The main menu also has a dedicated **Local VM HTTPS / SSL** option, so local HTTPS is no longer hidden under Advanced. Use this for local VM domains such as `erp.test`.
 
 Production SSL commands:
 
