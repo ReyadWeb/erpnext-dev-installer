@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.33"
+SCRIPT_VERSION="1.1.34"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -30,6 +30,8 @@ PRODUCTION_SSL_MODE="${PRODUCTION_SSL_MODE:-planned}"
 AUTO_START="${AUTO_START:-prompt}"
 ENABLE_AUTOSTART="${ENABLE_AUTOSTART:-prompt}"
 APP_BACKUP_BEFORE_INSTALL="${APP_BACKUP_BEFORE_INSTALL:-prompt}"
+APP_BACKUP_AFTER_INSTALL="${APP_BACKUP_AFTER_INSTALL:-prompt}"
+FIREWALL_BACKUP_DIR="${FIREWALL_BACKUP_DIR:-/var/backups/erpnext-dev/firewall}"
 ERPNEXT_SERVICE_NAME="${ERPNEXT_SERVICE_NAME:-erpnext-dev.service}"
 READY_TIMEOUT="${READY_TIMEOUT:-90}"
 READY_INTERVAL="${READY_INTERVAL:-5}"
@@ -231,7 +233,7 @@ acquire_toolkit_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|repair-site-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|security-mode-status|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|repair-site-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
       return 0
       ;;
     *)
@@ -3353,6 +3355,61 @@ show_next_step() {
   echo "============================================================"
 }
 
+
+show_setup_lifecycle_plan() {
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "Recommended Setup Lifecycle"
+  echo "============================================================"
+  echo "Local VM order:"
+  echo "  1) Check requirements and storage"
+  echo "  2) Choose local .test domain, default erp.test"
+  echo "  3) Install ERPNext and verify access"
+  echo "  4) Create backup checkpoint / VM snapshot"
+  echo "  5) Configure local HTTPS if wanted"
+  echo "  6) Apply Local VM security profile only"
+  echo "  7) Install optional apps one at a time"
+  echo "  8) Backup after every optional app"
+  echo "  9) Final status summary and credentials"
+  echo
+  echo "Production order:"
+  echo "  1) Check requirements, storage, public IP, DNS readiness"
+  echo "  2) Set real production domain"
+  echo "  3) Install ERPNext and verify service health"
+  echo "  4) Create backup checkpoint / provider snapshot"
+  echo "  5) Configure production HTTPS"
+  echo "  6) Apply Production security profile only after HTTPS works"
+  echo "  7) Create a second checkpoint"
+  echo "  8) Install optional apps one at a time"
+  echo "  9) Backup after every optional app"
+  echo "  10) Final QA, access URLs, credentials, support bundle"
+  echo "============================================================"
+}
+
+post_core_install_checkpoint() {
+  local reply
+  echo
+  echo "Core install checkpoint recommended."
+  echo "Create a database + files backup now, and take a VM/provider snapshot if this VM is important."
+
+  if [[ "$ASSUME_YES" -eq 1 ]]; then
+    create_site_backup true || warn "Core install backup failed. Create a manual checkpoint before HTTPS/hardening/apps."
+    return 0
+  fi
+
+  if [[ -t 0 ]]; then
+    read -r -p "Create database + files backup now? [Y/n]: " reply
+    reply="${reply:-Y}"
+    if [[ "$reply" =~ ^[Yy]$ ]]; then
+      create_site_backup true || warn "Core install backup failed. Create a manual checkpoint before HTTPS/hardening/apps."
+    else
+      warn "Core install backup skipped. Take a VM snapshot or backup before HTTPS, hardening, or app installs."
+    fi
+  fi
+}
+
 run_guided_setup() {
   require_sudo
 
@@ -3360,7 +3417,7 @@ run_guided_setup() {
   echo "============================================================"
   echo "Guided ERPNext Setup"
   echo "============================================================"
-  echo "Flow: storage expansion -> environment preflight -> site name -> install -> service -> access."
+  echo "Flow: requirements -> domain -> install -> verify -> backup checkpoint -> HTTPS -> security profile -> apps -> final QA."
   echo "Keep this terminal open until setup finishes."
   echo "============================================================"
 
@@ -3368,21 +3425,32 @@ run_guided_setup() {
 
   echo
   ok "ERPNext installation workflow finished successfully."
-  echo "Verifying local access state..."
+  echo "Verifying access state..."
   verify_access
+  post_core_install_checkpoint
   show_next_step
   prompt_open_main_menu_after_install
 }
+
 
 prompt_open_main_menu_after_install() {
   local reply
 
   [[ -t 0 ]] || return 0
   echo
-  echo "Recommended local VM follow-up actions:"
-  echo "  Local HTTPS / SSL: $(toolkit_cmd local-ssl-menu)"
-  echo "  Optional apps:      $(toolkit_cmd app-install-wizard)"
-  echo "  Next step check:    $(toolkit_cmd next-step)"
+  if is_public_vm_workflow; then
+    echo "Recommended production follow-up actions:"
+    echo "  Production HTTPS / SSL: $(toolkit_cmd production-ssl-menu)"
+    echo "  Security profile:       $(toolkit_cmd security-hardening-wizard)"
+    echo "  Optional apps:          $(toolkit_cmd app-install-wizard)"
+    echo "  Final QA:               $(toolkit_cmd final-qa)"
+  else
+    echo "Recommended local VM follow-up actions:"
+    echo "  Local HTTPS / SSL:      $(toolkit_cmd local-ssl-menu)"
+    echo "  Local security profile: $(toolkit_cmd security-hardening-wizard)"
+    echo "  Optional apps:          $(toolkit_cmd app-install-wizard)"
+    echo "  Next step check:        $(toolkit_cmd next-step)"
+  fi
   echo
   read -r -p "Open the main toolkit menu now? [Y/n]: " reply
   reply="${reply:-Y}"
@@ -3394,6 +3462,7 @@ prompt_open_main_menu_after_install() {
     echo "  $(toolkit_cmd menu)"
   fi
 }
+
 
 show_host_hosts_command() {
   local vm_ip escaped_site
@@ -3639,28 +3708,35 @@ run_public_vm_quickstart() {
 
   while true; do
     ui_box_start "Public VM Quickstart"
-    echo "One guided flow for domain, install, HTTPS, and hardening."
+    echo "Production order: requirements -> domain -> install -> backup -> HTTPS -> security profile -> apps -> final QA."
     echo
     public_quickstart_status_summary
     echo
-    echo "1) Set/change domain"
-    echo "2) Check DNS/domain plan"
-    echo "3) Install or repair ERPNext"
-    echo "4) Configure HTTPS"
-    echo "5) Security hardening"
-    echo "6) Final status / support bundle"
-    echo "7) SSL mode guide / setup steps"
+    print_two_column_menu \
+      "1) Setup lifecycle plan" \
+      "2) Set/change domain" \
+      "3) Check requirements + DNS" \
+      "4) Install or repair ERPNext" \
+      "5) Create backup checkpoint" \
+      "6) Configure HTTPS" \
+      "7) Security hardening" \
+      "8) Optional apps" \
+      "9) Final status / support bundle" \
+      "10) SSL mode guide / setup steps"
     menu_footer
     read -r -p "Choose an option: " choice
 
     case "$choice" in
-      1) prompt_and_save_public_domain ;;
-      2) show_production_domain_plan ;;
-      3) ensure_public_domain_configured && run_guided_setup ;;
-      4) ensure_public_domain_configured && production_ssl_wizard ;;
-      5) security_hardening_wizard ;;
-      6) public_quickstart_final_status ;;
-      7) show_ssl_mode_status; show_setup_effort_guide ;;
+      1) show_setup_lifecycle_plan ;;
+      2) prompt_and_save_public_domain ;;
+      3) ensure_public_domain_configured && show_production_domain_plan && show_public_vm_readiness ;;
+      4) ensure_public_domain_configured && run_guided_setup ;;
+      5) public_quickstart_maybe_initial_backup ;;
+      6) ensure_public_domain_configured && production_ssl_wizard ;;
+      7) security_hardening_wizard ;;
+      8) run_app_install_wizard ;;
+      9) public_quickstart_final_status ;;
+      10) show_ssl_mode_status; show_setup_effort_guide ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *)
@@ -3687,7 +3763,7 @@ run_first_run_wizard() {
     echo "2) Public VM / production-candidate"
     echo "3) Existing install / maintenance menu"
     echo "4) Show saved config"
-    echo "5) Setup effort / SSL mode guide"
+    echo "5) Setup lifecycle / SSL mode guide"
     menu_footer
     read -r -p "Choose an option: " choice
 
@@ -3696,7 +3772,7 @@ run_first_run_wizard() {
       2) run_public_vm_quickstart ;;
       3) show_menu ;;
       4) show_config_summary ;;
-      5) show_setup_effort_guide; show_ssl_mode_guide ;;
+      5) show_setup_lifecycle_plan; show_setup_effort_guide; show_ssl_mode_guide ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *)
@@ -4467,6 +4543,307 @@ show_firewall_hardening_status() {
 }
 
 
+security_environment_label() {
+  if is_public_vm_workflow; then
+    printf '%s\n' "production"
+  else
+    printf '%s\n' "local"
+  fi
+}
+
+security_mode_status() {
+  local env domain vm_ip ssl_pair ssl_status ssl_detail ufw_state install_state_value runtime
+
+  require_sudo
+  env="$(security_environment_label)"
+  domain="${PRODUCTION_DOMAIN:-$SITE_NAME}"
+  vm_ip="$(get_vm_ip 2>/dev/null || echo unknown)"
+  install_state_value="$(install_state 2>/dev/null || echo 'Not installed')"
+  runtime="$(runtime_state 2>/dev/null || echo 'Stopped')"
+
+  echo
+  echo "============================================================"
+  echo "Security Mode Status"
+  echo "============================================================"
+  status_line "Detected profile" "INFO" "$env"
+  status_line "Deployment mode" "INFO" "${DEPLOYMENT_MODE:-development}"
+  status_line "Site/domain" "INFO" "$domain"
+  status_line "VM IP" "INFO" "$vm_ip"
+  status_line "Install" "$([[ "$install_state_value" == "Installed" ]] && echo OK || echo WARN)" "$install_state_value"
+  status_line "Runtime" "$([[ "$runtime" == Running* ]] && echo OK || echo WARN)" "$runtime"
+
+  if [[ "$env" == "production" ]]; then
+    ssl_pair="$(production_ssl_overall_status 2>/dev/null || echo 'WARN|not configured')"
+    ssl_status="${ssl_pair%%|*}"
+    ssl_detail="${ssl_pair#*|}"
+    status_line "Production HTTPS" "$ssl_status" "$ssl_detail"
+    echo
+    echo "Production hardening should run only after the real domain, DNS, install, service, and HTTPS path are validated."
+  else
+    if ssl_is_configured 2>/dev/null; then
+      status_line "Local HTTPS" "OK" "configured"
+    else
+      status_line "Local HTTPS" "INFO" "not configured yet"
+    fi
+    echo
+    echo "Local VM hardening keeps dev access available from private networks. It must not block 8000/9000 unless Nginx/HTTPS is fully replacing direct Bench access."
+  fi
+
+  if ufw_is_active; then
+    ufw_state="active"
+  else
+    ufw_state="inactive or not installed"
+  fi
+  status_line "UFW" "$([[ "$ufw_state" == active ]] && echo OK || echo INFO)" "$ufw_state"
+  echo "============================================================"
+}
+
+firewall_backup_snapshot() {
+  local stamp target
+  require_sudo
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  target="${FIREWALL_BACKUP_DIR}/${stamp}"
+  $SUDO mkdir -p "$target"
+  $SUDO chmod 700 "${FIREWALL_BACKUP_DIR}" "$target" 2>/dev/null || true
+
+  if command -v ufw >/dev/null 2>&1; then
+    ufw_status_raw | $SUDO tee "${target}/ufw-status.txt" >/dev/null || true
+    $SUDO cp -a /etc/ufw/user.rules "${target}/user.rules" 2>/dev/null || true
+    $SUDO cp -a /etc/ufw/user6.rules "${target}/user6.rules" 2>/dev/null || true
+    $SUDO cp -a /etc/ufw/before.rules "${target}/before.rules" 2>/dev/null || true
+    $SUDO cp -a /etc/ufw/before6.rules "${target}/before6.rules" 2>/dev/null || true
+  else
+    printf 'UFW not installed at snapshot time.\n' | $SUDO tee "${target}/ufw-status.txt" >/dev/null || true
+  fi
+
+  ok "Firewall rollback snapshot saved: ${target}"
+}
+
+firewall_latest_snapshot() {
+  $SUDO find "${FIREWALL_BACKUP_DIR}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -1 || true
+}
+
+show_firewall_rollback_snapshots() {
+  require_sudo
+  echo
+  echo "============================================================"
+  echo "Firewall Rollback Snapshots"
+  echo "============================================================"
+  if [[ ! -d "${FIREWALL_BACKUP_DIR}" ]]; then
+    status_line "Snapshots" "INFO" "none yet"
+  else
+    $SUDO find "${FIREWALL_BACKUP_DIR}" -mindepth 1 -maxdepth 1 -type d -printf '%TY-%Tm-%Td %TH:%TM  %p\n' 2>/dev/null | sort -r | head -10 | sed 's/^/  /' || true
+  fi
+  echo
+  echo "Rollback guidance: these snapshots preserve UFW rule files before toolkit changes. If access breaks, use the provider console and inspect the latest folder."
+  echo "============================================================"
+}
+
+private_network_allow_sources() {
+  printf '%s\n' "10.0.0.0/8" "172.16.0.0/12" "192.168.0.0/16"
+}
+
+current_ssh_client_ip() {
+  if [[ -n "${SSH_CLIENT:-}" ]]; then
+    printf '%s\n' "${SSH_CLIENT%% *}"
+  fi
+}
+
+allow_local_dev_ports() {
+  local source current_ip
+
+  # SSH is intentionally kept broadly allowed at the VM firewall layer to avoid lockout.
+  # Restrict SSH at the host/router/cloud layer when needed.
+  $SUDO ufw allow 22/tcp
+  $SUDO ufw allow 80/tcp
+  $SUDO ufw allow 443/tcp
+
+  while read -r source; do
+    [[ -n "$source" ]] || continue
+    $SUDO ufw allow from "$source" to any port 8000 proto tcp
+    $SUDO ufw allow from "$source" to any port 9000 proto tcp
+  done < <(private_network_allow_sources)
+
+  current_ip="$(current_ssh_client_ip || true)"
+  if [[ -n "$current_ip" ]]; then
+    $SUDO ufw allow from "$current_ip" to any port 22 proto tcp || true
+    $SUDO ufw allow from "$current_ip" to any port 8000 proto tcp || true
+    $SUDO ufw allow from "$current_ip" to any port 9000 proto tcp || true
+  fi
+}
+
+configure_local_vm_firewall() {
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "Apply Local VM Firewall Profile"
+  echo "============================================================"
+  echo "This profile is for local .test development VMs. It keeps direct Bench access available."
+  echo
+  echo "Allowed:"
+  echo "  - 22/tcp for SSH"
+  echo "  - 80/tcp and 443/tcp for local Nginx/SSL"
+  echo "  - 8000/tcp and 9000/tcp from private RFC1918 networks for local Bench access"
+  echo
+  echo "Blocked by default: public/non-private inbound traffic and internal service ports."
+  echo
+  if is_public_vm_workflow; then
+    warn "This VM is currently marked as public/production. Use the Production Firewall Profile unless you are intentionally switching back to local dev."
+  fi
+  confirm "Apply Local VM firewall profile now?" || return 1
+
+  firewall_backup_snapshot
+  log "Installing UFW"
+  $SUDO apt-get update
+  $SUDO apt-get install -y ufw
+
+  log "Applying Local VM UFW profile"
+  $SUDO ufw default deny incoming
+  $SUDO ufw default allow outgoing
+  allow_local_dev_ports
+
+  # Keep Redis/MariaDB-style internal ports closed externally.
+  for port in 11000 12000 13000 3306; do
+    $SUDO ufw delete allow "${port}/tcp" >/dev/null 2>&1 || true
+    $SUDO ufw delete allow "$port" >/dev/null 2>&1 || true
+  done
+
+  $SUDO ufw --force enable
+
+  ui_box_start "Result Summary"
+  status_line "Profile" "OK" "Local VM"
+  status_line "Dev access" "OK" "8000/9000 allowed from private networks"
+  status_line "HTTP/HTTPS" "OK" "80/443 allowed"
+  status_line "Rollback snapshot" "OK" "${FIREWALL_BACKUP_DIR}"
+  ui_box_end
+  verify_local_firewall_profile || true
+  ui_next "$(toolkit_cmd verify-access)" "$(toolkit_cmd vm-firewall-status)"
+}
+
+configure_production_vm_firewall() {
+  local ssl_pair ssl_status ssl_detail
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "Apply Production Firewall Profile"
+  echo "============================================================"
+  echo "This profile is for a public VM behind Nginx/HTTPS. It blocks direct backend ports."
+  echo
+  if ! is_public_vm_workflow; then
+    err "This VM is currently detected as local/development."
+    status_line "Deployment mode" "WARN" "${DEPLOYMENT_MODE:-development}"
+    status_line "Site" "WARN" "$SITE_NAME"
+    echo
+    echo "Set a real production domain first with: $(toolkit_cmd set-domain)"
+    echo "Or use the Local VM Firewall Profile instead."
+    return 1
+  fi
+
+  if [[ -z "${PRODUCTION_DOMAIN:-}" ]] || ! validate_production_domain_value "${PRODUCTION_DOMAIN:-}" >/dev/null 2>&1; then
+    err "A valid production domain is required before production firewall hardening."
+    echo "Run: $(toolkit_cmd set-domain)"
+    return 1
+  fi
+
+  ssl_pair="$(production_ssl_overall_status 2>/dev/null || echo 'WARN|not configured')"
+  ssl_status="${ssl_pair%%|*}"
+  ssl_detail="${ssl_pair#*|}"
+  status_line "Production HTTPS" "$ssl_status" "$ssl_detail"
+  if [[ "$ssl_status" != "OK" ]]; then
+    warn "Production HTTPS is not confirmed. Blocking backend ports now may remove your only working browser access path."
+    confirm "Continue anyway and apply production firewall profile?" || return 1
+  else
+    confirm "Apply production firewall profile now?" || return 1
+  fi
+
+  firewall_backup_snapshot
+  log "Installing UFW"
+  $SUDO apt-get update
+  $SUDO apt-get install -y ufw
+
+  log "Applying Production UFW profile"
+  $SUDO ufw default deny incoming
+  $SUDO ufw default allow outgoing
+  $SUDO ufw allow 22/tcp
+  $SUDO ufw allow 80/tcp
+  $SUDO ufw allow 443/tcp
+
+  for port in 8000 9000 11000 12000 13000 3306; do
+    $SUDO ufw delete allow "${port}/tcp" >/dev/null 2>&1 || true
+    $SUDO ufw delete allow "$port" >/dev/null 2>&1 || true
+    $SUDO ufw deny "${port}/tcp" >/dev/null 2>&1 || true
+  done
+
+  $SUDO ufw --force enable
+
+  ui_box_start "Result Summary"
+  status_line "Profile" "OK" "Production"
+  status_line "Public entry" "OK" "80/443 allowed"
+  status_line "Backend ports" "OK" "8000/9000 blocked at UFW layer"
+  status_line "Rollback snapshot" "OK" "${FIREWALL_BACKUP_DIR}"
+  ui_box_end
+  show_vm_firewall_status
+}
+
+verify_local_firewall_profile() {
+  require_sudo
+  echo
+  echo "============================================================"
+  echo "Local Firewall Access Check"
+  echo "============================================================"
+  if ! command -v ufw >/dev/null 2>&1; then
+    status_line "UFW" "WARN" "not installed"
+    echo "============================================================"
+    return 1
+  fi
+  ufw_is_active && status_line "UFW" "OK" "active" || status_line "UFW" "WARN" "inactive"
+  for port in 22 80 443 8000 9000; do
+    if ufw_port_has_allow "$port"; then
+      status_line "Port ${port}" "OK" "allow rule present"
+    else
+      status_line "Port ${port}" "WARN" "no allow rule detected"
+    fi
+  done
+  echo
+  echo "Host-side tests to run from your host machine:"
+  echo "  curl -I http://$(get_vm_ip 2>/dev/null || echo VM_IP):8000"
+  echo "  curl -I http://${SITE_NAME}:8000"
+  echo "============================================================"
+}
+
+repair_local_access() {
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "Repair Local VM Access"
+  echo "============================================================"
+  echo "This restores the local development access profile after hardening blocks erp.test or port 8000."
+  echo
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "VM IP" "INFO" "$(get_vm_ip 2>/dev/null || echo unknown)"
+  echo
+  confirm "Restore local firewall access now?" || return 1
+
+  firewall_backup_snapshot
+  $SUDO apt-get update
+  $SUDO apt-get install -y ufw
+  $SUDO ufw default deny incoming
+  $SUDO ufw default allow outgoing
+  allow_local_dev_ports
+  $SUDO ufw --force enable
+
+  ui_box_start "Result Summary"
+  status_line "Local access" "OK" "22/80/443 and private 8000/9000 rules restored"
+  status_line "Rollback snapshot" "OK" "${FIREWALL_BACKUP_DIR}"
+  ui_box_end
+  verify_local_firewall_profile || true
+  verify_access || true
+}
+
+
 vm_firewall_plan() {
   local vm_ip domain
 
@@ -4576,7 +4953,26 @@ show_vm_firewall_status() {
           detail="no UFW allow rule detected; Cloudflare/Nginx may be blocked"
         fi
         ;;
-      8000|9000|11000|13000)
+      8000|9000)
+        if ufw_port_has_allow "$port"; then
+          if is_public_vm_workflow; then
+            state="WARN"
+            detail="explicit UFW allow rule found; remove it for production after HTTPS works"
+          else
+            state="OK"
+            detail="allowed for local VM direct Bench access"
+          fi
+        else
+          if is_public_vm_workflow; then
+            state="OK"
+            detail="no explicit UFW allow rule; backend should be blocked publicly"
+          else
+            state="WARN"
+            detail="no allow rule detected; local erp.test:8000 may be blocked"
+          fi
+        fi
+        ;;
+      11000|13000)
         if ufw_port_has_allow "$port"; then
           state="WARN"
           detail="explicit UFW allow rule found; remove it unless you intentionally need this"
@@ -4597,6 +4993,7 @@ show_vm_firewall_status() {
   echo "============================================================"
 }
 
+
 configure_vm_firewall() {
   require_sudo
 
@@ -4604,46 +5001,18 @@ configure_vm_firewall() {
   echo "============================================================"
   echo "Configure VM Firewall / UFW"
   echo "============================================================"
-  echo "This applies safe UFW defaults inside the VM:"
-  echo "  - deny incoming by default"
-  echo "  - allow outgoing by default"
-  echo "  - allow 22/tcp from any source at UFW layer to avoid lockout"
-  echo "  - allow 80/tcp and 443/tcp"
-  echo "  - no allow rules for 8000, 9000, 11000, or 13000"
+  echo "This command is now environment-aware. It will choose a Local VM or Production profile based on saved config."
   echo
-  echo "SSH restriction should stay in the cloud provider firewall unless you intentionally run ufw-ssh-admin-only."
-  confirm "Configure safe UFW defaults now?" || return 1
+  security_mode_status
+  echo
 
-  log "Installing UFW"
-  $SUDO apt-get update
-  $SUDO apt-get install -y ufw
-
-  log "Applying safe UFW defaults"
-  $SUDO ufw default deny incoming
-  $SUDO ufw default allow outgoing
-  $SUDO ufw allow 22/tcp
-  $SUDO ufw allow 80/tcp
-  $SUDO ufw allow 443/tcp
-
-  # Remove common accidental backend allow rules when possible.
-  for port in 8000 9000 11000 13000; do
-    $SUDO ufw delete allow "${port}/tcp" >/dev/null 2>&1 || true
-    $SUDO ufw delete allow "$port" >/dev/null 2>&1 || true
-  done
-
-  $SUDO ufw --force enable
-
-  ui_box_start "Result Summary"
-  status_line "UFW" "OK" "enabled with safe defaults"
-  status_line "Incoming policy" "OK" "deny by default"
-  status_line "Outgoing policy" "OK" "allow by default"
-  status_line "SSH" "OK" "22/tcp allowed in UFW; restrict at cloud firewall"
-  status_line "HTTP/HTTPS" "OK" "80/tcp and 443/tcp allowed"
-  status_line "Backend ports" "OK" "8000/9000/11000/13000 not allowed in UFW"
-  ui_box_end
-  ui_next \
-    "$(toolkit_cmd vm-firewall-status)" \
-    "$(toolkit_cmd firewall-hardening-status)"
+  if is_public_vm_workflow; then
+    echo "Detected production/public VM workflow."
+    configure_production_vm_firewall
+  else
+    echo "Detected local/development VM workflow."
+    configure_local_vm_firewall
+  fi
 }
 
 configure_ufw_ssh_admin_only() {
@@ -4777,6 +5146,7 @@ EOF
   ui_next "$(toolkit_cmd fail2ban-status)" "$(toolkit_cmd security-hardening-wizard)"
 }
 
+
 security_hardening_wizard() {
   local choice
 
@@ -4786,25 +5156,36 @@ security_hardening_wizard() {
     echo "============================================================"
     echo "Security Hardening"
     echo "============================================================"
-    echo "1) Plan"
-    echo "2) Apply safe UFW defaults"
-    echo "3) UFW status"
-    echo "4) Apply Fail2Ban for SSH"
-    echo "5) Fail2Ban status"
-    echo "6) Public firewall status"
-    echo "7) Advanced: restrict SSH in UFW"
+    security_mode_status
     echo
-    echo "Recommended: run 2 and 4. Keep SSH IP restriction in the cloud provider firewall by default."
+    print_two_column_menu \
+      "1) Security mode status" \
+      "2) Local VM firewall profile" \
+      "3) Production firewall profile" \
+      "4) Environment-aware firewall" \
+      "5) Repair local VM access" \
+      "6) UFW status" \
+      "7) Apply Fail2Ban for SSH" \
+      "8) Fail2Ban status" \
+      "9) Public firewall status" \
+      "10) Firewall rollback snapshots" \
+      "11) Advanced: restrict SSH in UFW"
+    echo
+    echo "Use Local VM profile for erp.test/dev access. Use Production profile only after real domain + HTTPS are verified."
     menu_footer
     read -r -p "Choose an option: " choice
     case "$choice" in
-      1) vm_firewall_plan ;;
-      2) configure_vm_firewall ;;
-      3) show_vm_firewall_status ;;
-      4) configure_fail2ban ;;
-      5) show_fail2ban_status ;;
-      6) show_firewall_hardening_status ;;
-      7) configure_ufw_ssh_admin_only ;;
+      1) security_mode_status ;;
+      2) configure_local_vm_firewall ;;
+      3) configure_production_vm_firewall ;;
+      4) configure_vm_firewall ;;
+      5) repair_local_access ;;
+      6) show_vm_firewall_status ;;
+      7) configure_fail2ban ;;
+      8) show_fail2ban_status ;;
+      9) show_firewall_hardening_status ;;
+      10) show_firewall_rollback_snapshots ;;
+      11) configure_ufw_ssh_admin_only ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *) warn "Invalid option." ;;
@@ -9797,6 +10178,35 @@ create_app_install_checkpoint() {
   fi
 }
 
+
+create_post_app_install_checkpoint() {
+  local display="$1"
+  local reply
+
+  if [[ "${APP_BACKUP_AFTER_INSTALL}" == "false" ]]; then
+    warn "Post-app backup skipped by APP_BACKUP_AFTER_INSTALL=false."
+    return 0
+  fi
+
+  echo
+  echo "Post-app backup checkpoint recommended after installing ${display}."
+
+  if [[ "${APP_BACKUP_AFTER_INSTALL}" == "true" || "$ASSUME_YES" -eq 1 ]]; then
+    create_site_backup true || warn "Post-app backup failed. Create a manual checkpoint before installing another app."
+    return 0
+  fi
+
+  if [[ -t 0 ]]; then
+    read -r -p "Create database + files backup after ${display}? [Y/n]: " reply
+    reply="${reply:-Y}"
+    if [[ "$reply" =~ ^[Yy]$ ]]; then
+      create_site_backup true || warn "Post-app backup failed. Create a manual checkpoint before installing another app."
+    else
+      warn "Post-app backup skipped. Take a VM snapshot or backup before installing the next app."
+    fi
+  fi
+}
+
 run_post_app_validation() {
   local app_name="$1"
   local display="$2"
@@ -9902,7 +10312,8 @@ app_wizard_preflight() {
   print_app_compatibility_snapshot "$bench_dir"
 
   echo
-  echo "Backup policy: ${APP_BACKUP_BEFORE_INSTALL}"
+  echo "Pre-app backup policy: ${APP_BACKUP_BEFORE_INSTALL}"
+  echo "Post-app backup policy: ${APP_BACKUP_AFTER_INSTALL}"
   echo "============================================================"
 }
 
@@ -10053,6 +10464,7 @@ install_frappe_app() {
   ok "${display} installation workflow completed"
   show_installed_apps
   run_post_app_validation "$app_name" "$display"
+  create_post_app_install_checkpoint "$display"
 }
 
 install_app_profile() {
@@ -12600,6 +13012,7 @@ Start here:
   set-domain          Save public domain and site config
   show-config         Show saved toolkit config
   setup-effort-guide  Show commands/input count by setup type
+  setup-lifecycle-plan Show recommended local/production setup order
 
 Core:
   version             Print toolkit version
@@ -12644,7 +13057,12 @@ Production / HTTPS:
   public-vm-readiness     Public VM DNS/access/listener check
 
 Security:
-  security-hardening-wizard  UFW + Fail2Ban workflow
+  security-hardening-wizard  Environment-aware UFW + Fail2Ban workflow
+  security-mode-status       Show local vs production hardening context
+  local-firewall-profile     Apply local VM profile; keeps 8000/9000 reachable privately
+  production-firewall-profile Apply production profile; blocks backend ports
+  repair-local-access        Restore local erp.test / port 8000 access after over-hardening
+  firewall-rollback-snapshots Show saved UFW rule snapshots
   firewall-hardening-status  Cloud firewall + backend-port guidance
   vm-firewall-status         UFW status
   fail2ban-status            SSH jail status
@@ -12760,7 +13178,7 @@ show_menu() {
     echo "============================================================"
     echo "${APP_NAME} v${SCRIPT_VERSION}"
     echo "============================================================"
-    print_two_column_menu       "1) Start here / setup wizard"       "2) Public VM quickstart"       "3) Local VM quickstart"       "4) Status"       "5) Start service"       "6) Stop service"       "7) Verify access"       "8) Local VM HTTPS / SSL"       "9) Production HTTPS / SSL"       "10) Security hardening"       "11) Backup / maintenance"       "12) Optional apps"       "13) Advanced"       "14) Final QA"       "15) Production operations"       "16) Help"
+    print_two_column_menu       "1) Start here / setup wizard"       "2) Public VM quickstart"       "3) Local VM quickstart"       "4) Status"       "5) Start service"       "6) Stop service"       "7) Verify access"       "8) Local VM HTTPS / SSL"       "9) Production HTTPS / SSL"       "10) Security profiles"       "11) Backup / maintenance"       "12) Optional apps"       "13) Advanced"       "14) Final QA"       "15) Production operations"       "16) Help"
     menu_footer quit-only
     read -r -p "Choose an option: " choice
 
@@ -12802,7 +13220,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -12981,7 +13399,12 @@ main() {
     production-firewall-plan|prod-firewall-plan) show_production_firewall_plan ;;
     firewall-hardening-status|firewall-status|hardening-status) show_firewall_hardening_status ;;
     vm-firewall-plan|ufw-plan) vm_firewall_plan ;;
+    security-mode-status) security_mode_status ;;
     configure-vm-firewall) configure_vm_firewall ;;
+    local-firewall-profile|local-security-profile) configure_local_vm_firewall ;;
+    production-firewall-profile|production-security-profile) configure_production_vm_firewall ;;
+    repair-local-access) repair_local_access ;;
+    firewall-rollback-snapshots) show_firewall_rollback_snapshots ;;
     vm-firewall-status|ufw-status) show_vm_firewall_status ;;
     configure-fail2ban) configure_fail2ban ;;
     fail2ban-status) show_fail2ban_status ;;
@@ -12997,6 +13420,7 @@ main() {
     ssl-mode-status) show_ssl_mode_status ;;
     ssl-mode-guide|ssl-compatibility) show_ssl_mode_guide ;;
     setup-effort-guide|setup-step-count) show_setup_effort_guide ;;
+    setup-lifecycle-plan|setup-order-plan) show_setup_lifecycle_plan ;;
     disable-production-ssl) disable_production_ssl ;;
     production-domain-guide) show_production_domain_guide ;;
     production-ssl-guide) show_production_ssl_guide ;;

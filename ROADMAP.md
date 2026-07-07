@@ -1,3 +1,11 @@
+## v1.1.34 completed security profile and setup lifecycle hardening
+
+- Added separate Local VM and Production firewall profiles.
+- Added local access repair for over-hardened `.test` VMs.
+- Added firewall rollback snapshots before UFW changes.
+- Added setup lifecycle guidance for local and production installs.
+- Added post-core and post-app backup checkpoints.
+
 # Roadmap
 
 ## v1.1.33 completed local domain workflow

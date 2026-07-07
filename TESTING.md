@@ -1,8 +1,47 @@
+# Testing
+
+## v1.1.34 environment-aware security and setup lifecycle checks
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh --help | grep -E "security-mode-status|local-firewall-profile|production-firewall-profile|repair-local-access|setup-lifecycle-plan"
+printf 'q\n' | MENU_TERMINAL_COLS=100 ./erpnext-dev.sh security-hardening-wizard
+printf 'q\n' | MENU_TERMINAL_COLS=100 ./erpnext-dev.sh public-vm-quickstart
+./erpnext-dev.sh setup-lifecycle-plan
+```
+
+Expected:
+
+```text
+ERPNext Developer Toolkit v1.1.34
+Security menu shows Local VM firewall profile, Production firewall profile, Repair local VM access, and rollback snapshots.
+Public VM quickstart shows the lifecycle order: requirements, domain, install, backup, HTTPS, security, apps, final status.
+```
+
+Local VM recovery test after accidental hardening:
+
+```bash
+sudo erpnext-dev repair-local-access
+sudo erpnext-dev vm-firewall-status
+sudo erpnext-dev verify-access
+```
+
+Expected: UFW is active, `8000` and `9000` have local/private access rules, and the tool prints host-side curl tests for `erp.test`.
+
+Production guard test on a local `.test` VM:
+
+```bash
+sudo erpnext-dev production-firewall-profile
+```
+
+Expected: the command refuses because no real production domain is configured.
+
 # ERPNext Developer Toolkit Testing Guide
 
 This file validates the current toolkit release. Version history belongs in `CHANGELOG.md`.
 
-## v1.1.33 local domain workflow checks
+## v1.1.34 local domain workflow checks
 
 ```bash
 bash -n erpnext-dev.sh
@@ -15,8 +54,8 @@ printf 'q\n' | MENU_TERMINAL_COLS=100 ./erpnext-dev.sh advanced | grep -E "47\) 
 Expected:
 
 ```text
-SCRIPT_VERSION="1.1.33"
-ERPNext Developer Toolkit v1.1.33
+SCRIPT_VERSION="1.1.34"
+ERPNext Developer Toolkit v1.1.34
 ```
 
 Manual VM validation after installing the patch:

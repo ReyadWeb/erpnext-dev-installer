@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.1.34 - Environment-aware security profiles and setup lifecycle
+
+- Replaced the generic security hardening flow with environment-aware security profiles so local `.test` VMs do not accidentally lose direct Bench access on ports `8000` and `9000`.
+- Added `security-mode-status`, `local-firewall-profile`, `production-firewall-profile`, `repair-local-access`, and `firewall-rollback-snapshots`.
+- Added UFW rollback snapshots before toolkit firewall changes under `/var/backups/erpnext-dev/firewall`.
+- Changed `configure-vm-firewall` to choose the correct Local VM or Production firewall profile based on saved deployment config.
+- Added a Local VM repair path that restores SSH, HTTP, HTTPS, and private-network Bench access after over-hardening.
+- Added production hardening guards so production firewall rules require a real production domain and warn if HTTPS is not confirmed.
+- Added a setup lifecycle plan covering requirements, domain, install, backup checkpoint, SSL, security profile, optional apps, post-app backups, and final QA.
+- Added a core-install backup checkpoint prompt after guided setup verification.
+- Added post-app backup checkpoints after every optional app install, controlled by `APP_BACKUP_AFTER_INSTALL`.
+- Updated the public VM quickstart menu to follow the safer order: requirements, domain, install, backup, HTTPS, security profile, apps, final QA.
+
 ## v1.1.33 - Local domain selection and rename workflow
 
 - Added an interactive local VM domain prompt to `local-dev-quickstart`; pressing Enter keeps the default `erp.test`.

@@ -806,6 +806,38 @@ sudo erpnext-dev disable-production-ssl
 
 ## Security hardening
 
+### Environment-aware security profiles
+
+Use the profile that matches the VM type. Do not apply the production firewall profile to a local `.test` VM unless local HTTPS/Nginx has fully replaced direct Bench access.
+
+```bash
+sudo erpnext-dev security-mode-status
+sudo erpnext-dev security-hardening-wizard
+
+# Local VM / erp.test profile
+sudo erpnext-dev local-firewall-profile
+
+# Repair local access if hardening blocked erp.test or port 8000
+sudo erpnext-dev repair-local-access
+
+# Production profile, only after real domain + HTTPS are verified
+sudo erpnext-dev production-firewall-profile
+
+# Inspect rollback snapshots created before UFW changes
+sudo erpnext-dev firewall-rollback-snapshots
+```
+
+Local VM profile keeps `8000` and `9000` reachable from private networks for development. Production profile blocks direct backend ports and leaves only SSH, HTTP, and HTTPS open at the VM firewall layer.
+
+### Recommended setup lifecycle
+
+```bash
+sudo erpnext-dev setup-lifecycle-plan
+```
+
+The intended order is: requirements, domain, install, verification, backup checkpoint, SSL, security profile, optional apps, backup after every app, final QA and credentials handoff.
+
+
 ```bash
 sudo erpnext-dev security-hardening-wizard
 sudo erpnext-dev configure-vm-firewall
