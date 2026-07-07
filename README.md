@@ -193,7 +193,7 @@ sudo erpnext-dev production-ops-wizard
 | Scenario | Command | Recommended hostname |
 |---|---|---|
 | VM safety check before install | `install-preflight` | not required yet |
-| Local VM testing/dev | `local-dev-quickstart` | `erp.test` |
+| Local VM testing/dev | `local-dev-quickstart` | prompts; Enter defaults to `erp.test` |
 | Public VPS/cloud VM | `public-vm-quickstart` | `erp.example.com` |
 | Existing install operations | `production-ops-wizard` | saved site/domain |
 | Optional Frappe apps | `app-install-wizard` | existing site |
@@ -764,11 +764,28 @@ sudo erpnext-dev production-ssl-wizard
 | Let's Encrypt | Public VM, DNS directly to VM | Requires HTTP-01 validation on port 80 |
 | Cloudflare Origin CA | Public VM behind Cloudflare proxy | Requires Cloudflare proxy and Full (strict) |
 
+### Local VM domain selection and rename
+
+During `local-dev-quickstart`, the toolkit asks for the local VM domain / Frappe site name. Press Enter to use the default:
+
+```text
+erp.test
+```
+
+To change it after installation, use:
+
+```bash
+sudo erpnext-dev change-local-domain
+```
+
+The wizard backs up the existing site when possible, runs the Frappe site rename, updates the Bench default site, updates the toolkit config, disables the old local SSL Nginx site, and prints the exact `/etc/hosts` commands to run on the host machine. Rebuild local SSL after a domain change because certificates are domain-specific.
+
 Local SSL commands:
 
 ```bash
 sudo erpnext-dev local-ssl-menu
 sudo erpnext-dev local-ssl-wizard
+sudo erpnext-dev change-local-domain
 sudo erpnext-dev verify-local-ssl
 sudo erpnext-dev disable-local-ssl
 ```

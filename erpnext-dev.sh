@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.32"
+SCRIPT_VERSION="1.1.33"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -231,7 +231,7 @@ acquire_toolkit_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|repair-site-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
       return 0
       ;;
     *)
@@ -806,6 +806,215 @@ prompt_for_site_name_if_needed() {
   fi
 }
 
+choose_local_site_name_for_setup() {
+  local reply normalized default_name
+
+  if [[ "$SITE_NAME_ENV_PROVIDED" -eq 1 ]]; then
+    validate_site_name_value "$SITE_NAME" || fail "Invalid SITE_NAME override."
+    SITE_NAME="${SITE_NAME,,}"
+    SITE_NAME_SOURCE="environment"
+    maybe_warn_site_name "$SITE_NAME"
+    echo "Using local VM domain: ${SITE_NAME}"
+    return 0
+  fi
+
+  default_name="${SITE_NAME:-erp.test}"
+  if [[ -z "$default_name" || "$default_name" != *.test ]]; then
+    default_name="erp.test"
+  fi
+
+  if [[ -t 0 && "$ASSUME_YES" -ne 1 ]]; then
+    while true; do
+      echo
+      read -r -p "Local VM domain / Frappe site name [${default_name}]: " reply
+      reply="${reply:-$default_name}"
+      normalized="${reply,,}"
+
+      if validate_site_name_value "$normalized" >/dev/null 2>&1; then
+        SITE_NAME="$normalized"
+        SITE_NAME_SOURCE="setup prompt"
+        maybe_warn_site_name "$SITE_NAME"
+        echo "Using local VM domain: ${SITE_NAME}"
+        return 0
+      fi
+
+      echo "Invalid site name. Use a hostname like erp.test, school.test, or client-a.test. Do not include http://, ports, spaces, or slashes."
+    done
+  else
+    SITE_NAME="$default_name"
+    SITE_NAME_SOURCE="local quickstart"
+    validate_site_name_value "$SITE_NAME" || fail "Invalid local VM domain."
+    echo "Using local VM domain: ${SITE_NAME}"
+  fi
+}
+
+local_ssl_paths_for_site() {
+  local site="$1" slug
+  slug="$(printf '%s' "$site" | tr -c 'A-Za-z0-9._-' '-')"
+  printf '%s\n' \
+    "${SSL_NGINX_CONF_DIR}/sites-available/erpnext-dev-${slug}.conf" \
+    "${SSL_NGINX_CONF_DIR}/sites-enabled/erpnext-dev-${slug}.conf" \
+    "${SSL_CERT_DIR}/${site}.crt" \
+    "${SSL_CERT_DIR}/${site}.key"
+}
+
+change_local_domain_wizard() {
+  require_sudo
+
+  local bench_dir old_site new_site reply normalized vm_ip site_exists_flag service_was_active old_available old_enabled old_cert old_key maybe_rebuild_ssl
+  local -a _local_ssl_paths
+  bench_dir="$(active_bench_dir)"
+  old_site="$SITE_NAME"
+  vm_ip="$(get_vm_ip 2>/dev/null || echo unknown)"
+  site_exists_flag="no"
+  service_was_active="no"
+  maybe_rebuild_ssl="no"
+
+  if [[ -d "${bench_dir}/sites/${old_site}" ]]; then
+    site_exists_flag="yes"
+  fi
+
+  readarray -t _local_ssl_paths < <(local_ssl_paths_for_site "$old_site")
+  old_available="${_local_ssl_paths[0]:-}"
+  old_enabled="${_local_ssl_paths[1]:-}"
+  old_cert="${_local_ssl_paths[2]:-}"
+  old_key="${_local_ssl_paths[3]:-}"
+
+  echo
+  echo "============================================================"
+  echo "Change Local VM Domain / Site Name"
+  echo "============================================================"
+  status_line "Current local site" "INFO" "$old_site"
+  status_line "Bench" "INFO" "$bench_dir"
+  status_line "Site folder" "$([[ "$site_exists_flag" == yes ]] && echo OK || echo WARN)" "$([[ "$site_exists_flag" == yes ]] && echo present || echo not-found/config-only)"
+  status_line "VM IP" "INFO" "$vm_ip"
+  echo
+  echo "Use a .test name for local VM work, for example: erp.test, erpnext.test, school.test."
+  echo "Press Enter to keep the current value."
+  echo
+
+  while true; do
+    if [[ -t 0 && "$ASSUME_YES" -ne 1 ]]; then
+      read -r -p "New local VM domain [${old_site}]: " reply || reply=""
+      reply="${reply:-$old_site}"
+    else
+      reply="$old_site"
+    fi
+    normalized="${reply,,}"
+
+    if validate_site_name_value "$normalized" >/dev/null 2>&1; then
+      new_site="$normalized"
+      break
+    fi
+    echo "Invalid site name. Use a hostname only, for example erpnext.test."
+  done
+
+  if [[ "$new_site" == "$old_site" ]]; then
+    ok "No change needed. Local site is already ${old_site}."
+    show_site_config
+    return 0
+  fi
+
+  if [[ "$new_site" != *.test ]]; then
+    warn "For local VM work, .test is strongly recommended. Selected: ${new_site}"
+    if ! confirm "Continue with ${new_site}?"; then
+      fail "Local domain change cancelled."
+    fi
+  fi
+
+  if [[ -d "${bench_dir}/sites/${new_site}" ]]; then
+    fail "Target site already exists: ${bench_dir}/sites/${new_site}"
+  fi
+
+  echo
+  echo "Planned change:"
+  status_line "Old local site" "INFO" "$old_site"
+  status_line "New local site" "INFO" "$new_site"
+  if [[ "$site_exists_flag" == yes ]]; then
+    status_line "Frappe action" "INFO" "bench rename-site"
+    status_line "Backup" "INFO" "database + files before rename"
+  else
+    status_line "Frappe action" "INFO" "config-only; no site folder found"
+  fi
+  status_line "Host mapping" "INFO" "update HOST /etc/hosts after this finishes"
+  echo
+
+  if [[ "$ASSUME_YES" -ne 1 ]]; then
+    if ! confirm "Apply this local domain change now?"; then
+      fail "Local domain change cancelled."
+    fi
+  fi
+
+  if service_exists && systemctl is-active --quiet "${ERPNEXT_SERVICE_NAME}"; then
+    service_was_active="yes"
+    log "Stopping ERPNext service before site rename"
+    $SUDO systemctl stop "${ERPNEXT_SERVICE_NAME}" || warn "Could not stop ${ERPNEXT_SERVICE_NAME}; continuing carefully."
+  fi
+
+  if [[ "$site_exists_flag" == yes ]]; then
+    log "Creating safety backup for ${old_site}"
+    run_as_frappe "cd '${bench_dir}' && bench --site '${old_site}' backup --with-files" || warn "Backup command did not complete cleanly. Check Bench logs before relying on this backup."
+
+    log "Renaming Frappe site from ${old_site} to ${new_site}"
+    if ! run_as_frappe "cd '${bench_dir}' && if bench rename-site --help 2>&1 | grep -q -- '--force'; then bench rename-site --force '${old_site}' '${new_site}'; else bench rename-site '${old_site}' '${new_site}'; fi"; then
+      if [[ "$service_was_active" == yes ]]; then
+        $SUDO systemctl start "${ERPNEXT_SERVICE_NAME}" || true
+      fi
+      fail "bench rename-site failed. The toolkit config was not changed. Review the output above."
+    fi
+
+    log "Updating Bench default site"
+    run_as_frappe "cd '${bench_dir}' && bench use '${new_site}' && bench set-config -g default_site '${new_site}' && bench set-config -g serve_default_site true" || warn "Could not update Bench default site automatically."
+  fi
+
+  SITE_NAME="$new_site"
+  SITE_NAME_SOURCE="domain change wizard"
+  DEPLOYMENT_MODE="development"
+  PRODUCTION_DOMAIN=""
+  PRODUCTION_SSL_MODE="planned"
+  write_dev_config_file
+  SITE_NAME_SOURCE="saved config"
+
+  if [[ -n "$old_enabled" && -e "$old_enabled" ]]; then
+    log "Disabling old local SSL Nginx site for ${old_site}"
+    $SUDO rm -f "$old_enabled" || true
+    maybe_rebuild_ssl="yes"
+  fi
+
+  if [[ -n "$old_available" && -e "$old_available" ]]; then
+    $SUDO mv "$old_available" "${old_available}.disabled.$(date +%Y%m%d_%H%M%S)" || true
+  fi
+
+  if command -v nginx >/dev/null 2>&1; then
+    $SUDO nginx -t >/dev/null 2>&1 && $SUDO systemctl reload nginx || true
+  fi
+
+  if [[ "$service_was_active" == yes ]]; then
+    log "Starting ERPNext service after site rename"
+    $SUDO systemctl start "${ERPNEXT_SERVICE_NAME}" || warn "Could not restart ${ERPNEXT_SERVICE_NAME}. Run: $(toolkit_cmd start)"
+  fi
+
+  ok "Local VM domain changed to ${SITE_NAME}"
+  echo
+  echo "Run this on your HOST machine, not inside the VM:"
+  echo "  sudo sed -i '/[[:space:]]${old_site//./\\.}\$/d' /etc/hosts"
+  echo "  echo \"${vm_ip} ${SITE_NAME}\" | sudo tee -a /etc/hosts"
+  echo
+  echo "Then test from the HOST:"
+  echo "  getent hosts ${SITE_NAME}"
+  echo "  curl -I http://${SITE_NAME}:8000"
+
+  if [[ "$maybe_rebuild_ssl" == yes || -f "$old_cert" || -f "$old_key" ]]; then
+    echo
+    warn "Local SSL certificates are domain-specific. Rebuild local SSL for ${SITE_NAME}."
+    echo "Recommended next command:"
+    echo "  $(toolkit_cmd local-ssl-wizard)"
+  fi
+
+  echo
+  show_site_config
+}
+
 write_dev_config_file() {
   require_sudo
 
@@ -896,6 +1105,9 @@ show_site_config() {
   echo "  $(toolkit_cmd_env "SITE_NAME=erp107.test" setup)"
   echo
   echo "Or run setup interactively and answer the site-name prompt."
+  echo
+  echo "To change the local domain after install:"
+  echo "  $(toolkit_cmd change-local-domain)"
   echo "============================================================"
 }
 
@@ -957,6 +1169,9 @@ show_site_name_guide() {
   echo "  ${CONFIG_FILE}"
   echo
   echo "Future commands reuse the saved name automatically."
+  echo
+  echo "To rename an existing local site automatically:"
+  echo "  $(toolkit_cmd change-local-domain)"
   echo "============================================================"
 }
 
@@ -3323,9 +3538,18 @@ run_local_dev_quickstart() {
 
   ui_box_start "Local VM Quickstart"
   echo "This path uses local development defaults and keeps inputs minimal."
-  status_line "Site" "INFO" "${SITE_NAME:-erp.test}"
+  echo "You can choose the local VM domain now, or press Enter for erp.test."
+  status_line "Current site" "INFO" "${SITE_NAME:-erp.test}"
   status_line "Production domain" "INFO" "not used"
   status_line "Mode" "INFO" "local development"
+  ui_box_end
+
+  choose_local_site_name_for_setup
+
+  ui_box_start "Local VM Setup Confirmation"
+  status_line "Local VM domain" "OK" "${SITE_NAME}"
+  status_line "Default if skipped" "INFO" "erp.test"
+  status_line "Production domain" "INFO" "not used"
   ui_box_end
 
   if confirm "Save local defaults and start guided setup now?"; then
@@ -12271,7 +12495,7 @@ show_local_ssl_menu() {
     echo "Use this for local VM domains such as erp.test."
     echo "For public domains, use Production HTTPS instead."
     echo
-    print_two_column_menu       "1) Local SSL Wizard"       "2) Local SSL Status"       "3) Local SSL Guide"       "4) Trusted mkcert Guide"       "5) Browser Trust Check"       "6) Install/Replace Cert"       "7) Verify Local SSL"       "8) Create Self-Signed Cert"       "9) Configure Local SSL"       "10) Disable Local SSL"       "11) Verify SSL Rollback"       "12) SSL/HTTPS Roadmap"
+    print_two_column_menu       "1) Local SSL Wizard"       "2) Local SSL Status"       "3) Local SSL Guide"       "4) Trusted mkcert Guide"       "5) Browser Trust Check"       "6) Install/Replace Cert"       "7) Verify Local SSL"       "8) Create Self-Signed Cert"       "9) Configure Local SSL"       "10) Disable Local SSL"       "11) Verify SSL Rollback"       "12) Change Local Domain"       "13) SSL/HTTPS Roadmap"
     menu_footer
     read -r -p "Choose an option: " ssl_choice
 
@@ -12287,7 +12511,8 @@ show_local_ssl_menu() {
       9) configure_local_ssl ;;
       10) disable_local_ssl ;;
       11) verify_ssl_rollback ;;
-      12) show_ssl_roadmap_guide ;;
+      12) change_local_domain_wizard ;;
+      13) show_ssl_roadmap_guide ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *) warn "Invalid option" ;;
@@ -12301,7 +12526,7 @@ show_advanced_menu() {
     echo "============================================================"
     echo "Advanced Options"
     echo "============================================================"
-    print_two_column_menu       "1) Install / Reinstall"       "2) Repair Environment"       "3) Uninstall / Reset"       "4) Autostart / Service Manager"       "5) Backup / Maintenance"       "6) App Library"       "7) Optional App Status"       "8) Full Health Report"       "9) VM Network Status"       "10) Environment / location check"       "11) KVM Fixed IP Guide"       "12) Multi-Environment Guide"       "13) Local VM HTTPS / SSL"       "14) Local SSL Status"       "15) Local SSL Guide"       "16) Local SSL Wizard"       "17) Trusted mkcert SSL Guide"       "18) Browser Trust Check Guide"       "19) Install/Replace Local SSL Cert"       "20) Verify Local SSL"       "21) Create Self-Signed Local Cert"       "22) Configure Local SSL"       "23) Disable Local SSL"       "24) Verify SSL Rollback"       "25) Storage Status"       "26) Expand Root Storage"       "27) Verify Storage"       "28) Domain Config"       "29) Production Readiness Preview"       "30) Production Domain Guide"       "31) Production SSL Guide"       "32) Public VM Readiness"       "33) Production SSL Plan"       "34) Production Firewall Plan"       "35) Firewall Hardening Status"       "36) Configure Production SSL"       "37) Production SSL Status"       "38) Disable Production SSL"       "39) Start Bench in Foreground"       "40) Show Service Logs"       "41) Access Submenu"       "42) Next Step"       "43) Verify ERPNext HTTP Access"       "44) App Install Wizard"       "45) App Rollback Guide"       "46) Install Environment Preflight"
+    print_two_column_menu       "1) Install / Reinstall"       "2) Repair Environment"       "3) Uninstall / Reset"       "4) Autostart / Service Manager"       "5) Backup / Maintenance"       "6) App Library"       "7) Optional App Status"       "8) Full Health Report"       "9) VM Network Status"       "10) Environment / location check"       "11) KVM Fixed IP Guide"       "12) Multi-Environment Guide"       "13) Local VM HTTPS / SSL"       "14) Local SSL Status"       "15) Local SSL Guide"       "16) Local SSL Wizard"       "17) Trusted mkcert SSL Guide"       "18) Browser Trust Check Guide"       "19) Install/Replace Local SSL Cert"       "20) Verify Local SSL"       "21) Create Self-Signed Local Cert"       "22) Configure Local SSL"       "23) Disable Local SSL"       "24) Verify SSL Rollback"       "25) Storage Status"       "26) Expand Root Storage"       "27) Verify Storage"       "28) Domain Config"       "29) Production Readiness Preview"       "30) Production Domain Guide"       "31) Production SSL Guide"       "32) Public VM Readiness"       "33) Production SSL Plan"       "34) Production Firewall Plan"       "35) Firewall Hardening Status"       "36) Configure Production SSL"       "37) Production SSL Status"       "38) Disable Production SSL"       "39) Start Bench in Foreground"       "40) Show Service Logs"       "41) Access Submenu"       "42) Next Step"       "43) Verify ERPNext HTTP Access"       "44) App Install Wizard"       "45) App Rollback Guide"       "46) Install Environment Preflight"       "47) Change Local Domain"
     menu_footer
     read -r -p "Choose an option: " advanced_choice
 
@@ -12352,6 +12577,7 @@ show_advanced_menu() {
       44) run_app_install_wizard ;;
       45) show_app_rollback_guide ;;
       46) run_install_preflight ;;
+      47) change_local_domain_wizard ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *) warn "Invalid option" ;;
@@ -12369,7 +12595,7 @@ Usage:
 Start here:
   first-run           Pick local VM, public VM, or maintenance flow
   public-vm-quickstart Domain -> install -> HTTPS -> security wizard
-  local-dev-quickstart Minimal-input local VM setup using erp.test
+  local-dev-quickstart Local VM setup; prompts for domain, Enter defaults to erp.test
   install-preflight   Check OS, internet, CPU, RAM, disk, and /tmp before installing
   set-domain          Save public domain and site config
   show-config         Show saved toolkit config
@@ -12400,6 +12626,7 @@ Core:
 Local VM HTTPS / SSL:
   local-ssl-menu       Local VM HTTPS / SSL submenu
   local-ssl-wizard     Guided local HTTPS setup for erp.test-style domains
+  change-local-domain  Rename the local VM domain/site and update toolkit config
   local-ssl-guide      Local SSL guide
   ssl-status           Local SSL status
   install-local-ssl-cert Install/replace local certificate from /tmp
@@ -12575,7 +12802,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -12745,6 +12972,7 @@ main() {
     expand-root-storage) expand_root_storage ;;
     verify-storage) verify_storage ;;
     domain-config) show_domain_config ;;
+    change-local-domain|local-domain-wizard|rename-local-site|change-site-domain) change_local_domain_wizard ;;
     production-readiness) show_production_readiness ;;
     production-plan|prod-plan) show_production_plan ;;
     production-domain-plan|prod-domain-plan) show_production_domain_plan ;;

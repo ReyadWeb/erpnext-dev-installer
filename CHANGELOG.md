@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.33 - Local domain selection and rename workflow
+
+- Added an interactive local VM domain prompt to `local-dev-quickstart`; pressing Enter keeps the default `erp.test`.
+- Added `change-local-domain`, `local-domain-wizard`, `rename-local-site`, and `change-site-domain` command aliases.
+- Added a menu entry under **Local VM HTTPS / SSL** to change the local domain after installation.
+- Added an Advanced menu entry for the same workflow so domain changes are discoverable from both SSL and maintenance paths.
+- The change workflow detects the current Frappe site, creates a safety backup when a site folder exists, runs `bench rename-site`, updates Bench default-site config, updates the toolkit config, disables the old local Nginx SSL site, and prints the host `/etc/hosts` replacement commands.
+- Updated help and documentation so the default/fresh-install domain choice and after-install rename path are explicit.
+
 ## v1.1.32 - Comprehensive HTTPS menu and handler audit
 
 - Fixed broken Local SSL menu actions by adding the missing central handlers for `local-ssl-wizard`, `ssl-status`, `install-local-ssl-cert`, `verify-local-ssl`, browser trust guidance, rollback guidance, and rollback verification.

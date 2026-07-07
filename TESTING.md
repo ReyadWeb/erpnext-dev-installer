@@ -2,6 +2,39 @@
 
 This file validates the current toolkit release. Version history belongs in `CHANGELOG.md`.
 
+## v1.1.33 local domain workflow checks
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh --help | grep -E "local-dev-quickstart|change-local-domain"
+printf 'q\n' | MENU_TERMINAL_COLS=100 ./erpnext-dev.sh local-ssl-menu | grep -E "Change Local Domain"
+printf 'q\n' | MENU_TERMINAL_COLS=100 ./erpnext-dev.sh advanced | grep -E "47\) Change Local Domain"
+```
+
+Expected:
+
+```text
+SCRIPT_VERSION="1.1.33"
+ERPNext Developer Toolkit v1.1.33
+```
+
+Manual VM validation after installing the patch:
+
+```bash
+sudo erpnext-dev domain-config
+sudo erpnext-dev change-local-domain
+sudo erpnext-dev domain-config
+sudo erpnext-dev verify-access
+```
+
+Expected behavior:
+
+- `local-dev-quickstart` asks for a local VM domain and Enter defaults to `erp.test`.
+- `change-local-domain` shows the current site, asks for the new `.test` hostname, backs up and renames the Frappe site when a site exists, updates toolkit config, and prints the host `/etc/hosts` replacement commands.
+- If local SSL was previously configured, the wizard disables the old local Nginx SSL site and tells the user to rebuild local SSL for the new hostname.
+
+
 ## v1.1.32 menu, SSL, and CLI validation
 
 Local syntax/version validation:

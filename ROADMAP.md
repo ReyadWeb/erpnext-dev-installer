@@ -1,5 +1,11 @@
 # Roadmap
 
+## v1.1.33 completed local domain workflow
+
+- Local quickstart now asks for the local VM domain at the beginning and defaults to `erp.test` when the user presses Enter.
+- Existing installs now have a guided `change-local-domain` workflow that backs up, renames the Frappe site, updates Bench/toolkit config, and prompts for local SSL rebuild.
+
+
 This roadmap is focused on making the ERPNext Developer Toolkit mature enough to install, manage, monitor, secure, back up, and maintain ERPNext/Frappe VMs reliably.
 
 The current priority remains the **VM-based installer and production operations toolkit**. A Docker-based ERPNext/Frappe installation method is planned as a separate future track, but it should not distract from hardening the VM workflow first.
