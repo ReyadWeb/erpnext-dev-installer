@@ -409,3 +409,19 @@ Expected:
 Fresh VM commands use a unique /tmp/erpnext-dev.XXXXXX.sh bootstrap path.
 Follow-up commands use sudo erpnext-dev.
 ```
+
+
+## README Start Here command order
+
+Validate that the README opens with the three intended installation paths:
+
+```bash
+grep -n "General guided setup" README.md
+grep -n "Local VM install" README.md
+grep -n "Production VPS / cloud VM install" README.md
+grep -n "sudo "\$tmp" start-here" README.md
+grep -n "sudo "\$tmp" local-dev-quickstart" README.md
+grep -n "sudo "\$tmp" public-vm-quickstart" README.md
+```
+
+The site-name guidance should appear after the corresponding command blocks, not before the first copy/paste command.

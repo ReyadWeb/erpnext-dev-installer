@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.1.38
+
+### Improved
+
+- Reworked the README Start Here section so the first visible items are copy/paste commands.
+- Added a general guided setup command using `start-here` so users can choose local or production from the wizard.
+- Kept separate first-run commands for local VM installs and production VPS/cloud installs.
+- Moved site-name guidance after each command: local defaults to `erp.test`; production uses a real domain such as `erp.example.com`.
+- Kept bootstrap path details lower in the README instead of showing them before the install commands.
+
+
 ## v1.1.37 - README start-here cleanup
 
 - Reworked the README **Start here** section so users see the practical install commands first.
