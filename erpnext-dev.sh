@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.31"
+SCRIPT_VERSION="1.1.32"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -231,7 +231,7 @@ acquire_toolkit_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
       return 0
       ;;
     *)
@@ -6338,6 +6338,418 @@ disable_local_ssl() {
   echo "============================================================"
 }
 
+
+ssl_is_configured() {
+  local cert_path key_path enabled_path available_path
+  cert_path="$(ssl_cert_path 2>/dev/null || true)"
+  key_path="$(ssl_key_path 2>/dev/null || true)"
+  enabled_path="$(ssl_nginx_enabled_path 2>/dev/null || true)"
+  available_path="$(ssl_nginx_available_path 2>/dev/null || true)"
+
+  [[ -n "$cert_path" && -f "$cert_path" ]] || return 1
+  [[ -n "$key_path" && -f "$key_path" ]] || return 1
+  [[ -n "$enabled_path" && ( -L "$enabled_path" || -f "$enabled_path" ) ]] || return 1
+  [[ -n "$available_path" && -f "$available_path" ]] || return 1
+  return 0
+}
+
+ssl_cert_is_self_signed() {
+  local cert_path="$1" issuer subject
+  [[ -n "$cert_path" && -f "$cert_path" ]] || return 1
+  issuer="$(openssl x509 -in "$cert_path" -noout -issuer 2>/dev/null | sed 's/^issuer=//' || true)"
+  subject="$(openssl x509 -in "$cert_path" -noout -subject 2>/dev/null | sed 's/^subject=//' || true)"
+  [[ -n "$issuer" && -n "$subject" && "$issuer" == "$subject" ]]
+}
+
+show_ssl_status() {
+  local cert_path key_path available_path enabled_path vm_ip https_head direct_head issuer subject dates nginx_state cert_state key_state site_state port443_state cert_type
+  cert_path="$(ssl_cert_path)"
+  key_path="$(ssl_key_path)"
+  available_path="$(ssl_nginx_available_path)"
+  enabled_path="$(ssl_nginx_enabled_path)"
+  vm_ip="$(get_vm_ip)"
+
+  echo
+  echo "============================================================"
+  echo "Local SSL / HTTPS Status"
+  echo "============================================================"
+  echo "Scope: local VM HTTPS only. Production HTTPS has a separate menu."
+  echo
+
+  if [[ -f "$cert_path" ]]; then
+    cert_state="present: ${cert_path}"
+  else
+    cert_state="missing: ${cert_path}"
+  fi
+  if [[ -f "$key_path" ]]; then
+    key_state="present: ${key_path}"
+  else
+    key_state="missing: ${key_path}"
+  fi
+  if [[ -f "$available_path" ]]; then
+    status_line "Nginx local config" "OK" "$available_path"
+  else
+    status_line "Nginx local config" "INFO" "not created yet"
+  fi
+  if [[ -L "$enabled_path" || -f "$enabled_path" ]]; then
+    site_state="enabled: ${enabled_path}"
+  else
+    site_state="disabled/not enabled"
+  fi
+
+  [[ -f "$cert_path" ]] && status_line "Certificate" "OK" "$cert_state" || status_line "Certificate" "WARN" "$cert_state"
+  [[ -f "$key_path" ]] && status_line "Private key" "OK" "$key_state" || status_line "Private key" "WARN" "$key_state"
+  [[ -L "$enabled_path" || -f "$enabled_path" ]] && status_line "Local HTTPS site" "OK" "$site_state" || status_line "Local HTTPS site" "INFO" "$site_state"
+
+  if command -v nginx >/dev/null 2>&1; then
+    nginx_state="installed"
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+      nginx_state="installed/running"
+    fi
+    status_line "Nginx" "OK" "$nginx_state"
+  else
+    status_line "Nginx" "INFO" "not installed yet"
+  fi
+
+  if port_listens 443; then
+    port443_state="listening"
+    https_head="$(curl_head_status "https://${SITE_NAME}/" "$SITE_NAME" 443 "127.0.0.1" || true)"
+    if [[ "$https_head" == HTTP/* ]]; then
+      status_line "HTTPS response" "OK" "$https_head"
+    else
+      status_line "HTTPS response" "WARN" "port 443 listens, but local HTTPS did not respond cleanly"
+    fi
+  else
+    port443_state="not listening"
+    status_line "Port 443" "INFO" "$port443_state"
+  fi
+
+  direct_head="$(curl_head_status "http://127.0.0.1:8000/" "" "" "" || true)"
+  if [[ "$direct_head" == HTTP/* ]]; then
+    status_line "Bench fallback" "OK" "http://127.0.0.1:8000 -> ${direct_head}"
+  else
+    status_line "Bench fallback" "WARN" "no direct Bench response on 127.0.0.1:8000"
+  fi
+
+  if [[ -f "$cert_path" ]]; then
+    issuer="$(certificate_issuer_for_file "$cert_path" 2>/dev/null || true)"
+    subject="$(certificate_subject_for_file "$cert_path" 2>/dev/null || true)"
+    dates="$(certificate_dates_for_file "$cert_path" 2>/dev/null || true)"
+    if ssl_cert_is_self_signed "$cert_path" 2>/dev/null; then
+      cert_type="self-signed/local test certificate"
+    else
+      cert_type="custom/trusted local certificate"
+    fi
+    status_line "Certificate type" "INFO" "$cert_type"
+    [[ -n "$subject" ]] && status_line "Certificate subject" "INFO" "$subject"
+    [[ -n "$issuer" ]] && status_line "Certificate issuer" "INFO" "$issuer"
+    [[ -n "$dates" ]] && status_line "Certificate dates" "INFO" "$dates"
+  fi
+
+  echo
+  echo "Useful commands:"
+  echo "  $(toolkit_cmd local-ssl-wizard)"
+  echo "  $(toolkit_cmd verify-local-ssl)"
+  echo "  $(toolkit_cmd disable-local-ssl)"
+  echo
+  echo "Host tests:"
+  echo "  curl -kI https://${SITE_NAME}"
+  echo "  curl -I http://${SITE_NAME}:8000"
+  echo "============================================================"
+}
+
+install_local_ssl_cert() {
+  require_erpnext_vm_context "install-local-ssl-cert" || return 1
+  require_sudo
+
+  local cert_path key_path src_cert src_key stamp
+  cert_path="$(ssl_cert_path)"
+  key_path="$(ssl_key_path)"
+  src_cert="${LOCAL_SSL_CERT_SOURCE:-/tmp/${SITE_NAME}.crt}"
+  src_key="${LOCAL_SSL_KEY_SOURCE:-/tmp/${SITE_NAME}.key}"
+
+  echo
+  echo "============================================================"
+  echo "Install / Replace Local SSL Certificate"
+  echo "============================================================"
+  echo "Source certificate: ${src_cert}"
+  echo "Source private key: ${src_key}"
+  echo "Target certificate: ${cert_path}"
+  echo "Target private key: ${key_path}"
+  echo
+
+  if [[ ! -f "$src_cert" || ! -f "$src_key" ]]; then
+    warn "Source certificate/key not found."
+    echo
+    echo "For trusted local SSL, generate the files on the HOST using mkcert, then copy them into the VM:"
+    echo "  mkcert -cert-file ${SITE_NAME}.crt -key-file ${SITE_NAME}.key ${SITE_NAME} $(get_vm_ip) localhost 127.0.0.1"
+    echo "  scp ${SITE_NAME}.crt ${SITE_NAME}.key $(suggested_vm_ssh_user)@$(get_vm_ip):/tmp/"
+    echo
+    echo "Then rerun:"
+    echo "  $(toolkit_cmd install-local-ssl-cert)"
+    echo
+    echo "For a fast untrusted test certificate, run:"
+    echo "  $(toolkit_cmd create-self-signed-local-cert)"
+    echo "============================================================"
+    return 1
+  fi
+
+  if ! validate_certificate_and_key_pair "$src_cert" "$src_key"; then
+    fail "The source certificate and key are invalid or do not match."
+  fi
+
+  $SUDO mkdir -p "$SSL_CERT_DIR"
+  stamp="$(date +%Y%m%d_%H%M%S)"
+  [[ -f "$cert_path" ]] && $SUDO cp "$cert_path" "${cert_path}.bak.${stamp}"
+  [[ -f "$key_path" ]] && $SUDO cp "$key_path" "${key_path}.bak.${stamp}"
+
+  $SUDO cp "$src_cert" "$cert_path"
+  $SUDO cp "$src_key" "$key_path"
+  $SUDO chown root:root "$cert_path" "$key_path"
+  $SUDO chmod 644 "$cert_path"
+  $SUDO chmod 600 "$key_path"
+
+  ok "Local SSL certificate installed"
+  echo
+  echo "Next steps:"
+  echo "  $(toolkit_cmd configure-local-ssl)"
+  echo "  $(toolkit_cmd verify-local-ssl)"
+  echo "============================================================"
+}
+
+verify_local_ssl() {
+  local vm_ip cert_path key_path enabled_path http_head https_head direct_head failed=0
+  vm_ip="$(get_vm_ip)"
+  cert_path="$(ssl_cert_path)"
+  key_path="$(ssl_key_path)"
+  enabled_path="$(ssl_nginx_enabled_path)"
+
+  echo
+  echo "============================================================"
+  echo "Verify Local SSL / HTTPS"
+  echo "============================================================"
+  echo
+
+  [[ -f "$cert_path" ]] && status_line "Certificate" "OK" "$cert_path" || { status_line "Certificate" "FAIL" "missing: $cert_path"; failed=1; }
+  [[ -f "$key_path" ]] && status_line "Private key" "OK" "$key_path" || { status_line "Private key" "FAIL" "missing: $key_path"; failed=1; }
+  [[ -L "$enabled_path" || -f "$enabled_path" ]] && status_line "Nginx site enabled" "OK" "$enabled_path" || { status_line "Nginx site enabled" "FAIL" "missing: $enabled_path"; failed=1; }
+
+  if command -v nginx >/dev/null 2>&1; then
+    if sudo -n nginx -t >/dev/null 2>&1; then
+      status_line "Nginx config" "OK" "nginx -t passed"
+    elif [[ "${EUID:-$(id -u)}" -eq 0 ]] && nginx -t >/dev/null 2>&1; then
+      status_line "Nginx config" "OK" "nginx -t passed"
+    else
+      status_line "Nginx config" "WARN" "could not verify without sudo, or nginx -t failed"
+    fi
+  else
+    status_line "Nginx" "FAIL" "not installed"
+    failed=1
+  fi
+
+  if port_listens 443; then
+    status_line "Port 443" "OK" "listening"
+  else
+    status_line "Port 443" "FAIL" "not listening"
+    failed=1
+  fi
+
+  direct_head="$(curl_head_status "http://127.0.0.1:8000/" "" "" "" || true)"
+  [[ "$direct_head" == HTTP/* ]] && status_line "Bench backend" "OK" "$direct_head" || status_line "Bench backend" "WARN" "no response on 127.0.0.1:8000"
+
+  http_head="$(curl_head_status "http://${SITE_NAME}/" "$SITE_NAME" 80 "127.0.0.1" || true)"
+  https_head="$(curl_head_status "https://${SITE_NAME}/" "$SITE_NAME" 443 "127.0.0.1" || true)"
+
+  [[ "$http_head" == HTTP/* ]] && status_line "Local HTTP entry" "OK" "$http_head" || status_line "Local HTTP entry" "WARN" "no HTTP response through Nginx"
+  if [[ "$https_head" == HTTP/* ]]; then
+    status_line "Local HTTPS entry" "OK" "$https_head"
+  else
+    status_line "Local HTTPS entry" "FAIL" "no HTTPS response through Nginx"
+    failed=1
+  fi
+
+  echo
+  echo "Host-side checks:"
+  echo "  getent hosts ${SITE_NAME}"
+  echo "  curl -kI https://${SITE_NAME}"
+  echo "  curl -I http://${SITE_NAME}:8000"
+  echo
+  echo "Expected host mapping:"
+  echo "  ${vm_ip} ${SITE_NAME}"
+  echo "============================================================"
+  return "$failed"
+}
+
+show_browser_trust_check_guide() {
+  local vm_ip
+  vm_ip="$(get_vm_ip)"
+  cat <<EOF_BROWSER_TRUST
+
+============================================================
+Browser Trust Check Guide
+============================================================
+
+Local HTTPS has two possible trust modes:
+
+1) Self-signed certificate
+   - Good for confirming that Nginx/HTTPS works.
+   - Browser warning is expected.
+   - curl requires -k:
+     curl -kI https://${SITE_NAME}
+
+2) mkcert trusted certificate
+   - Best local developer experience.
+   - The certificate is trusted by the HOST browser because mkcert installs a local CA on the HOST.
+   - curl/browser should work without a certificate warning after the host trusts the CA.
+
+Host checklist:
+  getent hosts ${SITE_NAME}
+  curl -kI https://${SITE_NAME}
+  curl -I http://${SITE_NAME}:8000
+
+Expected host /etc/hosts entry:
+  ${vm_ip} ${SITE_NAME}
+
+For trusted SSL, run on the HOST:
+  mkcert -install
+  mkcert -cert-file ${SITE_NAME}.crt -key-file ${SITE_NAME}.key ${SITE_NAME} ${vm_ip} localhost 127.0.0.1
+  scp ${SITE_NAME}.crt ${SITE_NAME}.key $(suggested_vm_ssh_user)@${vm_ip}:/tmp/
+
+Then run inside this VM:
+  $(toolkit_cmd install-local-ssl-cert)
+  $(toolkit_cmd configure-local-ssl)
+  $(toolkit_cmd verify-local-ssl)
+
+============================================================
+EOF_BROWSER_TRUST
+}
+
+show_ssl_rollback_guide() {
+  cat <<EOF_SSL_ROLLBACK
+
+============================================================
+Local SSL Rollback Guide
+============================================================
+
+Local SSL rollback is safe because the toolkit uses Nginx as a reverse proxy.
+It does not remove the ERPNext bench service and does not remove direct :8000 access.
+
+Recommended rollback:
+  $(toolkit_cmd disable-local-ssl)
+  $(toolkit_cmd verify-ssl-rollback)
+
+What rollback does:
+  - Removes/disables the local Nginx site symlink.
+  - Keeps certificate files for reuse.
+  - Keeps direct Bench access on port 8000.
+
+After rollback, use:
+  http://${SITE_NAME}:8000
+  http://$(get_vm_ip):8000
+
+If Nginx still listens on 443 because another site uses it, that is not necessarily an ERPNext local SSL issue.
+Check enabled Nginx sites:
+  ls -la /etc/nginx/sites-enabled/
+
+============================================================
+EOF_SSL_ROLLBACK
+}
+
+verify_ssl_rollback() {
+  local enabled_path direct_head failed=0
+  enabled_path="$(ssl_nginx_enabled_path)"
+
+  echo
+  echo "============================================================"
+  echo "Verify Local SSL Rollback"
+  echo "============================================================"
+  echo
+
+  if [[ -L "$enabled_path" || -f "$enabled_path" ]]; then
+    status_line "Local SSL site" "FAIL" "still enabled: ${enabled_path}"
+    failed=1
+  else
+    status_line "Local SSL site" "OK" "disabled"
+  fi
+
+  direct_head="$(curl_head_status "http://127.0.0.1:8000/" "" "" "" || true)"
+  if [[ "$direct_head" == HTTP/* ]]; then
+    status_line "Bench fallback" "OK" "$direct_head"
+  else
+    status_line "Bench fallback" "WARN" "no direct Bench response on 127.0.0.1:8000"
+  fi
+
+  if command -v nginx >/dev/null 2>&1; then
+    if sudo -n nginx -t >/dev/null 2>&1 || { [[ "${EUID:-$(id -u)}" -eq 0 ]] && nginx -t >/dev/null 2>&1; }; then
+      status_line "Nginx config" "OK" "nginx -t passed"
+    else
+      status_line "Nginx config" "WARN" "could not verify without sudo, or nginx -t failed"
+    fi
+  fi
+
+  echo
+  echo "Use after rollback:"
+  echo "  http://${SITE_NAME}:8000"
+  echo "  http://$(get_vm_ip):8000"
+  echo "============================================================"
+  return "$failed"
+}
+
+run_local_ssl_wizard() {
+  while true; do
+    echo
+    echo "============================================================"
+    echo "Local SSL Wizard"
+    echo "============================================================"
+    echo "Use this only for local VM domains such as ${SITE_NAME}."
+    echo "For public domains, use: $(toolkit_cmd production-ssl-menu)"
+    echo
+    print_two_column_menu \
+      "1) Quick self-signed setup" \
+      "2) Trusted mkcert setup" \
+      "3) Install/replace cert" \
+      "4) Configure/reload HTTPS" \
+      "5) Verify local HTTPS" \
+      "6) Local SSL status" \
+      "7) Browser trust guide" \
+      "8) Disable local HTTPS"
+    menu_footer
+    read -r -p "Choose an option: " wizard_choice
+
+    case "$wizard_choice" in
+      1)
+        create_self_signed_local_cert
+        configure_local_ssl
+        verify_local_ssl || true
+        ;;
+      2)
+        show_mkcert_local_ssl_guide
+        ;;
+      3)
+        install_local_ssl_cert
+        ;;
+      4)
+        configure_local_ssl
+        ;;
+      5)
+        verify_local_ssl
+        ;;
+      6)
+        show_ssl_status
+        ;;
+      7)
+        show_browser_trust_check_guide
+        ;;
+      8)
+        disable_local_ssl
+        ;;
+      b|B|"") return 0 ;;
+      q|Q) exit 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
+}
+
 show_kvm_fixed_ip_guide() {
   local vm_ip clean_name escaped_site
   vm_ip="$(get_vm_ip)"
@@ -11805,6 +12217,51 @@ show_service_menu() {
   done
 }
 
+
+show_production_ssl_menu() {
+  while true; do
+    echo
+    echo "============================================================"
+    echo "Production HTTPS / SSL"
+    echo "============================================================"
+    echo "Use this only for public domains. For erp.test/local VM HTTPS, use Local VM HTTPS / SSL."
+    echo
+    print_two_column_menu \
+      "1) Production SSL Wizard" \
+      "2) Production SSL Status" \
+      "3) Production SSL Plan" \
+      "4) Production SSL Guide" \
+      "5) Production Domain Guide" \
+      "6) Public VM Readiness" \
+      "7) Configure Let's Encrypt SSL" \
+      "8) Cloudflare Origin SSL" \
+      "9) Cloudflare Origin Status" \
+      "10) SSL Mode Status" \
+      "11) SSL Mode Guide" \
+      "12) Disable Production SSL"
+    menu_footer
+    read -r -p "Choose an option: " prod_ssl_choice
+
+    case "$prod_ssl_choice" in
+      1) production_ssl_wizard ;;
+      2) show_production_ssl_status ;;
+      3) show_production_ssl_plan ;;
+      4) show_production_ssl_guide ;;
+      5) show_production_domain_guide ;;
+      6) show_public_vm_readiness ;;
+      7) configure_production_ssl ;;
+      8) configure_cloudflare_origin_ssl ;;
+      9) show_cloudflare_origin_ssl_status ;;
+      10) show_ssl_mode_status ;;
+      11) show_ssl_mode_guide ;;
+      12) disable_production_ssl ;;
+      b|B|"") return 0 ;;
+      q|Q) exit 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
+}
+
 show_local_ssl_menu() {
   while true; do
     echo
@@ -11944,11 +12401,15 @@ Local VM HTTPS / SSL:
   local-ssl-menu       Local VM HTTPS / SSL submenu
   local-ssl-wizard     Guided local HTTPS setup for erp.test-style domains
   local-ssl-guide      Local SSL guide
+  ssl-status           Local SSL status
+  install-local-ssl-cert Install/replace local certificate from /tmp
+  create-self-signed-local-cert Create local self-signed certificate
   verify-local-ssl     Verify local HTTPS access
   disable-local-ssl    Disable local HTTPS config
 
 Production / HTTPS:
   production-readiness    Production-candidate check
+  production-ssl-menu     Production HTTPS / SSL submenu
   production-ssl-wizard   Choose Let's Encrypt or Cloudflare Origin CA
   production-ssl-status   HTTPS/Nginx/certificate status
   ssl-mode-status         Recommended SSL mode for current config
@@ -12072,7 +12533,7 @@ show_menu() {
     echo "============================================================"
     echo "${APP_NAME} v${SCRIPT_VERSION}"
     echo "============================================================"
-    print_two_column_menu       "1) Start here / setup wizard"       "2) Public VM quickstart"       "3) Local VM quickstart"       "4) Status"       "5) Start service"       "6) Stop service"       "7) Verify access"       "8) Local VM HTTPS / SSL"       "9) Production HTTPS status"       "10) Security hardening"       "11) Backup / maintenance"       "12) Optional apps"       "13) Advanced"       "14) Final QA"       "15) Production operations"       "16) Help"
+    print_two_column_menu       "1) Start here / setup wizard"       "2) Public VM quickstart"       "3) Local VM quickstart"       "4) Status"       "5) Start service"       "6) Stop service"       "7) Verify access"       "8) Local VM HTTPS / SSL"       "9) Production HTTPS / SSL"       "10) Security hardening"       "11) Backup / maintenance"       "12) Optional apps"       "13) Advanced"       "14) Final QA"       "15) Production operations"       "16) Help"
     menu_footer quit-only
     read -r -p "Choose an option: " choice
 
@@ -12085,7 +12546,7 @@ show_menu() {
       6) run_stop ;;
       7) verify_access ;;
       8) show_local_ssl_menu ;;
-      9) show_production_ssl_status ;;
+      9) show_production_ssl_menu ;;
       10) security_hardening_wizard ;;
       11) run_backup_maintenance_menu ;;
       12) show_app_library_menu ;;
@@ -12114,7 +12575,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -12298,6 +12759,7 @@ main() {
     fail2ban-status) show_fail2ban_status ;;
     security-hardening-wizard|vm-firewall-wizard) security_hardening_wizard ;;
     ufw-ssh-admin-only) configure_ufw_ssh_admin_only ;;
+    production-ssl-menu|production-https|production-https-menu) show_production_ssl_menu ;;
     production-ssl-wizard|ssl-provider-wizard) production_ssl_wizard ;;
     configure-production-ssl) configure_production_ssl ;;
     configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl) configure_cloudflare_origin_ssl ;;

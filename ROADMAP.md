@@ -6,9 +6,9 @@ The current priority remains the **VM-based installer and production operations 
 
 ---
 
-## v1.1.31 menu visibility baseline
+## v1.1.32 HTTPS menu baseline
 
-The command naming baseline is now `erpnext-dev.sh` for the bootstrap file and `erpnext-dev` for day-to-day operations. Local VM HTTPS / SSL and Optional Apps are first-level menu actions after installation. Future roadmap items should refer to the project as the ERPNext Developer Toolkit, not only an installer.
+The command naming baseline is `erpnext-dev.sh` for the bootstrap file and `erpnext-dev` for day-to-day operations. Local VM HTTPS / SSL, Production HTTPS / SSL, and Optional Apps are first-level menu actions after installation. Local HTTPS and production HTTPS must remain separate workflows with separate submenus, status checks, and rollback guidance. Future roadmap items should refer to the project as the ERPNext Developer Toolkit, not only an installer.
 
 ---
 

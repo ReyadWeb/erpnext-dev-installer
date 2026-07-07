@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.32 - Comprehensive HTTPS menu and handler audit
+
+- Fixed broken Local SSL menu actions by adding the missing central handlers for `local-ssl-wizard`, `ssl-status`, `install-local-ssl-cert`, `verify-local-ssl`, browser trust guidance, rollback guidance, and rollback verification.
+- Added shared local SSL helpers so every local HTTPS status/check path uses the same certificate, key, Nginx site, and self-signed detection logic.
+- Added a first-level **Production HTTPS / SSL** submenu instead of exposing only a production status check from the main menu.
+- Added `production-ssl-menu`, `production-https`, and `production-https-menu` command aliases.
+- Updated the main menu labels so local VM SSL and production SSL are clearly separated.
+- Audited menu entries against real function handlers to prevent command-not-found failures from menu selections.
+
 ## v1.1.31 - Menu UX and local SSL visibility
 
 - Promoted **Local VM HTTPS / SSL** to the main menu so local SSL is visible immediately after installation, alongside Optional Apps.

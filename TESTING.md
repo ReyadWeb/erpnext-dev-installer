@@ -2,7 +2,7 @@
 
 This file validates the current toolkit release. Version history belongs in `CHANGELOG.md`.
 
-## v1.1.31 menu and CLI validation
+## v1.1.32 menu, SSL, and CLI validation
 
 Local syntax/version validation:
 
@@ -18,8 +18,8 @@ grep -n "SCRIPT_VERSION" erpnext-dev.sh
 Expected:
 
 ```text
-SCRIPT_VERSION="1.1.31"
-ERPNext Developer Toolkit v1.1.31
+SCRIPT_VERSION="1.1.32"
+ERPNext Developer Toolkit v1.1.32
 ```
 
 
@@ -29,6 +29,8 @@ ERPNext Developer Toolkit v1.1.31
 printf 'q\n' | MENU_TERMINAL_COLS=100 ./erpnext-dev.sh menu
 printf 'q\n' | MENU_TERMINAL_COLS=100 ./erpnext-dev.sh advanced
 printf 'q\n' | MENU_TERMINAL_COLS=80 ./erpnext-dev.sh local-ssl-menu
+printf 'q\n' | MENU_TERMINAL_COLS=80 ./erpnext-dev.sh production-ssl-menu
+printf 'q\n' | MENU_TERMINAL_COLS=80 ./erpnext-dev.sh local-ssl-wizard
 printf 'q\n' | MENU_TERMINAL_COLS=80 ./erpnext-dev.sh advanced
 printf 'q\n' | MENU_TERMINAL_COLS=60 ./erpnext-dev.sh advanced
 ```
@@ -36,9 +38,11 @@ printf 'q\n' | MENU_TERMINAL_COLS=60 ./erpnext-dev.sh advanced
 Expected:
 
 ```text
-Main menu shows Local VM HTTPS / SSL as a first-level option.
+Main menu shows Local VM HTTPS / SSL and Production HTTPS / SSL as separate first-level options.
 Advanced menu renders in two columns on normal terminal widths and falls back cleanly on very narrow terminals.
 Local SSL submenu shows wizard, status, guides, cert install/replace, verify, disable, and rollback options.
+Production SSL submenu shows wizard, status, plan, guides, readiness checks, Let's Encrypt, Cloudflare Origin, SSL mode, and disable options.
+Selecting Local SSL Wizard must not produce a command-not-found error.
 ```
 
 ## Root/non-root logging validation
@@ -65,7 +69,7 @@ The shared lock file uses /tmp/erpnext-dev-locks/toolkit.lock.
 The release package should contain the canonical toolkit file `erpnext-dev.sh`.
 
 ```bash
-unzip -l erpnext-dev-installer-v1.1.31.zip | grep "erpnext-dev.sh"
+unzip -l erpnext-dev-installer-v1.1.32.zip | grep "erpnext-dev.sh"
 ```
 
 Expected:
