@@ -1,5 +1,104 @@
 # Testing Guide
 
+## v1.1.26 Credentials workflow validation
+
+Run these checks after updating the script on a test VM:
+
+```bash
+sudo /root/install-erpnext-dev.sh credentials-info
+sudo /root/install-erpnext-dev.sh credentials-file-status
+printf 'NO\n' | sudo /root/install-erpnext-dev.sh credentials-show || true
+printf 'NO\n' | sudo /root/install-erpnext-dev.sh credentials-delete || true
+sudo /root/install-erpnext-dev.sh help | grep -E "credentials-show|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password"
+sudo /root/install-erpnext-dev.sh command-audit | grep Credentials
+```
+
+Expected:
+
+- `credentials-info` does not print any password.
+- `credentials-file-status` reports owner/mode and recommends `root:root` with mode `600`.
+- `credentials-show` refuses to print credentials unless the user types `SHOW`.
+- `credentials-delete` refuses to delete the file unless the user types `DELETE`.
+- `reset-admin-password` appears in help and uses the script wrapper instead of manual `bench` commands.
+
+## v1.1.25 Education access validation
+
+After installing Education, validate that users receive clear access guidance:
+
+```bash
+sudo /root/install-erpnext-dev.sh install-education
+sudo /root/install-erpnext-dev.sh education-access-info
+sudo /root/install-erpnext-dev.sh access-info
+sudo /root/install-erpnext-dev.sh verify-access
+```
+
+Expected:
+
+- Output explains that Education may use the website root as the portal.
+- Output shows ERPNext/Frappe Desk at `/app`.
+- Output shows the login page at `/login`.
+- Output shows the Education portal at `/edu-portal/students`.
+- `verify-access` includes the important browser paths even when the root URL is portal-focused.
+
+
+## v1.1.24 Validation - Optional App Service Readiness
+
+Validate script version and syntax:
+
+```bash
+bash -n install-erpnext-dev.sh
+grep -n "SCRIPT_VERSION" install-erpnext-dev.sh
+./install-erpnext-dev.sh version
+grep -n "ensure_bench_services_for_site_commands" install-erpnext-dev.sh
+```
+
+Expected:
+
+```text
+SCRIPT_VERSION="1.1.24"
+ERPNext Developer Installer v1.1.24
+ensure_bench_services_for_site_commands is present
+```
+
+Recover a VM that failed during optional app post-maintenance:
+
+```bash
+sudo /root/install-erpnext-dev.sh service-restart
+sudo /root/install-erpnext-dev.sh wait-ready
+sudo /root/install-erpnext-dev.sh migrate
+sudo /root/install-erpnext-dev.sh build
+sudo /root/install-erpnext-dev.sh clear-cache
+sudo /root/install-erpnext-dev.sh app-status
+sudo /root/install-erpnext-dev.sh doctor --plain
+sudo /root/install-erpnext-dev.sh verify-access
+```
+
+Expected:
+
+```text
+service-restart starts all required Bench ports
+migrate no longer fails with Service redis_cache is not running
+app-status shows the optional app status accurately
+doctor and verify-access complete without shell command errors
+```
+
+Optional app install regression test:
+
+```bash
+sudo /root/install-erpnext-dev.sh install-payments
+sudo /root/install-erpnext-dev.sh app-status
+sudo /root/install-erpnext-dev.sh doctor --plain
+sudo /root/install-erpnext-dev.sh verify-access
+```
+
+Expected:
+
+```text
+The installer ensures Bench services are ready before install-app post-maintenance.
+No raw bench error about redis_cache appears during post-app migrate.
+The service is restarted and validated at the end of the app workflow.
+```
+
 ## v1.1.23 Validation - README Command and Workflow Refresh
 
 Validate script version and syntax:
@@ -390,12 +489,12 @@ README contains the credential lookup section
 On an installed VM, validate:
 
 ```bash
-/root/install-erpnext-dev.sh credentials-info
-sudo test -f /home/frappe/erpnext-dev-credentials.txt
-sudo cat /home/frappe/erpnext-dev-credentials.txt
+sudo /root/install-erpnext-dev.sh credentials-info
+sudo /root/install-erpnext-dev.sh credentials-file-status
+printf 'NO\n' | sudo /root/install-erpnext-dev.sh credentials-show || true
 ```
 
-Expected: `credentials-info` explains where the login password is stored, and the direct `sudo cat` command shows the generated credentials only when the admin intentionally asks for them.
+Expected: `credentials-info` explains the credential workflow without printing passwords, `credentials-file-status` reports file owner/mode, and `credentials-show` refuses to print generated credentials unless the admin intentionally types `SHOW`.
 
 
 ## Local VM quickstart validation

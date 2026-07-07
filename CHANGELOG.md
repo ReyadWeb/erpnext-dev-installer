@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.1.26 - Credentials workflow hardening
+
+- Added `credentials-show` with explicit confirmation before displaying generated passwords.
+- Added `credentials-file-status` to report owner, group, mode, size, modified time, and recommended security state.
+- Added `credentials-secure` to set the generated credentials file to `root:root` with mode `600`.
+- Added `credentials-delete` for production handoff after credentials are saved in a password manager.
+- Added `reset-admin-password` so users can safely reset the ERPNext Administrator password without manually entering the Bench directory or relying on the current user's `bench` PATH.
+- Updated new installs to create the credentials file with root-only ownership and permissions.
+- Updated README and TESTING with the safer credentials workflow.
+
+## v1.1.25 - Education access guidance
+
+- Added `access-info` / `desk-url` command to print the correct Desk, login, website root, and portal URLs.
+- Added `education-access-info` / `portal-access-info` command for Education installs.
+- Updated `verify-access` to print `/app` and `/login` paths, not only the website root.
+- Added a post-install Education note explaining that the website root may open the Education portal and that ERPNext Desk remains available at `/app`.
+- Updated README and TESTING notes so Education users are not confused by the portal redirect.
+
+
+## v1.1.24 - Optional app service-readiness fix
+
+- Fixed optional app installation post-maintenance for local VM installs by ensuring Bench services are running before commands that require Redis, including `bench migrate` and `bench clear-cache`.
+- Added a service-readiness helper that starts or restarts `erpnext-dev.service` and waits for the required development ports before app install maintenance continues.
+- Updated direct maintenance commands so `migrate` and `clear-cache` now check service readiness instead of failing with `Service redis_cache is not running`.
+- Clarified the recovery path: users should use installer service commands or run Bench as the `frappe` user, not as the normal login user.
+
 ## v1.1.23 - README command and workflow refresh
 
 - Refreshed README.md to document the current v1.1.22+ installer workflow.

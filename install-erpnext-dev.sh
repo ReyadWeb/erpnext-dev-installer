@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Installer"
-SCRIPT_VERSION="1.1.23"
+SCRIPT_VERSION="1.1.26"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -139,7 +139,7 @@ acquire_installer_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|configure-fail2ban|ufw-ssh-admin-only|local-ssl-wizard|ssl-wizard|repair-site-config|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry)
       return 0
       ;;
     *)
@@ -863,6 +863,39 @@ wait_for_erpnext_ready() {
   echo "  $(installer_cmd logs)"
   echo "  sudo systemctl status ${ERPNEXT_SERVICE_NAME} --no-pager -l"
   return 1
+}
+
+ensure_bench_services_for_site_commands() {
+  local context="${1:-maintenance command}"
+  local bench_dir
+  bench_dir="$(active_bench_dir)"
+
+  if ! service_exists; then
+    err "ERPNext service is not configured, so Bench services are not managed by this installer yet."
+    echo
+    echo "Start Bench manually as the ${FRAPPE_USER} user if you are using development mode:"
+    echo "  sudo -iu ${FRAPPE_USER} bash -lc 'export PATH="\$HOME/.local/bin:\$PATH"; cd ${bench_dir} && bench start'"
+    return 1
+  fi
+
+  if systemctl is-active --quiet "${ERPNEXT_SERVICE_NAME}" && bench_ports_ready; then
+    ok "Bench services are ready for ${context}."
+    return 0
+  fi
+
+  if systemctl is-active --quiet "${ERPNEXT_SERVICE_NAME}"; then
+    warn "ERPNext service is active, but one or more Bench ports are not ready. Restarting before ${context}."
+  else
+    warn "ERPNext service is not running. Starting it before ${context}."
+  fi
+
+  if ! $SUDO systemctl restart "${ERPNEXT_SERVICE_NAME}"; then
+    err "Could not restart ${ERPNEXT_SERVICE_NAME} before ${context}."
+    echo "Check logs with: $(installer_cmd logs)"
+    return 1
+  fi
+
+  wait_for_erpnext_ready
 }
 
 show_access_when_ready() {
@@ -2497,10 +2530,11 @@ Important:
   Use $(installer_cmd access) to print the required host-side command.
 EOF_CREDS
 
-  $SUDO chown "$FRAPPE_USER:$FRAPPE_USER" "$cred_file"
+  $SUDO chown root:root "$cred_file"
   $SUDO chmod 600 "$cred_file"
 
   ok "Credentials saved to ${cred_file}"
+  ok "Credentials file secured with root-only permissions"
 }
 
 get_vm_ip() {
@@ -2650,6 +2684,110 @@ verify_access() {
     echo "  curl -I http://${vm_ip}:8000"
     echo "  curl -I http://${SITE_NAME}:8000"
   fi
+
+  echo
+  echo "Important browser paths:"
+  if is_public_vm_workflow; then
+    echo "  Desk:  https://${PRODUCTION_DOMAIN:-$SITE_NAME}/app"
+    echo "  Login: https://${PRODUCTION_DOMAIN:-$SITE_NAME}/login"
+  else
+    echo "  Desk:  http://${vm_ip}:8000/app"
+    echo "  Login: http://${vm_ip}:8000/login"
+  fi
+
+  if site_app_installed education; then
+    print_education_access_note
+  fi
+
+  echo "============================================================"
+}
+
+print_primary_access_urls() {
+  local vm_ip base
+  vm_ip="$(get_vm_ip)"
+
+  if is_public_vm_workflow; then
+    base="https://${PRODUCTION_DOMAIN:-$SITE_NAME}"
+    echo "Primary URLs:"
+    echo "  Website / portal root: ${base}"
+    echo "  ERPNext / Frappe Desk: ${base}/app"
+    echo "  Login page:            ${base}/login"
+  else
+    echo "Primary URLs from the HOST:"
+    echo "  Website / portal root: http://${vm_ip}:8000"
+    echo "  ERPNext / Frappe Desk: http://${vm_ip}:8000/app"
+    echo "  Login page:            http://${vm_ip}:8000/login"
+    echo
+    echo "Friendly local URLs after /etc/hosts is set:"
+    echo "  Website / portal root: http://${SITE_NAME}:8000"
+    echo "  ERPNext / Frappe Desk: http://${SITE_NAME}:8000/app"
+    echo "  Login page:            http://${SITE_NAME}:8000/login"
+  fi
+}
+
+print_education_access_note() {
+  local vm_ip base
+  vm_ip="$(get_vm_ip)"
+
+  echo
+  warn "Education access note"
+  echo "  Education can make the normal website root open the Education portal."
+  echo "  This is expected after installing the Education app."
+  echo "  Use /app for ERPNext/Frappe Desk and /login for the login page."
+  echo
+
+  if is_public_vm_workflow; then
+    base="https://${PRODUCTION_DOMAIN:-$SITE_NAME}"
+    echo "Education-aware URLs:"
+    echo "  ERPNext / Frappe Desk: ${base}/app"
+    echo "  Login page:            ${base}/login"
+    echo "  Education portal:      ${base}/edu-portal/students"
+  else
+    echo "Education-aware direct URLs:"
+    echo "  ERPNext / Frappe Desk: http://${vm_ip}:8000/app"
+    echo "  Login page:            http://${vm_ip}:8000/login"
+    echo "  Education portal:      http://${vm_ip}:8000/edu-portal/students"
+    echo
+    echo "Education-aware friendly URLs after /etc/hosts is set:"
+    echo "  ERPNext / Frappe Desk: http://${SITE_NAME}:8000/app"
+    echo "  Login page:            http://${SITE_NAME}:8000/login"
+    echo "  Education portal:      http://${SITE_NAME}:8000/edu-portal/students"
+  fi
+}
+
+show_access_info() {
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "Access Information"
+  echo "============================================================"
+  print_primary_access_urls
+
+  if site_app_installed education; then
+    print_education_access_note
+  fi
+
+  echo
+  echo "Useful checks:"
+  echo "  $(installer_cmd verify-access)"
+  echo "  $(installer_cmd doctor)"
+  echo "============================================================"
+}
+
+show_education_access_info() {
+  require_sudo
+
+  echo
+  echo "============================================================"
+  echo "Education Access Information"
+  echo "============================================================"
+  print_education_access_note
+  echo
+  echo "If /app fails, run:"
+  echo "  $(installer_cmd service-restart)"
+  echo "  $(installer_cmd wait-ready)"
+  echo "  $(installer_cmd doctor)"
   echo "============================================================"
 }
 
@@ -6201,7 +6339,7 @@ print_summary() {
   echo "  Username: Administrator"
   echo "  Password: saved in the credentials file"
   echo "  Credentials help: $(installer_cmd credentials-info)"
-  echo "  View password: sudo cat ${FRAPPE_HOME}/erpnext-dev-credentials.txt"
+  echo "  Show password: $(installer_cmd credentials-show)"
   echo
   echo "Start ERPNext:"
   echo "  $(installer_cmd start)"
@@ -6232,6 +6370,8 @@ print_summary() {
 }
 
 show_credentials_info() {
+  require_sudo
+
   local cred_file bench_dir current_site reset_site
   cred_file="${FRAPPE_HOME}/erpnext-dev-credentials.txt"
   bench_dir="$(active_bench_dir 2>/dev/null || printf '%s' "${BENCH_DIR}")"
@@ -6252,22 +6392,228 @@ show_credentials_info() {
   status_line "Site" "INFO" "$current_site"
   status_line "Bench" "INFO" "$bench_dir"
   echo
-  echo "To view the generated password on the VM:"
-  echo "  sudo cat ${cred_file}"
+  echo "Recommended commands:"
+  echo "  View safe credential info:       $(installer_cmd credentials-info)"
+  echo "  Show generated password:         $(installer_cmd credentials-show)"
+  echo "  Check credential file security:  $(installer_cmd credentials-file-status)"
+  echo "  Fix credential file permissions: $(installer_cmd credentials-secure)"
+  echo "  Delete local plaintext file:     $(installer_cmd credentials-delete)"
+  echo "  Reset Administrator password:    $(installer_cmd reset-admin-password)"
   echo
-  echo "Use this for the ERPNext web login:"
+  echo "ERPNext web login:"
   echo "  Username: Administrator"
-  echo "  Password: value shown in ${cred_file}"
+  echo "  Password: value shown by credentials-show or in ${cred_file}"
   echo
   echo "Security note:"
-  echo "  The installer does not print the password in diagnostics, support bundles, or shared logs."
-  echo "  Share the credentials file only through a secure channel."
+  echo "  credentials-info does not print passwords."
+  echo "  The installer does not print passwords in diagnostics, support bundles, or shared logs."
+  echo "  After saving credentials in a password manager, remove the local plaintext file on production systems."
   echo
-  echo "If the Administrator password needs to be reset:"
-  echo "  cd ${bench_dir}"
-  echo "  sudo -u ${FRAPPE_USER} bench --site ${reset_site} set-admin-password"
+  echo "Manual fallback for experienced admins: sudo cat ${cred_file}"
+  echo "Prefer credentials-show because it includes safety warnings."
   echo
   echo "For a public/production site, replace ${reset_site} with the actual site name if different."
+  echo "============================================================"
+}
+
+show_credentials_file_status() {
+  require_sudo
+
+  local cred_file owner group mode size modified status perm_status
+  cred_file="${FRAPPE_HOME}/erpnext-dev-credentials.txt"
+
+  echo
+  echo "============================================================"
+  echo "Credentials File Status"
+  echo "============================================================"
+
+  if ! path_is_file "$cred_file"; then
+    status_line "Credentials file" "WARN" "missing at $cred_file"
+    echo
+    echo "If you already saved the credentials in a password manager, this is acceptable."
+    echo "If you still need access, reset the Administrator password with:"
+    echo "  $(installer_cmd reset-admin-password)"
+    echo "============================================================"
+    return 0
+  fi
+
+  owner="$(stat -c '%U' "$cred_file" 2>/dev/null || echo unknown)"
+  group="$(stat -c '%G' "$cred_file" 2>/dev/null || echo unknown)"
+  mode="$(stat -c '%a' "$cred_file" 2>/dev/null || echo unknown)"
+  size="$(stat -c '%s' "$cred_file" 2>/dev/null || echo unknown)"
+  modified="$(stat -c '%y' "$cred_file" 2>/dev/null | cut -d'.' -f1 || echo unknown)"
+
+  if [[ "$owner" == "root" && "$mode" == "600" ]]; then
+    perm_status="OK"
+    status="root-only permissions"
+  else
+    perm_status="WARN"
+    status="recommended owner=root and mode=600; run $(installer_cmd credentials-secure)"
+  fi
+
+  status_line "Credentials file" "OK" "$cred_file"
+  status_line "Owner" "$([[ "$owner" == "root" ]] && echo OK || echo WARN)" "$owner"
+  status_line "Group" "INFO" "$group"
+  status_line "Mode" "$([[ "$mode" == "600" ]] && echo OK || echo WARN)" "$mode"
+  status_line "Size" "INFO" "${size} bytes"
+  status_line "Modified" "INFO" "$modified"
+  status_line "Security" "$perm_status" "$status"
+  echo
+  echo "Production recommendation:"
+  echo "  1. Save the credentials in a password manager."
+  echo "  2. Run: $(installer_cmd credentials-delete)"
+  echo "============================================================"
+}
+
+credentials_secure() {
+  require_sudo
+
+  local cred_file
+  cred_file="${FRAPPE_HOME}/erpnext-dev-credentials.txt"
+
+  if ! path_is_file "$cred_file"; then
+    warn "Credentials file is missing: $cred_file"
+    echo "Use $(installer_cmd reset-admin-password) if you need to set a new Administrator password."
+    return 0
+  fi
+
+  $SUDO chown root:root "$cred_file"
+  $SUDO chmod 600 "$cred_file"
+  ok "Credentials file secured with owner=root and mode=600"
+  show_credentials_file_status
+}
+
+credentials_show() {
+  require_sudo
+
+  local cred_file reply
+  cred_file="${FRAPPE_HOME}/erpnext-dev-credentials.txt"
+
+  echo
+  echo "============================================================"
+  echo "Show ERPNext Credentials"
+  echo "============================================================"
+
+  if ! path_is_file "$cred_file"; then
+    status_line "Credentials file" "WARN" "missing at $cred_file"
+    echo
+    echo "If the file was deleted after handoff, reset the Administrator password with:"
+    echo "  $(installer_cmd reset-admin-password)"
+    echo "============================================================"
+    return 1
+  fi
+
+  warn "This will display generated passwords in your terminal."
+  echo "Only continue from a private console. Do not paste this output into chats, tickets, logs, or screenshots."
+  echo
+
+  if [[ "$ASSUME_YES" -eq 1 ]]; then
+    reply="SHOW"
+  else
+    read -r -p "Type SHOW to display credentials: " reply
+  fi
+
+  if [[ "$reply" != "SHOW" ]]; then
+    warn "Credentials display cancelled."
+    echo "============================================================"
+    return 1
+  fi
+
+  echo
+  echo "----- BEGIN CREDENTIALS (${cred_file}) -----"
+  $SUDO cat "$cred_file"
+  echo "----- END CREDENTIALS -----"
+  echo
+  echo "After saving these credentials in a password manager, production systems should run:"
+  echo "  $(installer_cmd credentials-delete)"
+  echo "============================================================"
+}
+
+credentials_delete() {
+  require_sudo
+
+  local cred_file reply
+  cred_file="${FRAPPE_HOME}/erpnext-dev-credentials.txt"
+
+  echo
+  echo "============================================================"
+  echo "Delete Local Credentials File"
+  echo "============================================================"
+
+  if ! path_is_file "$cred_file"; then
+    status_line "Credentials file" "INFO" "already missing at $cred_file"
+    echo "============================================================"
+    return 0
+  fi
+
+  warn "This removes the local plaintext credentials file from the VM."
+  echo "Only continue after saving credentials in a password manager or completing handoff."
+  echo "This does not change the ERPNext Administrator password."
+  echo
+
+  if [[ "$ASSUME_YES" -eq 1 ]]; then
+    reply="DELETE"
+  else
+    read -r -p "Type DELETE to remove ${cred_file}: " reply
+  fi
+
+  if [[ "$reply" != "DELETE" ]]; then
+    warn "Credentials deletion cancelled."
+    echo "============================================================"
+    return 1
+  fi
+
+  $SUDO rm -f "$cred_file"
+  ok "Deleted local credentials file: $cred_file"
+  echo "If access is needed later, run: $(installer_cmd reset-admin-password)"
+  echo "============================================================"
+}
+
+reset_admin_password() {
+  require_sudo
+
+  local bench_dir site new_password confirm_password pw_quoted site_quoted
+  bench_dir="$(active_bench_dir 2>/dev/null || printf '%s' "${BENCH_DIR}")"
+  site="${SITE_NAME}"
+
+  echo
+  echo "============================================================"
+  echo "Reset ERPNext Administrator Password"
+  echo "============================================================"
+  status_line "Site" "INFO" "$site"
+  status_line "Bench" "INFO" "$bench_dir"
+  echo
+
+  if [[ ! -d "$bench_dir" ]]; then
+    fail "Bench folder not found: $bench_dir"
+  fi
+
+  if [[ ! -t 0 ]]; then
+    fail "Interactive terminal required for password reset."
+  fi
+
+  read -r -s -p "New Administrator password: " new_password
+  echo
+  read -r -s -p "Confirm new Administrator password: " confirm_password
+  echo
+
+  if [[ -z "$new_password" ]]; then
+    fail "Password cannot be empty."
+  fi
+  if [[ "$new_password" != "$confirm_password" ]]; then
+    fail "Passwords do not match."
+  fi
+
+  pw_quoted="$(printf '%q' "$new_password")"
+  site_quoted="$(printf '%q' "$site")"
+
+  echo "Updating Administrator password..."
+  run_as_frappe "cd '${bench_dir}' && bench --site ${site_quoted} set-admin-password ${pw_quoted}"
+  ok "Administrator password updated for ${site}"
+  echo
+  echo "Save the new password in a password manager."
+  echo "If the generated credentials file contains the old password, remove it with:"
+  echo "  $(installer_cmd credentials-delete)"
   echo "============================================================"
 }
 
@@ -8627,6 +8973,11 @@ run_post_app_validation() {
   echo "  $(installer_cmd app-status)"
   echo "  $(installer_cmd doctor)"
   echo "  $(installer_cmd verify-access)"
+
+  if [[ "$app_name" == "education" ]]; then
+    print_education_access_note
+  fi
+
   echo "============================================================"
 }
 
@@ -8826,6 +9177,8 @@ install_frappe_app() {
   prepare_downloaded_app_dependencies "$bench_dir" "$app_name"
   ensure_app_in_apps_txt "$bench_dir" "$app_name"
 
+  ensure_bench_services_for_site_commands "installing ${display}" || fail "Bench services were not ready, so ${display} installation was stopped safely."
+
   if site_app_installed "$app_name"; then
     ok "${display} is already installed on ${SITE_NAME}"
   else
@@ -8834,13 +9187,13 @@ install_frappe_app() {
   fi
 
   log "Running post-app maintenance"
+  ensure_bench_services_for_site_commands "post-app migrate for ${display}" || fail "Bench services were not ready for post-app maintenance."
   run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' migrate"
   run_as_frappe "cd '${bench_dir}' && bench build"
+  ensure_bench_services_for_site_commands "post-app clear-cache for ${display}" || fail "Bench services were not ready for cache cleanup."
   run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' clear-cache"
 
-  if [[ "$was_running" -eq 1 ]]; then
-    restart_erpnext_service || warn "${display} installed, but the service could not be restarted automatically."
-  fi
+  restart_erpnext_service || warn "${display} installed, but the service could not be restarted automatically."
 
   ok "${display} installation workflow completed"
   show_installed_apps
@@ -9280,6 +9633,7 @@ maintenance_migrate() {
   require_sudo
   local bench_dir
   bench_dir="$(require_site_environment)" || return 1
+  ensure_bench_services_for_site_commands "migrate" || fail "Bench services are required before running migrate."
   log "Running migrate for ${SITE_NAME}"
   run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' migrate"
   ok "Migrate completed"
@@ -9298,6 +9652,7 @@ maintenance_clear_cache() {
   require_sudo
   local bench_dir
   bench_dir="$(require_site_environment)" || return 1
+  ensure_bench_services_for_site_commands "clear-cache" || fail "Bench services are required before clearing cache."
   log "Clearing cache for ${SITE_NAME}"
   run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' clear-cache"
   ok "Cache cleared"
@@ -10822,7 +11177,7 @@ show_command_audit() {
   status_line "Preflight" "OK" "install-preflight, environment-preflight"
   status_line "Config" "OK" "set-domain, show-config, setup-effort-guide"
   status_line "Install/status" "OK" "guided-setup, status, doctor, support-bundle"
-  status_line "Credentials" "OK" "credentials-info, sudo cat /home/frappe/erpnext-dev-credentials.txt"
+  status_line "Credentials" "OK" "credentials-info, credentials-show, credentials-file-status, credentials-secure, credentials-delete, reset-admin-password"
   status_line "Production SSL" "OK" "production-ssl-wizard, production-ssl-status, ssl-mode-status"
   status_line "Cloudflare" "OK" "cloudflare-origin-guide, configure-cloudflare-origin-ssl"
   status_line "Security" "OK" "security-hardening-wizard, vm-firewall-status, fail2ban-status"
@@ -11356,7 +11711,14 @@ Core:
   guided-setup        Guided install / repair workflow
   status              Compact ERPNext status
   verify-access       HTTP access checks
-  credentials-info    Show where credentials are stored and how to reset admin password
+  access-info         Show Desk, login, portal, and host access URLs
+  education-access-info Show Education portal and ERPNext Desk URLs
+  credentials-info    Safe credential overview; does not print passwords
+  credentials-show    Show generated passwords after confirmation
+  credentials-file-status Check owner/mode/age of the credentials file
+  credentials-secure  Set credentials file to root:root 600
+  credentials-delete  Delete local plaintext credentials file after secure handoff
+  reset-admin-password Reset ERPNext Administrator password safely
   next-step           Recommended next action
   doctor --plain      Safe diagnostics
   support-bundle      Redacted troubleshooting archive
@@ -11540,7 +11902,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|credentials-info|credentials|login-info|next-step|local-ssl-wizard|ssl-wizard|access-menu|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-wizard|ssl-wizard|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|hosts-command|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -11593,7 +11955,14 @@ main() {
     advanced) show_advanced_menu ;;
     access) show_access_instructions ;;
     verify-access) verify_access ;;
+    access-info|desk-url) show_access_info ;;
+    education-access-info|portal-access-info) show_education_access_info ;;
     credentials-info|credentials|login-info) show_credentials_info ;;
+    credentials-show|show-credentials) credentials_show ;;
+    credentials-file-status) show_credentials_file_status ;;
+    credentials-secure) credentials_secure ;;
+    credentials-delete) credentials_delete ;;
+    reset-admin-password|admin-password-reset) reset_admin_password ;;
     next-step) show_next_step ;;
     local-ssl-wizard|ssl-wizard) run_local_ssl_wizard ;;
     access-menu) show_access_menu ;;

@@ -1,4 +1,4 @@
-# ERPNext Developer Installer v1.1.23
+# ERPNext Developer Installer v1.1.26
 
 ![ERPNext Installer Banner](docs/assets/erp_installer_readme_banner.png)
 
@@ -255,6 +255,7 @@ After the installer finishes, validate inside the VM:
 sudo /root/install-erpnext-dev.sh version
 sudo /root/install-erpnext-dev.sh doctor --plain
 sudo /root/install-erpnext-dev.sh verify-access
+sudo /root/install-erpnext-dev.sh access-info
 sudo /root/install-erpnext-dev.sh backup-files
 sudo /root/install-erpnext-dev.sh backup-status
 sudo /root/install-erpnext-dev.sh backup-verify
@@ -434,41 +435,52 @@ curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/mai
 
 ## Accessing ERPNext credentials
 
-After installation, the installer saves the generated ERPNext and database credentials on the VM.
+After installation, the installer saves the generated ERPNext Administrator password and database credentials on the VM.
 
-Run this inside the VM to see where the credentials are stored and how to reset the Administrator password:
+Use the safe overview command first. It shows where the credentials are stored, but it does **not** print passwords:
 
 ```bash
 sudo /root/install-erpnext-dev.sh credentials-info
 ```
 
-To view the generated password directly on the VM:
+To display the generated password on a private VM console, use the guarded command below. It warns first and requires confirmation before printing secrets:
 
 ```bash
-sudo cat /home/frappe/erpnext-dev-credentials.txt
+sudo /root/install-erpnext-dev.sh credentials-show
 ```
 
 The ERPNext web login normally uses:
 
 ```text
 Username: Administrator
-Password: value shown in /home/frappe/erpnext-dev-credentials.txt
+Password: value shown by credentials-show
 ```
 
-The credentials file is intentionally excluded from diagnostics, support bundles, shared logs, and generated support archives. Do not paste the file contents into public tickets or GitHub issues.
-
-If the Administrator password needs to be reset, run this inside the VM:
+Check the credentials file owner and permissions:
 
 ```bash
-cd /home/frappe/frappe/frappe-bench
-sudo -u frappe bench --site erp.test set-admin-password
+sudo /root/install-erpnext-dev.sh credentials-file-status
 ```
 
-For a public/production site, replace `erp.test` with the actual site name or domain, for example:
+Secure the credentials file with root-only permissions:
 
 ```bash
-sudo -u frappe bench --site erp.example.com set-admin-password
+sudo /root/install-erpnext-dev.sh credentials-secure
 ```
+
+After saving the credentials in a password manager or completing production handoff, remove the local plaintext credentials file:
+
+```bash
+sudo /root/install-erpnext-dev.sh credentials-delete
+```
+
+Reset the ERPNext Administrator password safely without manually changing directories or relying on the current user's `bench` PATH:
+
+```bash
+sudo /root/install-erpnext-dev.sh reset-admin-password
+```
+
+The credentials file is intentionally excluded from diagnostics, support bundles, shared logs, and generated support archives. Do not paste credentials into public tickets, GitHub issues, screenshots, or support chats.
 
 ---
 
@@ -609,6 +621,35 @@ Curated app library:
 | Telephony | `sudo /root/install-erpnext-dev.sh install-telephony` |
 | Insights | `sudo /root/install-erpnext-dev.sh install-insights` |
 
+
+### Education app access note
+
+After installing **Education**, the normal website root may open or redirect to the Education portal. This is expected behavior for an Education-focused site and does not mean ERPNext Desk is gone.
+
+Use these paths:
+
+```text
+ERPNext / Frappe Desk: /app
+Login page:            /login
+Education portal:      /edu-portal/students
+```
+
+Helpful commands:
+
+```bash
+sudo /root/install-erpnext-dev.sh access-info
+sudo /root/install-erpnext-dev.sh education-access-info
+sudo /root/install-erpnext-dev.sh verify-access
+```
+
+For a local VM, examples are:
+
+```text
+http://LOCAL_VM_IP:8000/app
+http://LOCAL_VM_IP:8000/login
+http://LOCAL_VM_IP:8000/edu-portal/students
+```
+
 Advanced app tools are separated from the curated app list:
 
 ```bash
@@ -711,6 +752,7 @@ sudo /root/install-erpnext-dev.sh verify-access
 sudo /root/install-erpnext-dev.sh support-bundle
 sudo /root/install-erpnext-dev.sh command-audit
 sudo /root/install-erpnext-dev.sh credentials-info
+sudo /root/install-erpnext-dev.sh credentials-file-status
 sudo /root/install-erpnext-dev.sh next-step
 ```
 
