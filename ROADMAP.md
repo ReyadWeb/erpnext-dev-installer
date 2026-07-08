@@ -1,5 +1,13 @@
 # Roadmap
 
+## v1.1.47 completed restore UX and post-restore sequencing
+
+- Restore prompts now use database-admin wording instead of MySQL/root wording.
+- Restore flow reminds users to have the MariaDB Bench Admin credential ready before continuing.
+- Restore now passes the toolkit database admin user/password to Bench restore.
+- Post-restore maintenance now starts/waits for ERPNext services before running migrate, build, and cache cleanup.
+- Remaining backup work: scheduled backup activation, retention cleanup validation, off-VM backup rehearsal, and disposable-VM restore testing.
+
 ## v1.1.46 completed README version hygiene
 
 - Removed the stale hard-coded version from the README heading.

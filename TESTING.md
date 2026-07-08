@@ -1,5 +1,47 @@
 # Testing
 
+## v1.1.47 Restore credential and post-restore maintenance regression test
+
+Before running a destructive restore, make sure the database admin credential is available:
+
+```bash
+sudo erpnext-dev credentials-info
+sudo erpnext-dev credentials-show
+```
+
+Then run a restore rehearsal on a disposable/local VM:
+
+```bash
+sudo erpnext-dev list-backups
+sudo erpnext-dev restore-full
+```
+
+Expected restore UX:
+
+- Restore prints a database credential reminder before destructive action.
+- Prompt says `Enter database admin user [frappe_db_admin]:`.
+- Prompt says `Database admin password:`.
+- Prompt does not say `Enter mysql super user [root]` from the toolkit flow.
+- Prompt does not say `MySQL root password` from the toolkit flow.
+- Emergency backup is created before restore.
+- ERPNext service is started/waited for before post-restore migrate/cache cleanup.
+- `bench migrate`, `bench build`, and `bench clear-cache` run after services are ready.
+
+Post-restore verification:
+
+```bash
+sudo erpnext-dev verify-access
+sudo erpnext-dev verify-local-ssl
+sudo erpnext-dev local-access-doctor
+sudo erpnext-dev app-status
+```
+
+Expected:
+
+- Access verification passes.
+- Local HTTPS verification passes.
+- App status still shows installed apps and no downloaded/registered mismatch.
+
 ## v1.1.46 README version hygiene regression test
 
 After updating the VM to v1.1.46, run:

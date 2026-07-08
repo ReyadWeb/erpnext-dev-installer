@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.1.47
+
+### Fixed
+
+- Improved restore prompts so they ask for `database admin user` and `Database admin password` instead of MySQL/root wording.
+- Added a restore credential reminder before destructive restore actions, pointing users to `erpnext-dev credentials-show` and the generated credentials file.
+- Changed restore flows to pass the toolkit database admin credentials to Bench restore instead of leaving Bench to prompt for a root user.
+- Fixed post-restore sequencing: the toolkit now starts/waits for ERPNext services before running migrate, build, and cache cleanup.
+
+### Validated
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` reports v1.1.47.
+- Restore flow text no longer contains the confusing `Enter mysql super user` or `MySQL root password` prompt strings in the toolkit code.
+
 ## v1.1.46
 
 ### Fixed
