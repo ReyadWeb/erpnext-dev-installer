@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.54"
+SCRIPT_VERSION="1.1.55"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -1371,22 +1371,39 @@ show_ready_summary() {
   echo "============================================================"
   echo "ERPNext is running and the required development ports are listening."
   echo
-  if ssl_is_configured 2>/dev/null && port_listens 443; then
-    echo "Open these HTTPS URLs from the HOST after /etc/hosts is set:"
-    echo "  Desk:         https://${SITE_NAME}/app"
-    echo "  Login:        https://${SITE_NAME}/login"
-    echo "  Website/root: https://${SITE_NAME}"
+  if is_public_vm_workflow; then
+    if ssl_is_configured 2>/dev/null && port_listens 443; then
+      echo "Production HTTPS URLs:"
+      echo "  Desk:         https://${SITE_NAME}/app"
+      echo "  Login:        https://${SITE_NAME}/login"
+      echo "  Website/root: https://${SITE_NAME}"
+    else
+      echo "Production HTTPS is not configured yet. Continue the guided production setup to enable:"
+      echo "  https://${SITE_NAME}"
+    fi
     echo
-    echo "Direct Bench fallback, useful for troubleshooting:"
+    echo "Backend validation URLs, for troubleshooting only:"
     echo "  Direct IP:    http://${vm_ip}:8000"
-    echo "  Friendly URL: http://${SITE_NAME}:8000"
+    echo "  Domain :8000: http://${SITE_NAME}:8000"
+    echo "Production note: public access to ports 8000 and 9000 should be blocked by the cloud firewall and UFW after hardening."
   else
-    echo "Open one of these URLs:"
-    echo "  Direct IP:    http://${vm_ip}:8000"
-    echo "  Friendly URL: http://${SITE_NAME}:8000"
+    if ssl_is_configured 2>/dev/null && port_listens 443; then
+      echo "Open these HTTPS URLs from the HOST after /etc/hosts is set:"
+      echo "  Desk:         https://${SITE_NAME}/app"
+      echo "  Login:        https://${SITE_NAME}/login"
+      echo "  Website/root: https://${SITE_NAME}"
+      echo
+      echo "Direct Bench fallback, useful for troubleshooting:"
+      echo "  Direct IP:    http://${vm_ip}:8000"
+      echo "  Friendly URL: http://${SITE_NAME}:8000"
+    else
+      echo "Open one of these URLs:"
+      echo "  Direct IP:    http://${vm_ip}:8000"
+      echo "  Friendly URL: http://${SITE_NAME}:8000"
+    fi
+    echo
+    echo "Friendly URL note: your HOST /etc/hosts must map ${SITE_NAME} to ${vm_ip}."
   fi
-  echo
-  echo "Friendly URL note: your HOST /etc/hosts must map ${SITE_NAME} to ${vm_ip}."
   echo "For full access instructions, run: $(toolkit_cmd access)"
   echo "============================================================"
 }
@@ -5456,14 +5473,28 @@ ufw_is_active() {
   $SUDO ufw status 2>/dev/null | grep -qi '^Status:[[:space:]]*active'
 }
 
-ufw_port_allow_lines() {
+ufw_port_lines() {
   local port="$1"
   command -v ufw >/dev/null 2>&1 || return 0
   $SUDO ufw status 2>/dev/null | grep -E "(^|[[:space:]])${port}(/tcp)?([[:space:]]|$)" || true
 }
 
+ufw_port_allow_lines() {
+  local port="$1"
+  ufw_port_lines "$port" | grep -E '[[:space:]]ALLOW([[:space:]]|$)' || true
+}
+
+ufw_port_deny_lines() {
+  local port="$1"
+  ufw_port_lines "$port" | grep -E '[[:space:]](DENY|REJECT)([[:space:]]|$)' || true
+}
+
 ufw_port_has_allow() {
   [[ -n "$(ufw_port_allow_lines "$1")" ]]
+}
+
+ufw_port_has_deny() {
+  [[ -n "$(ufw_port_deny_lines "$1")" ]]
 }
 
 show_vm_firewall_status() {
@@ -5490,7 +5521,7 @@ show_vm_firewall_status() {
   echo
   echo "Expected safe default UFW rules:"
   for port in 22 80 443 8000 9000 11000 13000; do
-    lines="$(ufw_port_allow_lines "$port" | paste -sd ';' -)"
+    lines="$(ufw_port_lines "$port" | paste -sd ';' -)"
     case "$port" in
       22)
         if ufw_port_has_allow 22; then
@@ -5514,28 +5545,39 @@ show_vm_firewall_status() {
         if ufw_port_has_allow "$port"; then
           if is_public_vm_workflow; then
             state="WARN"
-            detail="explicit UFW allow rule found; remove it for production after HTTPS works"
+            detail="explicit UFW ALLOW rule found; remove it for production after HTTPS works"
           else
             state="OK"
             detail="allowed for local VM direct Bench access"
           fi
+        elif ufw_port_has_deny "$port"; then
+          if is_public_vm_workflow; then
+            state="OK"
+            detail="explicit UFW DENY rule present; backend is blocked at the VM layer"
+          else
+            state="WARN"
+            detail="explicit UFW DENY rule present; local erp.test:${port} may be blocked"
+          fi
         else
           if is_public_vm_workflow; then
             state="OK"
-            detail="no explicit UFW allow rule; backend should be blocked publicly"
+            detail="no UFW allow rule; backend should be blocked by default deny and the cloud firewall"
           else
             state="WARN"
-            detail="no allow rule detected; local erp.test:8000 may be blocked"
+            detail="no allow rule detected; local erp.test:${port} may be blocked"
           fi
         fi
         ;;
       11000|13000)
         if ufw_port_has_allow "$port"; then
           state="WARN"
-          detail="explicit UFW allow rule found; remove it unless you intentionally need this"
+          detail="explicit UFW ALLOW rule found; remove it unless you intentionally need this"
+        elif ufw_port_has_deny "$port"; then
+          state="OK"
+          detail="explicit UFW DENY rule present"
         else
           state="OK"
-          detail="no explicit UFW allow rule; should be blocked externally by UFW"
+          detail="no UFW allow rule; should be blocked externally by UFW/default deny"
         fi
         ;;
     esac

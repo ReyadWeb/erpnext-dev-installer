@@ -1,5 +1,25 @@
 # Roadmap
 
+## v1.1.55 completed production VPS validation record and polish fixes
+
+- Recorded the successful fresh Hetzner VPS production validation with Ubuntu 26.04 LTS, real DNS, Let’s Encrypt HTTPS, UFW, Fail2Ban, scheduled local backups, external backend-port blocking, browser login testing, support bundle, and post-validation snapshot.
+- Fixed UFW status wording/parser so explicit backend `DENY` rules are not reported as false allow warnings.
+- Improved production access wording so `:8000` URLs are clearly troubleshooting/backend validation URLs, not normal public production access.
+- Documented the interactive-menu shell behavior: commands pasted after `final-qa` run after the menu exits.
+
+Updated readiness after real VPS validation:
+
+| Case | Rating | Interpretation |
+| --- | ---: | --- |
+| Local VM / developer workflow | 9.5/10 | Passed and ready for normal local development/testing use |
+| Core public VPS guided production path | 8.4/10 | Passed on fresh Hetzner VPS with real domain, Let’s Encrypt, UFW, Fail2Ban, backups, and external port checks |
+| Backup + restore foundation | 9.0/10 local / 7.5/10 production | Local restore passed; production restore still needs disposable-VM rehearsal |
+| Final QA and support bundle | 9.0/10 | Passed on local and production validation paths; support bundle contents reviewed |
+| Off-VM backup / production monitoring | 5.8/10 | Planning and local timers exist; real off-VM target and health timer validation remain open |
+| Cloudflare Origin CA SSL path | 6.8/10 | Available in the wizard and worked in older testing, but needs focused retest after v1.1.54 SSL-provider choice change |
+
+Active next milestone: validate v1.1.54+ guided SSL provider choice and Cloudflare Origin CA path on a fresh/rollback VPS, then validate off-VM backup and restore rehearsal.
+
 ## v1.1.52 completed production guided setup UX fix
 
 - Kept the existing Public VM menu for manual and advanced production tasks.

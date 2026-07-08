@@ -1,5 +1,36 @@
 # Production VPS Validation
 
+## Validated milestone
+
+The core production VPS guided path has been validated successfully on a fresh Hetzner VPS.
+
+```text
+Toolkit path: public-vm-guided-setup
+Validated release path: v1.1.53 core flow; v1.1.54/v1.1.55 polish afterward
+Provider: Hetzner Cloud VPS
+OS: Ubuntu 26.04 LTS
+Domain: real public subdomain
+HTTPS: Let’s Encrypt directly on the VM
+Nginx: public 80/443 entrypoint
+UFW: active production profile
+Fail2Ban: sshd jail enabled
+Backups: local database + public/private files backup verified readable
+Scheduled backups: daily systemd timer active
+External validation: HTTPS responds; 8000/9000 time out from workstation
+Support bundle: redacted archive created and contents reviewed
+Snapshot: post-validation provider snapshot required/confirmed during handoff
+```
+
+Remaining production hardening before relying on a real client system:
+
+```text
+Configure and test an off-VM backup target.
+Run off-VM backup dry run and real run.
+Rehearse restore on a disposable VM.
+Validate Cloudflare Origin CA / Full (strict) as a separate SSL provider path.
+Optionally configure health timer/monitoring.
+```
+
 This checklist starts after the local VM validation stage has passed. Use it to test the ERPNext Developer Toolkit on a real public VPS with a real test domain or subdomain before trusting the toolkit for production handoff.
 
 ## Validation position
@@ -140,7 +171,17 @@ sudo erpnext-dev backup-files
 sudo erpnext-dev backup-verify
 sudo erpnext-dev configure-backup-schedule
 sudo erpnext-dev backup-schedule-status
+```
+
+Run interactive menu commands by themselves:
+
+```bash
 sudo erpnext-dev final-qa
+```
+
+Quit with `q`, then run follow-up commands separately:
+
+```bash
 sudo erpnext-dev support-bundle
 ```
 

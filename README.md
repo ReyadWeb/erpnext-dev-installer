@@ -21,6 +21,8 @@ The day-to-day menu exposes **Local VM HTTPS / SSL**, **Production HTTPS / SSL**
 
 Interactive menus use a shared navigation reader: `q`/`Q` quits, `b`/`B` goes back where supported, and `sudo erpnext-dev menu-self-test` validates the menu navigation paths without running destructive actions.
 
+When running an interactive menu command such as `sudo erpnext-dev final-qa`, run it by itself. Do not paste additional commands after it in the same shell block unless you want those commands to run after you quit the menu.
+
 > Version history is maintained in [`CHANGELOG.md`](CHANGELOG.md). This README intentionally focuses on current installation, operations, and usage.
 
 ---
@@ -100,7 +102,30 @@ Before production HTTPS, make sure DNS points to the VM or your Cloudflare/proxy
 
 The completed local VM validation stage proves the `.test` local-development workflow, local HTTPS, optional apps, backups, restore, scheduled backups, retention checks, maintenance actions, Final QA, and support bundles.
 
-The next release-validation stage must use a **fresh disposable VPS with a real test subdomain**. Do not use the already-tested local VM for production validation, and do not use a final client production server as the first test target.
+The core production VPS guided path has also been validated on a fresh Hetzner VPS using Ubuntu 26.04 LTS, a real DNS record, Let’s Encrypt, Nginx, UFW, Fail2Ban, scheduled local backups, external backend-port blocking, browser login testing, and a redacted support bundle.
+
+Validated production milestone:
+
+```text
+Toolkit: v1.1.53 core path; v1.1.54/v1.1.55 polish builds afterward
+Provider: Hetzner Cloud VPS
+OS: Ubuntu 26.04 LTS
+Domain test: real public subdomain
+HTTPS: Let’s Encrypt directly on the VM
+External result: HTTPS OK; public 8000/9000 blocked
+Status: core production guided setup passed
+```
+
+Remaining production hardening before real client go-live:
+
+```text
+Configure and test off-VM backups.
+Rehearse restore on a disposable VM.
+Test Cloudflare Origin CA / Full (strict) as a separate SSL path.
+Optionally configure health timer/monitoring.
+```
+
+New release-validation stages should still use a **fresh disposable VPS with a real test subdomain** when validating production workflow changes. Do not use the already-tested local VM for production validation, and do not use a final client production server as the first test target.
 
 Recommended production-validation prerequisites:
 

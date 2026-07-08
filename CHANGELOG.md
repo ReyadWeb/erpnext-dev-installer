@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.1.55 - Production validation record and polish fixes
+
+### Changed
+
+- Updated the toolkit version to v1.1.55.
+- Documented the successful fresh Hetzner VPS production validation result in README, TESTING, PRODUCTION-VALIDATION, and ROADMAP.
+- Clarified that `final-qa` is interactive and should be run separately from follow-up commands unless the user intentionally wants queued shell commands to run after quitting the menu.
+- Improved production ready/access wording so production users are not presented with `:8000` browser URLs as normal public access after install.
+- Fixed VM firewall status parsing so explicit UFW `DENY` rules for backend ports are reported as blocked instead of being mistaken for allow rules.
+
+### Validated
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` reports v1.1.55.
+- Fresh VPS guided production path was validated on Hetzner with Ubuntu 26.04 LTS, real DNS, Let’s Encrypt HTTPS, UFW, Fail2Ban, scheduled local backups, support bundle, and external 8000/9000 blocking.
+- Remaining production hardening items are off-VM backup configuration and disposable-VM restore rehearsal.
+
 ## v1.1.54 - Guided production SSL provider choice
 
 ### Changed

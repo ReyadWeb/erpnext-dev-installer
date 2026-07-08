@@ -1,5 +1,56 @@
 # Testing
 
+## v1.1.55 Production VPS validation record and polish checks
+
+This release records the successful fresh Hetzner VPS production validation and fixes polish issues discovered during that test.
+
+Validated production result:
+
+```text
+Toolkit path tested: public-vm-guided-setup
+Provider: Hetzner Cloud VPS
+OS: Ubuntu 26.04 LTS
+Domain: real public DNS record
+HTTPS: Let’s Encrypt directly on the VM
+Result: ERPNext browser login works over HTTPS
+External backend ports: 8000/9000 timed out from workstation
+UFW: active
+Fail2Ban: sshd jail enabled
+Scheduled local backups: timer active
+Support bundle: created and reviewed
+```
+
+Regression checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh --help | grep -n "public-vm-guided-setup"
+grep -n "explicit UFW DENY rule present" erpnext-dev.sh
+grep -n "Backend validation URLs" erpnext-dev.sh
+grep -n "Do not paste additional commands" README.md
+grep -n "v1.1.55" CHANGELOG.md TESTING.md ROADMAP.md PRODUCTION-VALIDATION.md
+```
+
+Expected results:
+
+- Version prints `ERPNext Developer Toolkit v1.1.55`.
+- UFW status treats explicit `DENY` rules on backend ports as blocked, not as false allow warnings.
+- Production ready/access output labels `:8000` URLs as troubleshooting/backend validation only.
+- Docs record the successful production validation and the remaining off-VM backup / restore rehearsal work.
+- Interactive commands such as `sudo erpnext-dev final-qa` are documented as commands to run by themselves.
+
+Interactive command note:
+
+```bash
+sudo erpnext-dev production-checklist
+sudo erpnext-dev final-qa
+# Quit the menu with q, then run follow-up commands separately.
+sudo erpnext-dev support-bundle
+```
+
+Do not paste follow-up commands after `sudo erpnext-dev final-qa` in the same shell block unless you intentionally want them to run after the menu exits.
+
 ## v1.1.54 Guided production SSL provider choice test
 
 This focused release improves the production guided setup HTTPS step. Let's Encrypt remains the default when DNS resolves directly to the VPS, but the guided path now offers an explicit choice to open the SSL provider wizard for alternate providers such as Cloudflare Origin CA.
