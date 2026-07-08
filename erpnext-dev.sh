@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.53"
+SCRIPT_VERSION="1.1.54"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -4105,7 +4105,7 @@ public_vm_guided_backup_checkpoint() {
 }
 
 public_vm_guided_configure_https() {
-  local ssl_pair ssl_status ssl_detail ctx mode detail provider dns_ip vm_ip
+  local ssl_pair ssl_status ssl_detail ctx mode detail provider dns_ip vm_ip choice
   ssl_pair="$(production_ssl_overall_status 2>/dev/null || echo 'WARN|not configured for production')"
   ssl_status="${ssl_pair%%|*}"
   ssl_detail="${ssl_pair#*|}"
@@ -4133,12 +4133,30 @@ public_vm_guided_configure_https() {
 
   case "$mode" in
     letsencrypt)
-      echo "This guided production path will use Let's Encrypt directly on this VM."
-      configure_production_ssl || return 1
+      echo "Recommended guided choice: Let's Encrypt directly on this VM."
+      echo "Alternative available: Cloudflare Origin CA for Cloudflare-proxied Full (strict) deployments."
+      echo
+      if [[ "$ASSUME_YES" -eq 1 ]]; then
+        configure_production_ssl || return 1
+      else
+        echo "1) Use recommended Let's Encrypt directly on this VM (default)"
+        echo "2) Choose another SSL provider / advanced SSL wizard"
+        echo "3) Show SSL mode guide/status"
+        menu_footer
+        menu_read_choice choice
+        case "$choice" in
+          1|"") configure_production_ssl || return 1 ;;
+          2) production_ssl_wizard || return 1 ;;
+          3) show_ssl_mode_status; show_ssl_mode_guide; production_ssl_wizard || return 1 ;;
+          b|B) warn "Production HTTPS was not configured. Rerun: $(toolkit_cmd public-vm-guided-setup)"; return 1 ;;
+          q|Q) exit 0 ;;
+          *) warn "Invalid option: ${choice}"; return 1 ;;
+        esac
+      fi
       ;;
     cloudflare-origin-ca)
       warn "DNS does not look like direct origin DNS, or Cloudflare Origin CA is already selected."
-      echo "Use the SSL provider wizard to choose Cloudflare Origin CA or adjust DNS to DNS-only for Let's Encrypt."
+      echo "The guided setup will open the SSL provider wizard so you can choose Cloudflare Origin CA or adjust back to Let's Encrypt."
       production_ssl_wizard || return 1
       ;;
     *)
@@ -4149,6 +4167,15 @@ public_vm_guided_configure_https() {
       return 1
       ;;
   esac
+
+  ssl_pair="$(production_ssl_overall_status 2>/dev/null || echo 'WARN|not configured for production')"
+  ssl_status="${ssl_pair%%|*}"
+  ssl_detail="${ssl_pair#*|}"
+  if [[ "$ssl_status" != "OK" ]]; then
+    status_line "Production HTTPS" "$ssl_status" "$ssl_detail"
+    warn "Production HTTPS is not fully verified yet. Complete SSL configuration before continuing production setup."
+    return 1
+  fi
 
   show_production_ssl_status || true
 }

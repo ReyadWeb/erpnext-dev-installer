@@ -1,5 +1,28 @@
 # Testing
 
+## v1.1.54 Guided production SSL provider choice test
+
+This focused release improves the production guided setup HTTPS step. Let's Encrypt remains the default when DNS resolves directly to the VPS, but the guided path now offers an explicit choice to open the SSL provider wizard for alternate providers such as Cloudflare Origin CA.
+
+Regression checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh --help | grep -n "public-vm-guided-setup"
+grep -n "Choose another SSL provider" erpnext-dev.sh
+grep -n "Cloudflare Origin CA" README.md
+grep -n "v1.1.54" CHANGELOG.md
+```
+
+Expected results:
+
+- Version prints `ERPNext Developer Toolkit v1.1.54`.
+- `public-vm-guided-setup` remains available and remains the production README bootstrap command.
+- Production guided HTTPS Step 7 recommends Let's Encrypt by default when DNS points directly to the VM.
+- The same step can open the SSL provider wizard for Cloudflare Origin CA / advanced SSL provider selection.
+- Guided setup stops instead of continuing if production HTTPS is not verified after the SSL choice.
+
 ## v1.1.52 Production guided setup workflow test
 
 This focused release keeps the existing Public VM menu, but adds a true guided production command for the README production bootstrap path. The goal is to make the production VPS path feel like the local VM quickstart: the user follows an ordered wizard instead of manually choosing menu items 2, 3, 4, 6, 7, and so on.

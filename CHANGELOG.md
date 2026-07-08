@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.1.54 - Guided production SSL provider choice
+
+### Changed
+
+- Updated the toolkit version to v1.1.54.
+- Improved `public-vm-guided-setup` Step 7 so Let's Encrypt remains the recommended/default HTTPS path when DNS points directly to the VPS, but the user can choose another SSL provider instead of being forced straight into Let's Encrypt.
+- Added an explicit guided choice for the advanced SSL provider wizard, including Cloudflare Origin CA for Cloudflare-proxied Full (strict) deployments.
+- Added a post-choice verification gate so guided production setup does not continue unless production HTTPS is verified.
+- Updated README, TESTING, and PRODUCTION-VALIDATION notes to document the default Let's Encrypt path and the optional Cloudflare Origin CA path.
+
+### Validated
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` reports v1.1.54.
+- `public-vm-guided-setup` still remains the README production bootstrap path.
+- `production-ssl-wizard` remains available for manual provider selection.
+
 ## v1.1.53 - VPS rebuild SSH troubleshooting documentation
 
 ### Changed

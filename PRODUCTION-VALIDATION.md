@@ -67,6 +67,19 @@ Before installing, configure the provider firewall like this:
 
 Do not publicly expose Bench development ports 8000 or 9000 during production validation.
 
+## Production HTTPS provider choice
+
+For the first real VPS validation, prefer the default **Let's Encrypt directly on the VM** path when the DNS A record resolves to the VPS public IP and ports 80/443 are open. This proves the plain public HTTPS/Nginx path.
+
+The guided production setup should still allow the user to choose another SSL provider during the HTTPS step. Use **Cloudflare Origin CA** when the site will remain Cloudflare-proxied/orange-cloud and Cloudflare SSL/TLS mode will be set to **Full (strict)**.
+
+Validation expectations:
+
+```text
+Let's Encrypt path: DNS-only/direct DNS to VM; browser/curl trusts the certificate directly.
+Cloudflare Origin CA path: Cloudflare proxy ON; Full (strict); browser/curl should validate through Cloudflare, not directly to the origin certificate.
+```
+
 ## Production validation order
 
 1. Create a fresh disposable VPS.
@@ -78,7 +91,7 @@ Do not publicly expose Bench development ports 8000 or 9000 during production va
 7. Run `sudo erpnext-dev public-vm-guided-setup`.
 8. Confirm site/domain config.
 9. Apply or verify the production firewall profile.
-10. Run the production HTTPS wizard and select the Let's Encrypt path first.
+10. Run the guided production HTTPS step. Use the default Let's Encrypt path first when DNS points directly to the VM, or open the SSL provider wizard for Cloudflare Origin CA when validating a proxied Cloudflare Full (strict) path.
 11. Verify public HTTPS from outside the VM.
 12. Confirm 8000/9000 are not publicly reachable.
 13. Confirm Fail2Ban sshd jail status.

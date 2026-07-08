@@ -84,13 +84,17 @@ Run the printed `/etc/hosts` command on the **host machine**, not inside the VM.
 sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" public-vm-guided-setup
 ```
 
-Use this inside a fresh public VM when you have a real domain or subdomain ready. This command runs the guided production flow; the manual production menu remains available with `sudo erpnext-dev public-vm-quickstart`. Example production site name:
+Use this inside a fresh public VM when you have a real domain or subdomain ready. This command runs the guided production flow; the manual production menu remains available with `sudo erpnext-dev public-vm-quickstart`.
+
+During the production HTTPS step, the guided setup recommends **Let's Encrypt** by default when DNS points directly to the VM. The user can still choose the advanced SSL provider wizard from that step, including **Cloudflare Origin CA** for Cloudflare-proxied Full (strict) deployments.
+
+Example production site name:
 
 ```text
 erp.example.com
 ```
 
-Before production HTTPS, make sure DNS points to the VM or your Cloudflare/proxy setup is ready.
+Before production HTTPS, make sure DNS points to the VM or your Cloudflare/proxy setup is ready. If DNS points directly to the VM, choose the default Let's Encrypt path. If the site will stay behind Cloudflare proxy, use the SSL provider wizard and choose Cloudflare Origin CA.
 
 ### Production validation stage
 
@@ -475,11 +479,18 @@ Typical guided public setup flow:
 4. Confirm cloud firewall baseline and clean provider snapshot
 5. Install or repair ERPNext
 6. Create and verify backup checkpoint
-7. Configure production HTTPS
+7. Configure production HTTPS; Let's Encrypt is the default when DNS points directly to the VM, but the SSL provider wizard can be opened for Cloudflare Origin CA
 8. Apply production security profile and Fail2Ban
 9. Configure scheduled backups and review off-VM backup plan
 10. Optional apps, only if wanted
 11. Production checklist, Final QA, support bundle, post-validation snapshot reminder
+```
+
+Guided production HTTPS choice:
+
+```text
+Default/recommended: Let's Encrypt when DNS resolves directly to the VM
+Alternative: Cloudflare Origin CA when Cloudflare proxy will stay enabled with Full (strict)
 ```
 
 For Cloudflare Origin CA mode:
