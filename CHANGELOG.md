@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.1.52 - Production guided setup workflow
+
+### Changed
+
+- Updated the toolkit version to v1.1.52.
+- Added `public-vm-guided-setup` as the true guided production VPS setup command.
+- Kept `public-vm-quickstart` as the manual Public VM menu for individual production actions.
+- Routed the README production bootstrap command to `public-vm-guided-setup`.
+- Routed the First Run wizard's Public VM choice to the guided production setup path.
+- Added guided production gates for domain, DNS readiness, cloud firewall confirmation, clean provider snapshot confirmation, install, backup checkpoint, HTTPS, production UFW profile, Fail2Ban, scheduled backups, off-VM backup review, optional apps, Final QA, support bundle, and post-validation snapshot reminder.
+- Updated production validation docs to allow Ubuntu 24.04 LTS or Ubuntu 26.04 LTS.
+
+### Validated
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` reports v1.1.52.
+- `public-vm-guided-setup` is registered in command validation, help output, and command dispatch.
+- README production VPS command uses `public-vm-guided-setup`.
+- `public-vm-quickstart` remains available as the manual production menu.
+
 ## v1.1.51 - Production VPS validation handoff documentation
 
 ### Changed

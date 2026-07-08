@@ -81,10 +81,10 @@ Run the printed `/etc/hosts` command on the **host machine**, not inside the VM.
 ### Production VPS / cloud VM install
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" public-vm-quickstart
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" public-vm-guided-setup
 ```
 
-Use this inside a fresh public VM when you have a real domain or subdomain ready. Example production site name:
+Use this inside a fresh public VM when you have a real domain or subdomain ready. This command runs the guided production flow; the manual production menu remains available with `sudo erpnext-dev public-vm-quickstart`. Example production site name:
 
 ```text
 erp.example.com
@@ -101,7 +101,7 @@ The next release-validation stage must use a **fresh disposable VPS with a real 
 Recommended production-validation prerequisites:
 
 ```text
-Fresh Ubuntu 24.04 LTS VPS
+Fresh Ubuntu 24.04 LTS or Ubuntu 26.04 LTS VPS
 2 vCPU minimum; 4 vCPU preferred
 4 GB RAM minimum; 8 GB preferred
 60-80 GB SSD minimum
@@ -236,7 +236,7 @@ The temporary file under `/tmp` is only used for the first bootstrap or update. 
 |---|---|---|
 | VM safety check before install | `install-preflight` | not required yet |
 | Local VM testing/dev | `local-dev-quickstart` | prompts; Enter defaults to `erp.test` |
-| Public VPS/cloud VM | `public-vm-quickstart` | `erp.example.com` |
+| Public VPS/cloud VM | `public-vm-guided-setup` | `erp.example.com` |
 | Existing install operations | `production-ops-wizard` | saved site/domain |
 | Optional Frappe apps | `app-install-wizard` | existing site |
 | Advanced custom app tools | `advanced-app-tools` | existing site |
@@ -435,7 +435,7 @@ Recommended local VM test order:
 Run this inside a fresh public Ubuntu/Debian-family VM:
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" public-vm-quickstart
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" public-vm-guided-setup
 ```
 
 Use a real subdomain, for example:
@@ -444,18 +444,20 @@ Use a real subdomain, for example:
 erp.example.com
 ```
 
-Typical public setup flow:
+Typical guided public setup flow:
 
 ```text
-1. Run install-preflight
-2. Expand root storage if offered and needed
-3. Set/change production domain
-4. Check DNS/domain plan
+1. Detect VPS/public IP
+2. Ask for production domain and site name
+3. Check DNS points to this VPS
+4. Confirm cloud firewall baseline and clean provider snapshot
 5. Install or repair ERPNext
-6. Configure HTTPS
-7. Security hardening
-8. Configure backups and health checks
-9. Final status / support bundle
+6. Create and verify backup checkpoint
+7. Configure production HTTPS
+8. Apply production security profile and Fail2Ban
+9. Configure scheduled backups and review off-VM backup plan
+10. Optional apps, only if wanted
+11. Production checklist, Final QA, support bundle, post-validation snapshot reminder
 ```
 
 For Cloudflare Origin CA mode:

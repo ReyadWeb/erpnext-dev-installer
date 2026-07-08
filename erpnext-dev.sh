@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.51"
+SCRIPT_VERSION="1.1.52"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -237,7 +237,7 @@ acquire_toolkit_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|security-mode-status|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|local-access-doctor|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|host-dns-guide|print-hosts-command|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|firewall-rollback-snapshots|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|repair-site-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|security-mode-status|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|local-access-doctor|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|host-dns-guide|print-hosts-command|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|firewall-rollback-snapshots|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|repair-site-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
       return 0
       ;;
     *)
@@ -3556,7 +3556,7 @@ show_next_step() {
       next_command="$(toolkit_cmd expand-root-storage)"
     elif [[ "$installed" != "Installed" ]]; then
       next_label="run public quickstart install"
-      next_command="$(toolkit_cmd public-vm-quickstart)"
+      next_command="$(toolkit_cmd public-vm-guided-setup)"
     elif [[ "$runtime" != Running* ]]; then
       next_label="start ERPNext"
       next_command="$(toolkit_cmd start)"
@@ -4000,6 +4000,240 @@ public_quickstart_final_status() {
   ui_next "$(toolkit_cmd support-bundle)" "Take a cloud snapshot after validation."
 }
 
+
+public_vm_guided_step() {
+  local number="$1"
+  local title="$2"
+  echo
+  echo "============================================================"
+  echo "Production Guided Setup - Step ${number}"
+  echo "${title}"
+  echo "============================================================"
+}
+
+public_vm_guided_require_dns_ready() {
+  local vm_ip dns_ip domain
+  domain="${PRODUCTION_DOMAIN:-}"
+  vm_ip="$(get_vm_ip 2>/dev/null || echo unknown)"
+  dns_ip="$(resolve_ipv4_first "$domain")"
+
+  public_vm_guided_step "3" "DNS readiness gate"
+  status_line "Production domain" "$([[ -n "$domain" ]] && echo OK || echo FAIL)" "${domain:-not set}"
+  status_line "DNS A record" "$([[ -n "$dns_ip" ]] && echo OK || echo FAIL)" "${dns_ip:-unresolved}"
+  status_line "VM IPv4" "INFO" "$vm_ip"
+
+  if [[ -z "$dns_ip" ]]; then
+    echo
+    err "DNS does not resolve yet. Create/update the A record before continuing."
+    echo "Required record:"
+    echo "  A    ${domain}    ${vm_ip}"
+    return 1
+  fi
+
+  if [[ "$dns_ip" != "$vm_ip" ]]; then
+    echo
+    err "DNS does not point to this VM."
+    echo "Expected: ${vm_ip}"
+    echo "Actual:   ${dns_ip}"
+    echo
+    echo "For the first Let's Encrypt validation, use DNS-only / gray cloud if using Cloudflare."
+    return 1
+  fi
+
+  ok "DNS points to this VM."
+}
+
+public_vm_guided_external_gate() {
+  local vm_ip domain
+  vm_ip="$(get_vm_ip 2>/dev/null || echo unknown)"
+  domain="${PRODUCTION_DOMAIN:-$SITE_NAME}"
+
+  public_vm_guided_step "4" "External cloud firewall and snapshot gate"
+  echo "These checks happen outside Ubuntu, so the toolkit cannot safely apply them without provider API credentials."
+  echo
+  status_line "Production domain" "INFO" "$domain"
+  status_line "VM IPv4" "INFO" "$vm_ip"
+  echo
+  echo "Confirm your cloud/provider firewall allows only:"
+  echo "  22/tcp    from your admin IP only"
+  echo "  80/tcp    from anywhere"
+  echo "  443/tcp   from anywhere"
+  echo "  8000/tcp  blocked from anywhere"
+  echo "  9000/tcp  blocked from anywhere"
+  echo
+  if ! confirm "Cloud firewall baseline is configured as above"; then
+    warn "Stop here, configure the cloud firewall, then rerun: $(toolkit_cmd public-vm-guided-setup)"
+    return 1
+  fi
+  echo
+  echo "Confirm you took a clean provider snapshot before installation."
+  echo "Recommended name: erpnext-toolkit-v${SCRIPT_VERSION}-clean-before-install"
+  if ! confirm "Initial clean provider snapshot exists"; then
+    warn "Stop here, take the clean snapshot, then rerun: $(toolkit_cmd public-vm-guided-setup)"
+    return 1
+  fi
+}
+
+public_vm_guided_install_core() {
+  local installed runtime
+  installed="$(install_state 2>/dev/null || echo "Not installed")"
+  runtime="$(runtime_state 2>/dev/null || echo "Stopped")"
+
+  public_vm_guided_step "5" "Install or repair ERPNext"
+  status_line "Install" "$([[ "$installed" == Installed* ]] && echo OK || echo WARN)" "$installed"
+  status_line "Runtime" "$([[ "$runtime" == Running* ]] && echo OK || echo WARN)" "$runtime"
+
+  if [[ "$installed" != Installed* ]]; then
+    run_install
+  elif [[ "$runtime" != Running* ]]; then
+    if confirm "ERPNext is installed but not running. Start the service now?"; then
+      start_erpnext_service || return 1
+    fi
+  else
+    ok "ERPNext is already installed and running."
+  fi
+
+  echo
+  ok "Core ERPNext step complete."
+  verify_access || true
+}
+
+public_vm_guided_backup_checkpoint() {
+  public_vm_guided_step "6" "Backup checkpoint"
+  public_quickstart_maybe_initial_backup || return 1
+  verify_latest_backup_set || true
+}
+
+public_vm_guided_configure_https() {
+  local ssl_pair ssl_status ssl_detail ctx mode detail provider dns_ip vm_ip
+  ssl_pair="$(production_ssl_overall_status 2>/dev/null || echo 'WARN|not configured for production')"
+  ssl_status="${ssl_pair%%|*}"
+  ssl_detail="${ssl_pair#*|}"
+
+  public_vm_guided_step "7" "Production HTTPS"
+  status_line "Current HTTPS" "$ssl_status" "$ssl_detail"
+  if [[ "$ssl_status" == "OK" ]]; then
+    ok "Production HTTPS is already configured."
+    show_production_ssl_status || true
+    return 0
+  fi
+
+  ctx="$(ssl_mode_context)"
+  mode="${ctx%%|*}"; ctx="${ctx#*|}"
+  detail="${ctx%%|*}"; ctx="${ctx#*|}"
+  provider="${ctx%%|*}"; ctx="${ctx#*|}"
+  dns_ip="${ctx%%|*}"; ctx="${ctx#*|}"
+  vm_ip="$ctx"
+
+  status_line "Recommended mode" "INFO" "$mode"
+  status_line "Active provider" "INFO" "$provider"
+  status_line "DNS / VM" "INFO" "DNS=${dns_ip}; VM=${vm_ip}"
+  echo "Reason: $detail"
+  echo
+
+  case "$mode" in
+    letsencrypt)
+      echo "This guided production path will use Let's Encrypt directly on this VM."
+      configure_production_ssl || return 1
+      ;;
+    cloudflare-origin-ca)
+      warn "DNS does not look like direct origin DNS, or Cloudflare Origin CA is already selected."
+      echo "Use the SSL provider wizard to choose Cloudflare Origin CA or adjust DNS to DNS-only for Let's Encrypt."
+      production_ssl_wizard || return 1
+      ;;
+    *)
+      err "Production HTTPS is not ready. Fix DNS/SSL planning first."
+      echo "Helpful commands:"
+      echo "  $(toolkit_cmd production-domain-plan)"
+      echo "  $(toolkit_cmd production-ssl-plan)"
+      return 1
+      ;;
+  esac
+
+  show_production_ssl_status || true
+}
+
+public_vm_guided_security_profile() {
+  public_vm_guided_step "8" "Production security profile"
+  echo "This applies the VM UFW production profile and then configures Fail2Ban for sshd."
+  echo "Provider firewall restrictions still remain your cloud-provider responsibility."
+  configure_production_vm_firewall || return 1
+  configure_fail2ban || true
+  show_fail2ban_status || true
+  show_firewall_hardening_status || true
+}
+
+public_vm_guided_backups_and_operations() {
+  public_vm_guided_step "9" "Scheduled backups and off-VM backup planning"
+  configure_backup_schedule || true
+  show_backup_schedule_status || true
+  show_off_vm_backup_plan || true
+  show_off_vm_backup_status || true
+}
+
+public_vm_guided_optional_apps() {
+  public_vm_guided_step "10" "Optional apps"
+  echo "Optional Frappe apps should be installed only after core ERPNext, HTTPS, backups, and security are healthy."
+  if confirm "Open the optional app installer now?"; then
+    run_app_install_wizard || true
+  else
+    echo "Skipped optional apps. You can run later: $(toolkit_cmd app-install-wizard)"
+  fi
+}
+
+public_vm_guided_final_qa() {
+  public_vm_guided_step "11" "Final QA and support bundle"
+  show_production_checklist || true
+  show_release_readiness || true
+  verify_latest_backup_set || true
+  create_support_bundle || true
+  echo
+  echo "External validation commands to run from your workstation/admin machine:"
+  echo "  curl -I https://${PRODUCTION_DOMAIN:-$SITE_NAME}"
+  echo "  curl -I --connect-timeout 10 http://$(get_vm_ip 2>/dev/null || echo VM_IP):8000"
+  echo "  curl -I --connect-timeout 10 http://$(get_vm_ip 2>/dev/null || echo VM_IP):9000"
+  echo
+  echo "Expected external result: HTTPS responds; 8000 and 9000 are blocked or unreachable."
+  echo
+  echo "Take a named post-validation provider snapshot now."
+  echo "Recommended name: erpnext-toolkit-v${SCRIPT_VERSION}-post-production-validation"
+}
+
+run_public_vm_guided_setup() {
+  require_sudo
+  install_self_for_reuse
+
+  ui_box_start "Public VM Guided Setup"
+  echo "This guided path keeps the Public VM menu available, but walks the production VPS flow in order."
+  echo "Flow: domain -> DNS -> external firewall/snapshot gate -> install -> backup -> HTTPS -> security -> scheduled backups -> final QA."
+  echo
+  status_line "VM IPv4" "INFO" "$(get_vm_ip 2>/dev/null || echo unknown)"
+  status_line "Production domain" "$([[ -n "${PRODUCTION_DOMAIN:-}" ]] && echo OK || echo WARN)" "${PRODUCTION_DOMAIN:-not set}"
+  status_line "Site" "INFO" "$SITE_NAME"
+  ui_box_end
+
+  public_vm_guided_step "1" "Production domain"
+  ensure_public_domain_configured || return 1
+
+  public_vm_guided_step "2" "Requirements and production plan"
+  show_production_domain_plan
+  show_public_vm_readiness
+
+  public_vm_guided_require_dns_ready || return 1
+  public_vm_guided_external_gate || return 1
+  public_vm_guided_install_core || return 1
+  public_vm_guided_backup_checkpoint || true
+  public_vm_guided_configure_https || return 1
+  public_vm_guided_security_profile || return 1
+  public_vm_guided_backups_and_operations || true
+  public_vm_guided_optional_apps || true
+  public_vm_guided_final_qa || true
+
+  echo
+  ok "Public VM guided setup finished. Review any WARN rows before using this as production."
+  prompt_open_main_menu_after_install
+}
+
 run_public_vm_quickstart() {
   require_sudo
   install_self_for_reuse
@@ -4067,7 +4301,7 @@ run_first_run_wizard() {
 
     case "$choice" in
       1) run_local_dev_quickstart ;;
-      2) run_public_vm_quickstart ;;
+      2) run_public_vm_guided_setup ;;
       3) show_menu ;;
       4) show_config_summary ;;
       5) show_setup_lifecycle_plan; show_setup_effort_guide; show_ssl_mode_guide ;;
@@ -6420,7 +6654,7 @@ show_setup_effort_guide() {
   printf '  %-28s %-12s %-18s %s\n' "Local VM, local SSL" "1" "2-4" "Add local-ssl-wizard"
   printf '  %-28s %-12s %-18s %s\n' "Public VM, Let's Encrypt" "1" "6-8" "Domain, install, SSL, hardening"
   printf '  %-28s %-12s %-18s %s\n' "Public VM, Cloudflare" "1" "9-11" "Includes cert/key paste"
-  printf '  %-28s %-12s %-18s %s\n' "Existing install" "1" "1-3" "Use public-vm-quickstart/status"
+  printf '  %-28s %-12s %-18s %s\n' "Existing install" "1" "1-3" "Use production-ops-wizard/status"
   ui_box_end
   echo "One-command public VM entry point:"
   echo "  tmp=\"\$(mktemp /tmp/erpnext-dev.XXXXXX.sh)\" && curl -fsSL \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=\$(date +%s)\" -o \"\$tmp\" && chmod +x \"\$tmp\" && sudo \"\$tmp\" public-vm-quickstart"
@@ -13101,7 +13335,7 @@ show_release_readiness() {
 
 show_command_audit() {
   ui_box_start "Command Audit / Key Workflows"
-  status_line "Start here" "OK" "first-run, public-vm-quickstart, local-dev-quickstart"
+  status_line "Start here" "OK" "first-run, public-vm-guided-setup, public-vm-quickstart, local-dev-quickstart"
   status_line "Preflight" "OK" "install-preflight, environment-preflight"
   status_line "Toolkit CLI" "OK" "where-installed, install-cli, repair-cli, update-toolkit"
   status_line "Config" "OK" "set-domain, show-config, setup-effort-guide"
@@ -13124,43 +13358,28 @@ show_command_audit() {
 
 show_release_notes_guide() {
   ui_box_start "v${SCRIPT_VERSION} Release Notes Draft"
-  echo "Release focus: documentation handoff from completed local VM validation to the next production VPS validation stage."
+  echo "Release focus: production VPS guided setup UX fix."
   echo
-  echo "Validated and closed in the local VM stage:"
-  echo "  - Local VM quickstart path"
-  echo "  - Host mapping guidance for local domain access"
-  echo "  - Local HTTPS / mkcert workflow"
-  echo "  - Local VM security profile and access recovery checks"
-  echo "  - Optional app installation and app-status reporting"
-  echo "  - Manual database + files backups"
-  echo "  - Backup readable-file verification"
-  echo "  - Database restore"
-  echo "  - Full database + public/private files restore"
-  echo "  - Scheduled local backups with systemd timer"
-  echo "  - Backup retention status and cleanup dry run"
-  echo "  - Maintenance menu: service logs, clear cache, restart, safe repair"
-  echo "  - Final QA: readiness summary, command audit, backup verify, production checklist, support bundle"
+  echo "Changed in this release:"
+  echo "  - Added public-vm-guided-setup as the production README bootstrap target."
+  echo "  - Kept public-vm-quickstart as the manual Public VM menu."
+  echo "  - Routed the First Run wizard's Public VM choice to the guided production setup path."
+  echo "  - Added ordered production checkpoints: domain, DNS, cloud firewall/snapshot confirmation, install, backup, HTTPS, security, scheduled backups, off-VM backup review, optional apps, Final QA, support bundle, and post-validation snapshot reminder."
+  echo "  - Updated production validation docs to support Ubuntu 24.04 LTS or Ubuntu 26.04 LTS."
   echo
-  echo "Next validation stage requires a disposable public VPS and a real test subdomain:"
-  echo "  - Public VM quickstart"
-  echo "  - DNS A record resolution"
-  echo "  - Production UFW profile plus cloud firewall alignment"
-  echo "  - Let's Encrypt production HTTPS"
-  echo "  - Public HTTPS verification"
-  echo "  - External confirmation that 8000/9000 are blocked"
-  echo "  - Fail2Ban sshd jail confirmation"
-  echo "  - Production backup, scheduled backup, retention, and Final QA"
+  echo "Validation focus:"
+  echo "  - Run the new README production command on a fresh disposable VPS with a real subdomain."
+  echo "  - Confirm the guided path avoids manual menu-number hopping."
+  echo "  - Confirm the manual Public VM menu still works for individual operations."
   echo
   echo "Current readiness rating:"
   echo "  - Local VM workflow: 9.5/10, passed"
-  echo "  - Production VPS workflow before real-domain validation: 6.5/10, implementation present but not yet field-validated"
+  echo "  - Production VPS workflow: production-candidate; continue real VPS validation before client production use"
   echo
   echo "Known production responsibility:"
-  echo "  - Use a real domain/subdomain; local .test domains are not valid for Let's Encrypt"
-  echo "  - Copy backups off the VM"
-  echo "  - Rehearse restore on a disposable VM"
-  echo "  - Keep cloud snapshots named and current"
-  echo "  - Confirm cloud firewall rules after IP/admin changes"
+  echo "  - DNS records and provider firewall rules are still external provider actions."
+  echo "  - Copy backups off the VM and rehearse restore on a disposable VM."
+  echo "  - Keep provider snapshots named and current."
   ui_box_end
   ui_next "$(toolkit_cmd release-readiness)" "$(toolkit_cmd production-checklist)"
 }
@@ -13800,7 +14019,8 @@ Usage:
 
 Start here:
   first-run           Pick local VM, public VM, or maintenance flow
-  public-vm-quickstart Domain -> install -> HTTPS -> security wizard
+  public-vm-guided-setup Guided production VPS setup; domain -> DNS -> install -> HTTPS -> security -> QA
+  public-vm-quickstart Public VM manual menu for production tasks
   local-dev-quickstart Local VM setup; prompts for domain, Enter defaults to erp.test
   install-preflight   Check OS, internet, CPU, RAM, disk, and /tmp before installing
   set-domain          Save public domain and site config
@@ -13930,6 +14150,7 @@ Menus:
 
 Examples:
   $(toolkit_cmd first-run)
+  $(toolkit_cmd public-vm-guided-setup)
   $(toolkit_cmd public-vm-quickstart)
   $(toolkit_cmd local-dev-quickstart)
   $(toolkit_cmd local-ssl-menu)
@@ -13943,7 +14164,7 @@ Options:
 
 One-command GitHub entry points:
   Public VM:
-    tmp="\$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=\$(date +%s)" -o "\$tmp" && chmod +x "\$tmp" && sudo "\$tmp" public-vm-quickstart
+    tmp="\$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=\$(date +%s)" -o "\$tmp" && chmod +x "\$tmp" && sudo "\$tmp" public-vm-guided-setup
   Local VM:
     tmp="\$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=\$(date +%s)" -o "\$tmp" && chmod +x "\$tmp" && sudo "\$tmp" local-dev-quickstart
 
@@ -13986,7 +14207,7 @@ show_menu() {
 
     case "$choice" in
       1) run_first_run_wizard ;;
-      2) run_public_vm_quickstart ;;
+      2) run_public_vm_guided_setup ;;
       3) run_local_dev_quickstart ;;
       4) show_status_menu ;;
       5) run_start ;;
@@ -14022,7 +14243,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -14053,6 +14274,7 @@ main() {
     update-toolkit) update_toolkit ;;
     menu-self-test|menu-navigation-self-test) menu_navigation_self_test ;;
     first-run|start-here|quickstart|setup-wizard) run_first_run_wizard ;;
+    public-vm-guided-setup|public-guided-setup|production-guided-setup) run_public_vm_guided_setup ;;
     public-vm-quickstart|public-setup) run_public_vm_quickstart ;;
     local-dev-quickstart|local-setup) run_local_dev_quickstart ;;
     install-preflight|environment-preflight) run_install_preflight ;;

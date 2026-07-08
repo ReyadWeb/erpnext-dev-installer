@@ -1,5 +1,29 @@
 # Testing
 
+## v1.1.52 Production guided setup workflow test
+
+This focused release keeps the existing Public VM menu, but adds a true guided production command for the README production bootstrap path. The goal is to make the production VPS path feel like the local VM quickstart: the user follows an ordered wizard instead of manually choosing menu items 2, 3, 4, 6, 7, and so on.
+
+Regression checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh --help | grep -n "public-vm-guided-setup"
+grep -n "public-vm-guided-setup" README.md
+grep -n "public-vm-guided-setup" PRODUCTION-VALIDATION.md
+grep -n "v1.1.52" CHANGELOG.md
+printf 'q\n' | MENU_TERMINAL_COLS=100 ./erpnext-dev.sh public-vm-quickstart
+```
+
+Expected results:
+
+- Version prints `ERPNext Developer Toolkit v1.1.52`.
+- `public-vm-guided-setup` is listed in help and accepted by command dispatch.
+- README production VPS bootstrap command uses `public-vm-guided-setup`.
+- `public-vm-quickstart` still opens the manual Public VM menu.
+- The guided production flow includes domain, DNS readiness, external cloud firewall/snapshot gate, install, backup checkpoint, HTTPS, production security profile, scheduled backups/off-VM backup review, optional apps, Final QA, support bundle, and post-validation snapshot reminder.
+
 ## v1.1.51 Production VPS validation planning test
 
 This is a documentation and handoff release. It closes the local VM validation stage and defines the next required production-validation environment.
@@ -20,7 +44,7 @@ Production validation must use a fresh disposable VPS and a real test subdomain.
 Required production-validation environment:
 
 ```text
-Ubuntu 24.04 LTS VPS
+Ubuntu 24.04 LTS or Ubuntu 26.04 LTS VPS
 Public IPv4
 Real test subdomain, for example erp-test.example.com
 DNS A record: erp-test.example.com -> VPS_PUBLIC_IP
@@ -47,7 +71,7 @@ Recommended production-validation order:
 3) Configure cloud firewall baseline
 4) Take initial clean snapshot
 5) Install toolkit CLI
-6) Run Public VM quickstart
+6) Run Public VM guided setup
 7) Apply/check production firewall profile
 8) Run Let's Encrypt production HTTPS
 9) Verify public HTTPS externally
@@ -69,7 +93,7 @@ Readiness ratings after v1.1.50 local testing and before the production VPS test
 | Optional app installation/status | 9.0/10 | Passed on the curated app batch in local VM |
 | Local backup, restore, scheduled backup, retention | 9.0/10 | Passed locally; restore still must be rehearsed separately for production |
 | Maintenance and Final QA menus | 8.8/10 | Passed locally; production warning rows are expected until VPS validation |
-| Public VPS quickstart | 6.5/10 | Implemented, not yet real-VPS validated in this stage |
+| Public VPS guided setup | 6.5/10 | Implemented, not yet real-VPS validated in this stage |
 | Let's Encrypt production HTTPS | 6.5/10 | Implemented, requires real domain validation |
 | Cloudflare Origin CA / Full strict | 6.0/10 | Implemented/planned path, requires separate Cloudflare test |
 | Production firewall + Fail2Ban | 6.5/10 | UFW logic tested locally; cloud firewall and Fail2Ban need VPS validation |
@@ -774,7 +798,7 @@ grep -n "Local VM install" README.md
 grep -n "Production VPS / cloud VM install" README.md
 grep -n "sudo "\$tmp" start-here" README.md
 grep -n "sudo "\$tmp" local-dev-quickstart" README.md
-grep -n "sudo "\$tmp" public-vm-quickstart" README.md
+grep -n "sudo "\$tmp" public-vm-guided-setup" README.md
 ```
 
 The site-name guidance should appear after the corresponding command blocks, not before the first copy/paste command.

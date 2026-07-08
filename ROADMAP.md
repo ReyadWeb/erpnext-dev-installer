@@ -1,5 +1,15 @@
 # Roadmap
 
+## v1.1.52 completed production guided setup UX fix
+
+- Kept the existing Public VM menu for manual and advanced production tasks.
+- Added `public-vm-guided-setup` as the README production bootstrap target.
+- Routed the general setup wizard's Public VM path to the new guided production flow.
+- The guided flow now walks the user through domain, DNS readiness, external cloud firewall/snapshot confirmation, install, backup checkpoint, HTTPS, production security profile, Fail2Ban, scheduled backups/off-VM backup review, optional apps, Final QA, support bundle, and post-validation snapshot reminder.
+- Updated production validation documentation to allow Ubuntu 24.04 LTS or Ubuntu 26.04 LTS.
+
+Active next milestone: continue real VPS/domain validation with the new guided production command.
+
 ## v1.1.51 completed production VPS validation handoff documentation
 
 - Closed the local VM validation stage after v1.1.50 confirmed the final Local SSL firewall-guidance fix.
@@ -23,7 +33,7 @@ Active next milestone: **v1.1.52+ Production VPS validation**.
 Required test environment:
 
 ```text
-Fresh disposable Ubuntu 24.04 LTS VPS
+Fresh disposable Ubuntu 24.04 LTS or Ubuntu 26.04 LTS VPS
 Public IPv4
 Real test subdomain, for example erp-test.example.com
 Cloud firewall control

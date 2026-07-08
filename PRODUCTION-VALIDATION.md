@@ -29,7 +29,7 @@ Use a fresh disposable VPS, not a client production server and not the already-t
 Recommended minimum:
 
 ```text
-Ubuntu 24.04 LTS
+Ubuntu 24.04 LTS or Ubuntu 26.04 LTS
 2 vCPU minimum; 4 vCPU preferred
 4 GB RAM minimum; 8 GB preferred
 60-80 GB SSD minimum
@@ -75,7 +75,7 @@ Do not publicly expose Bench development ports 8000 or 9000 during production va
 4. Take a clean initial snapshot.
 5. Install the toolkit CLI.
 6. Run `erpnext-dev version`.
-7. Run `sudo erpnext-dev public-vm-quickstart`.
+7. Run `sudo erpnext-dev public-vm-guided-setup`.
 8. Confirm site/domain config.
 9. Apply or verify the production firewall profile.
 10. Run the production HTTPS wizard and select the Let's Encrypt path first.
@@ -100,10 +100,17 @@ Install or update the CLI on the VPS:
 tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" install-cli
 ```
 
-Start the production quickstart:
+Start the guided production setup:
 
 ```bash
 erpnext-dev version
+sudo erpnext-dev public-vm-guided-setup
+```
+
+
+Manual production menu remains available:
+
+```bash
 sudo erpnext-dev public-vm-quickstart
 ```
 
