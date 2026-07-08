@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.44"
+SCRIPT_VERSION="1.1.45"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -9990,6 +9990,58 @@ app_in_apps_txt() {
   run_as_frappe "cd ${bench_q} && grep -qxF ${app_q} sites/apps.txt" >/dev/null 2>&1
 }
 
+
+print_downloaded_app_comparisons() {
+  local bench_q="$1"
+  local site_q="$2"
+  local downloaded_tmp installed_tmp registered_tmp diff_tmp
+
+  downloaded_tmp="$(mktemp /tmp/erpnext-dev-downloaded-apps.XXXXXX)" || return 1
+  installed_tmp="$(mktemp /tmp/erpnext-dev-installed-apps.XXXXXX)" || { rm -f "$downloaded_tmp"; return 1; }
+  registered_tmp="$(mktemp /tmp/erpnext-dev-registered-apps.XXXXXX)" || { rm -f "$downloaded_tmp" "$installed_tmp"; return 1; }
+  diff_tmp="$(mktemp /tmp/erpnext-dev-app-diff.XXXXXX)" || { rm -f "$downloaded_tmp" "$installed_tmp" "$registered_tmp"; return 1; }
+
+  if ! run_as_frappe "cd ${bench_q} && find apps -maxdepth 1 -mindepth 1 -type d -printf '%f\\n' | sort -u" > "$downloaded_tmp"; then
+    warn "Could not list downloaded app folders for comparison."
+    : > "$downloaded_tmp"
+  fi
+
+  if ! run_as_frappe "cd ${bench_q} && bench --site ${site_q} list-apps 2>/dev/null | awk '{print \$1}' | sort -u" > "$installed_tmp"; then
+    warn "Could not list installed site apps for comparison."
+    : > "$installed_tmp"
+  fi
+
+  if ! run_as_frappe "cd ${bench_q} && { [ -f sites/apps.txt ] && sed '/^[[:space:]]*$/d' sites/apps.txt || true; } | sort -u" > "$registered_tmp"; then
+    warn "Could not read sites/apps.txt for comparison."
+    : > "$registered_tmp"
+  fi
+
+  echo "Downloaded but not installed on ${SITE_NAME}:"
+  if comm -23 "$downloaded_tmp" "$installed_tmp" > "$diff_tmp"; then
+    if [[ -s "$diff_tmp" ]]; then
+      sed 's/^/  /' "$diff_tmp"
+    else
+      echo "  none"
+    fi
+  else
+    warn "Could not compare downloaded apps with installed site apps."
+  fi
+  echo
+
+  echo "Downloaded but not registered in sites/apps.txt:"
+  if comm -23 "$downloaded_tmp" "$registered_tmp" > "$diff_tmp"; then
+    if [[ -s "$diff_tmp" ]]; then
+      sed 's/^/  /' "$diff_tmp"
+    else
+      echo "  none"
+    fi
+  else
+    warn "Could not compare downloaded apps with sites/apps.txt."
+  fi
+
+  rm -f "$downloaded_tmp" "$installed_tmp" "$registered_tmp" "$diff_tmp"
+}
+
 run_app_status() {
   require_sudo
 
@@ -10016,43 +10068,7 @@ run_app_status() {
   run_as_frappe "cd ${bench_q} && find apps -maxdepth 1 -mindepth 1 -type d -printf '  %f\n' | sort" || warn "Could not list downloaded app folders."
   echo
 
-  echo "Downloaded but not installed on ${SITE_NAME}:"
-  run_as_frappe "
-set -e
-cd ${bench_q}
-installed=\$(bench --site ${site_q} list-apps 2>/dev/null | awk '{print \$1}')
-missing=0
-for d in apps/*; do
-  [ -d "\$d" ] || continue
-  app="\${d##*/}"
-  if ! printf '%s\n' "\$installed" | grep -qx "\$app"; then
-    echo "  \$app"
-    missing=1
-  fi
-done
-if [ "\${missing:-0}" = "0" ]; then
-  echo '  none'
-fi
-" || warn "Could not compare downloaded apps with installed site apps."
-  echo
-
-  echo "Downloaded but not registered in sites/apps.txt:"
-  run_as_frappe "
-set -e
-cd ${bench_q}
-missing=0
-for d in apps/*; do
-  [ -d "\$d" ] || continue
-  app="\${d##*/}"
-  if ! grep -qxF "\$app" sites/apps.txt 2>/dev/null; then
-    echo "  \$app"
-    missing=1
-  fi
-done
-if [ "\${missing:-0}" = "0" ]; then
-  echo '  none'
-fi
-" || warn "Could not compare downloaded apps with sites/apps.txt."
+  print_downloaded_app_comparisons "$bench_q" "$site_q"
   echo
 
   echo "Curated optional app status:"
@@ -10104,42 +10120,8 @@ show_installed_apps() {
   echo "Downloaded app folders:"
   run_as_frappe "cd ${bench_q} && find apps -maxdepth 1 -mindepth 1 -type d -printf '  %f\\n' | sort" || warn "Could not list downloaded app folders."
   echo
-  echo "Downloaded but not installed on ${SITE_NAME}:"
-  run_as_frappe "
-set -e
-cd ${bench_q}
-installed=\$(bench --site ${site_q} list-apps 2>/dev/null | awk '{print \$1}')
-missing=0
-for d in apps/*; do
-  [ -d \"\$d\" ] || continue
-  app=\"\${d##*/}\"
-  if ! printf '%s\\n' \"\$installed\" | grep -qx \"\$app\"; then
-    echo \"  \$app\"
-    missing=1
-  fi
-done
-if [ \"\${missing:-0}\" = \"0\" ]; then
-  echo '  none'
-fi
-" || warn "Could not compare downloaded apps with installed site apps."
+  print_downloaded_app_comparisons "$bench_q" "$site_q"
   echo
-  echo "Downloaded but not registered in sites/apps.txt:"
-  run_as_frappe "
-set -e
-cd ${bench_q}
-missing=0
-for d in apps/*; do
-  [ -d \"\$d\" ] || continue
-  app=\"\${d##*/}\"
-  if ! grep -qxF \"\$app\" sites/apps.txt 2>/dev/null; then
-    echo \"  \$app\"
-    missing=1
-  fi
-done
-if [ \"\${missing:-0}\" = \"0\" ]; then
-  echo '  none'
-fi
-" || warn "Could not compare downloaded apps with sites/apps.txt."
   echo "============================================================"
 }
 

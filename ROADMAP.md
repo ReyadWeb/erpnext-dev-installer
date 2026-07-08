@@ -1,5 +1,11 @@
 # Roadmap
 
+## v1.1.45 completed app-status comparison hardening
+
+- Replaced the app comparison temp scripts with a safer local comparison flow using downloaded, installed, and registered app lists.
+- `app-status` and Advanced Tools -> Installed apps should now show `none` cleanly when every downloaded app is installed and registered.
+- The optional-app workflow is considered passed after full batch install/browser testing, pending final backup/checkpoint review.
+
 ## v1.1.44 completed optional-app status polish
 
 - Fixed optional-app status comparison output after large app batches.

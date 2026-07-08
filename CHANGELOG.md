@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.1.45
+
+### Fixed
+
+- Replaced the fragile multiline `run_as_frappe` app comparison snippets in `app-status` and Advanced Tools -> Installed apps with a safer tempfile + `comm` comparison flow.
+- Fixed the remaining temp-script `unexpected end of file from if command` error in the downloaded-but-not-installed and downloaded-but-not-registered sections.
+- Kept installed app listing and app wizard branch snapshot behavior from v1.1.44.
+
+### Validated
+
+- `bash -n erpnext-dev.sh` passes.
+- `app-status` comparison logic no longer embeds multiline remote `if` blocks.
+
 ## v1.1.44
 
 ### Fixed

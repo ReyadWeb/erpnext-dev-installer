@@ -1,5 +1,34 @@
 # Testing
 
+## v1.1.45 App status comparison regression test
+
+After updating the VM to v1.1.45, run:
+
+```bash
+erpnext-dev version
+sudo erpnext-dev app-status
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.45`.
+- `Installed on site` shows frappe, erpnext, and installed optional apps.
+- `Downloaded app folders` shows the app folders.
+- `Downloaded but not installed on <site>` prints `none` when all downloaded apps are installed.
+- `Downloaded but not registered in sites/apps.txt` prints `none` when all downloaded apps are registered.
+- No `/tmp/erpnext-dev-frappe-run... syntax error` appears.
+
+Also test:
+
+```bash
+sudo erpnext-dev app-install-wizard
+```
+
+Expected:
+
+- The preflight heading remains `Install / branch snapshot`.
+- Installed apps show `OK`; moving branch notes are repeatability warnings only.
+
 ## v1.1.44 App status compare regression test
 
 After installing several optional apps, run:
