@@ -1,5 +1,19 @@
 # Testing
 
+## v1.1.46 README version hygiene regression test
+
+After updating the VM to v1.1.46, run:
+
+```bash
+erpnext-dev version
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.46`.
+- `README.md` title is `# ERPNext Developer Toolkit` without a stale hard-coded release number.
+- The README tells users to run `erpnext-dev version` for the installed toolkit version.
+
 ## v1.1.45 App status comparison regression test
 
 After updating the VM to v1.1.45, run:

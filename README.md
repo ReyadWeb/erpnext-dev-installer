@@ -1,8 +1,14 @@
-# ERPNext Developer Toolkit v1.1.40
+# ERPNext Developer Toolkit
 
 ![ERPNext Toolkit Banner](docs/assets/erp_installer_readme_banner.png)
 
 A guided installer and operations toolkit for ERPNext/Frappe on Ubuntu and Debian-family VMs.
+
+To check the installed toolkit version, run:
+
+```bash
+erpnext-dev version
+```
 
 It supports two main setup paths:
 

@@ -1,5 +1,10 @@
 # Roadmap
 
+## v1.1.46 completed README version hygiene
+
+- Removed the stale hard-coded version from the README heading.
+- The README now points users to `erpnext-dev version` for the installed toolkit version, avoiding future documentation drift.
+
 ## v1.1.45 completed app-status comparison hardening
 
 - Replaced the app comparison temp scripts with a safer local comparison flow using downloaded, installed, and registered app lists.

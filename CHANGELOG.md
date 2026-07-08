@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.1.46
+
+### Fixed
+
+- Removed the stale hard-coded version from the README title so the README does not fall behind future script releases.
+- Added a README version-check command using `erpnext-dev version` as the source of truth.
+
+### Validated
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` reports v1.1.46.
+
 ## v1.1.45
 
 ### Fixed
