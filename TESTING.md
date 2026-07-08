@@ -1,5 +1,103 @@
 # Testing
 
+## v1.1.51 Production VPS validation planning test
+
+This is a documentation and handoff release. It closes the local VM validation stage and defines the next required production-validation environment.
+
+Local VM stage result:
+
+```text
+LOCAL VM VALIDATION: PASS
+Backup/restore: PASS
+Scheduled backups: PASS
+Retention dry run: PASS
+Maintenance checks: PASS
+Final QA/support bundle: PASS
+```
+
+Production validation must use a fresh disposable VPS and a real test subdomain. A local `.test` VM cannot validate public DNS, Let's Encrypt HTTP challenges, cloud firewall behavior, Cloudflare proxy modes, or external exposure checks.
+
+Required production-validation environment:
+
+```text
+Ubuntu 24.04 LTS VPS
+Public IPv4
+Real test subdomain, for example erp-test.example.com
+DNS A record: erp-test.example.com -> VPS_PUBLIC_IP
+Cloud firewall control
+Snapshot capability
+SSH access from admin IP
+```
+
+Baseline cloud firewall before install:
+
+```text
+22/tcp    allow from admin IP only
+80/tcp    allow public
+443/tcp   allow public
+8000/tcp  block public
+9000/tcp  block public
+```
+
+Recommended production-validation order:
+
+```text
+1) Create fresh disposable VPS
+2) Point test subdomain A record to VPS public IP
+3) Configure cloud firewall baseline
+4) Take initial clean snapshot
+5) Install toolkit CLI
+6) Run Public VM quickstart
+7) Apply/check production firewall profile
+8) Run Let's Encrypt production HTTPS
+9) Verify public HTTPS externally
+10) Confirm 8000/9000 are not publicly reachable
+11) Confirm Fail2Ban sshd jail status
+12) Create and verify backups
+13) Configure scheduled local backups
+14) Review off-VM backup plan or configure test rsync target
+15) Run production checklist
+16) Run Final QA
+17) Take named post-validation snapshot
+```
+
+Readiness ratings after v1.1.50 local testing and before the production VPS test:
+
+| Area | Rating | Status |
+| --- | ---: | --- |
+| Local VM quickstart and local HTTPS | 9.5/10 | Passed; release-candidate for local/dev use |
+| Optional app installation/status | 9.0/10 | Passed on the curated app batch in local VM |
+| Local backup, restore, scheduled backup, retention | 9.0/10 | Passed locally; restore still must be rehearsed separately for production |
+| Maintenance and Final QA menus | 8.8/10 | Passed locally; production warning rows are expected until VPS validation |
+| Public VPS quickstart | 6.5/10 | Implemented, not yet real-VPS validated in this stage |
+| Let's Encrypt production HTTPS | 6.5/10 | Implemented, requires real domain validation |
+| Cloudflare Origin CA / Full strict | 6.0/10 | Implemented/planned path, requires separate Cloudflare test |
+| Production firewall + Fail2Ban | 6.5/10 | UFW logic tested locally; cloud firewall and Fail2Ban need VPS validation |
+| Off-VM backup | 5.5/10 | Workflow exists; needs real remote-target validation |
+| Health-check timer / production monitoring | 5.5/10 | Available, not yet production-stage validated |
+| Overall local readiness | 9.3/10 | Passed |
+| Overall production readiness before VPS validation | 6.5/10 | Production-candidate, not final production-ready |
+
+Regression checks for this documentation release:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh release-notes-guide
+grep -n "Production validation stage" README.md
+grep -n "Production VPS validation" TESTING.md
+grep -n "PRODUCTION-VALIDATION" README.md
+test -f PRODUCTION-VALIDATION.md
+```
+
+Expected results:
+
+- Version prints `ERPNext Developer Toolkit v1.1.51`.
+- Release notes explain that production VPS validation is the next stage.
+- README links to `PRODUCTION-VALIDATION.md`.
+- TESTING includes the production VPS validation plan and readiness matrix.
+- ROADMAP marks local VM validation as closed and production VPS validation as the active next stage.
+
 ## v1.1.50 Local SSL firewall-guidance regression test
 
 After updating the VM to v1.1.50, run:

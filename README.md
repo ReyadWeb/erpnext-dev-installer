@@ -92,6 +92,41 @@ erp.example.com
 
 Before production HTTPS, make sure DNS points to the VM or your Cloudflare/proxy setup is ready.
 
+### Production validation stage
+
+The completed local VM validation stage proves the `.test` local-development workflow, local HTTPS, optional apps, backups, restore, scheduled backups, retention checks, maintenance actions, Final QA, and support bundles.
+
+The next release-validation stage must use a **fresh disposable VPS with a real test subdomain**. Do not use the already-tested local VM for production validation, and do not use a final client production server as the first test target.
+
+Recommended production-validation prerequisites:
+
+```text
+Fresh Ubuntu 24.04 LTS VPS
+2 vCPU minimum; 4 vCPU preferred
+4 GB RAM minimum; 8 GB preferred
+60-80 GB SSD minimum
+Public IPv4
+Real test subdomain, for example erp-test.example.com
+DNS A record pointing to the VPS public IP
+Cloud firewall access
+Snapshot capability
+SSH access from your admin IP
+```
+
+Initial cloud firewall baseline before running the production quickstart:
+
+```text
+22/tcp    allow from admin IP only
+80/tcp    allow from anywhere
+443/tcp   allow from anywhere
+8000/tcp  block from anywhere
+9000/tcp  block from anywhere
+```
+
+If using Cloudflare, start with **DNS only** for the first Let's Encrypt validation. After the plain public HTTPS path works, test Cloudflare proxy / Full strict as a separate validation path.
+
+See [`PRODUCTION-VALIDATION.md`](PRODUCTION-VALIDATION.md) for the full VPS validation checklist and readiness ratings.
+
 ### Check the VM before installing
 
 ```bash

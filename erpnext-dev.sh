@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.50"
+SCRIPT_VERSION="1.1.51"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -13124,9 +13124,9 @@ show_command_audit() {
 
 show_release_notes_guide() {
   ui_box_start "v${SCRIPT_VERSION} Release Notes Draft"
-  echo "Release focus: local VM reliability, backup/restore validation, scheduled backups, retention checks, maintenance workflows, and Final QA polish."
+  echo "Release focus: documentation handoff from completed local VM validation to the next production VPS validation stage."
   echo
-  echo "Validated in this local VM stage:"
+  echo "Validated and closed in the local VM stage:"
   echo "  - Local VM quickstart path"
   echo "  - Host mapping guidance for local domain access"
   echo "  - Local HTTPS / mkcert workflow"
@@ -13141,17 +13141,22 @@ show_release_notes_guide() {
   echo "  - Maintenance menu: service logs, clear cache, restart, safe repair"
   echo "  - Final QA: readiness summary, command audit, backup verify, production checklist, support bundle"
   echo
-  echo "Not yet fully validated in this local VM stage:"
-  echo "  - Public production VM quickstart"
+  echo "Next validation stage requires a disposable public VPS and a real test subdomain:"
+  echo "  - Public VM quickstart"
+  echo "  - DNS A record resolution"
+  echo "  - Production UFW profile plus cloud firewall alignment"
   echo "  - Let's Encrypt production HTTPS"
-  echo "  - Cloudflare Origin CA / Full strict production path"
-  echo "  - Production cloud firewall hardening"
+  echo "  - Public HTTPS verification"
+  echo "  - External confirmation that 8000/9000 are blocked"
   echo "  - Fail2Ban sshd jail confirmation"
-  echo "  - Off-VM backup sync"
-  echo "  - Health-check timer"
-  echo "  - Production operations wizard"
+  echo "  - Production backup, scheduled backup, retention, and Final QA"
+  echo
+  echo "Current readiness rating:"
+  echo "  - Local VM workflow: 9.5/10, passed"
+  echo "  - Production VPS workflow before real-domain validation: 6.5/10, implementation present but not yet field-validated"
   echo
   echo "Known production responsibility:"
+  echo "  - Use a real domain/subdomain; local .test domains are not valid for Let's Encrypt"
   echo "  - Copy backups off the VM"
   echo "  - Rehearse restore on a disposable VM"
   echo "  - Keep cloud snapshots named and current"

@@ -1,5 +1,38 @@
 # Roadmap
 
+## v1.1.51 completed production VPS validation handoff documentation
+
+- Closed the local VM validation stage after v1.1.50 confirmed the final Local SSL firewall-guidance fix.
+- Added a documented requirement that the next production-validation stage must use a fresh disposable VPS and a real test subdomain.
+- Added the production VPS validation order: DNS, cloud firewall, clean snapshot, public quickstart, production firewall, Let's Encrypt HTTPS, external port exposure checks, backups, scheduled backups, production checklist, Final QA, and post-validation snapshot.
+- Added readiness ratings so local/dev readiness is separated from production readiness.
+- Added `PRODUCTION-VALIDATION.md` as the dedicated handoff checklist for the next test session.
+
+Current ratings after local validation:
+
+| Case | Rating | Interpretation |
+| --- | ---: | --- |
+| Local VM / developer workflow | 9.5/10 | Passed and ready for normal local development/testing use |
+| Backup + restore foundation | 9.0/10 | Passed locally; production restore still requires disposable-VM rehearsal |
+| Final QA and support bundle | 8.8/10 | Passed locally; production warnings are expected until VPS validation |
+| Public VPS production-candidate workflow | 6.5/10 | Implemented but must be validated on real VPS + domain before production confidence rises |
+| Off-VM backup / production monitoring | 5.5/10 | Workflows exist, but real target/timer validation remains open |
+
+Active next milestone: **v1.1.52+ Production VPS validation**.
+
+Required test environment:
+
+```text
+Fresh disposable Ubuntu 24.04 LTS VPS
+Public IPv4
+Real test subdomain, for example erp-test.example.com
+Cloud firewall control
+Snapshot capability
+SSH access from admin IP
+```
+
+The next milestone should not add broad new features until the real VPS path is tested end to end.
+
 ## v1.1.50 completed Local SSL firewall-guidance polish
 
 - Fixed `verify-local-ssl` follow-up guidance so it no longer recommends applying the Local VM security profile when UFW is already active.

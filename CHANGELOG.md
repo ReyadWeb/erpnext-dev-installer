@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.1.51 - Production VPS validation handoff documentation
+
+### Changed
+
+- Updated the toolkit version to v1.1.51 for the documentation handoff release.
+- Updated the release notes guide to mark the local VM stage as validated and to identify real VPS + real subdomain validation as the next stage.
+- Updated README with a production-validation section, VPS requirements, DNS requirements, and baseline cloud firewall rules.
+- Updated TESTING with the production VPS validation plan, required environment, ordered test sequence, and readiness ratings.
+- Updated ROADMAP to close the local VM validation stage and make production VPS validation the active next milestone.
+- Added `PRODUCTION-VALIDATION.md` as the dedicated handoff checklist for the next test session.
+
+### Readiness after this release
+
+- Local VM/developer workflow: 9.5/10, passed.
+- Backup/restore foundation: 9.0/10, passed locally; production restore rehearsal still required.
+- Public VPS production-candidate workflow: 6.5/10, implemented but not yet validated on real VPS + domain.
+- Off-VM backup and production monitoring: 5.5/10, available but still require real-target validation.
+
+### Validated
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` reports v1.1.51.
+- Documentation now clearly separates completed local validation from upcoming production VPS validation.
+
 ## v1.1.50 - Local SSL firewall guidance polish
 
 - Fixed `verify-local-ssl` follow-up guidance so it no longer recommends applying the Local VM security profile when UFW is already active.
