@@ -1,3 +1,40 @@
+# v1.1.67 Production dashboard navigation polish validation plan
+
+v1.1.67 is a UX/navigation patch on top of the already validated v1.1.66 Production Operations dashboard. The validated production state remains unchanged: runtime, HTTPS, security baseline, local backup, off-VM backup, restore rehearsal, health monitoring, go-live validation, and support bundle evidence were already passing.
+
+## Field finding from v1.1.66
+
+During the v1.1.66 smoke test, the dashboard opened correctly and showed all key production-state rows as OK. Option `6) Health monitoring` opened the Health Monitoring submenu; selecting `9` there produced `WARN: Invalid option` because the operator was inside the submenu, not the main dashboard. After returning to the main dashboard, option `9) Go-live validation`, option `10) Support and diagnostics`, and option `11) Final QA` routed correctly.
+
+## v1.1.67 fix
+
+- Top-level Production Operations dashboard shows only `q) Quit`.
+- Nested sections show `b) Back` and `q) Quit`.
+- Nested sections use breadcrumb titles such as `ERPNext Production Operations > Health Monitoring`.
+
+## Production validation commands
+
+After installing v1.1.67 on production:
+
+```bash
+sudo erpnext-dev production-ops-wizard
+sudo erpnext-dev final-qa
+sudo erpnext-dev support-bundle
+```
+
+Validate:
+
+```text
+Top-level dashboard footer: q) Quit only
+6) Health monitoring: breadcrumb title and b) Back work
+10) Support and diagnostics: breadcrumb title and b) Back work
+11) Final QA: opens as before
+Final QA option 1: release state OK
+Support bundle: created and still includes evidence files
+```
+
+---
+
 # v1.1.66 Production operations dashboard validation plan
 
 v1.1.66 adds the unified Production Operations dashboard. The core production path was already validated through v1.1.64/v1.1.65; this patch focuses on operator experience and safe command routing.

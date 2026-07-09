@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.1.67 - Production dashboard navigation polish
+
+### Changed
+
+- Updated the toolkit version to v1.1.67.
+- Polished the Production Operations dashboard navigation after field validation on `erp.flowmaya.com`.
+- Changed the top-level `production-ops-wizard` footer to show only `q) Quit`, because it is the direct operator entry point.
+- Kept `b) Back` in nested dashboard submenus.
+- Added breadcrumb-style submenu titles such as `ERPNext Production Operations > Health Monitoring` and `ERPNext Production Operations > Support and Diagnostics`.
+- Preserved the hidden `b` handling at the top-level dashboard as a safe compatibility escape, but it is no longer advertised.
+- Updated README, TESTING, ROADMAP, and PRODUCTION-VALIDATION to document the navigation polish and validation plan.
+
+### Field evidence used
+
+- v1.1.66 production dashboard opened on `erp.flowmaya.com` and showed all current-state rows as OK.
+- Option `1) System health and readiness` routed to release readiness and returned to Production Operations.
+- Option `6) Health monitoring` opened the Health Monitoring submenu; selecting `9` inside that submenu correctly produced `WARN: Invalid option`, confirming the confusion came from submenu context rather than broken routing.
+- Returning to the main dashboard and selecting `9) Go-live validation`, `10) Support and diagnostics`, and `11) Final QA` routed correctly.
+
+### Validation scope
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` prints v1.1.67.
+- `production-ops-wizard` top-level footer shows `q) Quit` without advertising `b) Back`.
+- `production-ops-wizard -> 6` shows the breadcrumb title `ERPNext Production Operations > Health Monitoring`.
+- `production-ops-wizard -> 10` shows the breadcrumb title `ERPNext Production Operations > Support and Diagnostics`.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
 ## v1.1.66 - Production operations dashboard
 
 ### Changed

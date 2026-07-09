@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.66"
+SCRIPT_VERSION="1.1.67"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -14362,8 +14362,12 @@ show_health_check_journal() {
 
 health_monitoring_wizard() {
   require_sudo
+  local health_title="Health Monitoring"
+  if [[ "${PRODUCTION_OPS_CONTEXT:-0}" == "1" ]]; then
+    health_title="$(production_ops_breadcrumb_title "Health Monitoring")"
+  fi
   while true; do
-    ui_box_start "Health Monitoring"
+    ui_box_start "$health_title"
     echo "1) Run health check now"
     echo "2) Configure health timer"
     echo "3) Health timer/status"
@@ -14480,10 +14484,14 @@ production_ops_summary() {
   status_line "Go-live validation" "$go_state" "$go_detail"
 }
 
+production_ops_breadcrumb_title() {
+  printf 'ERPNext Production Operations > %s' "$1"
+}
+
 production_ops_services_menu() {
   require_sudo
   while true; do
-    ui_box_start "Services and Recovery"
+    ui_box_start "$(production_ops_breadcrumb_title "Services and Recovery")"
     echo "1) Service status"
     echo "2) Start ERPNext service"
     echo "3) Stop ERPNext service"
@@ -14513,7 +14521,7 @@ production_ops_services_menu() {
 production_ops_backups_menu() {
   require_sudo
   while true; do
-    ui_box_start "Local Backups"
+    ui_box_start "$(production_ops_breadcrumb_title "Local Backups")"
     echo "1) Create database + files backup"
     echo "2) Backup status"
     echo "3) Verify latest backup"
@@ -14549,7 +14557,7 @@ production_ops_backups_menu() {
 production_ops_restore_menu() {
   require_sudo
   while true; do
-    ui_box_start "Restore Readiness and Rehearsal"
+    ui_box_start "$(production_ops_breadcrumb_title "Restore Readiness and Rehearsal")"
     echo "1) Restore rehearsal status"
     echo "2) Restore rehearsal guide"
     echo "3) Restore rehearsal wizard"
@@ -14581,7 +14589,7 @@ production_ops_restore_menu() {
 production_ops_security_menu() {
   require_sudo
   while true; do
-    ui_box_start "Security and Firewall"
+    ui_box_start "$(production_ops_breadcrumb_title "Security and Firewall")"
     echo "1) Firewall hardening status"
     echo "2) VM firewall status"
     echo "3) Security hardening wizard"
@@ -14611,7 +14619,7 @@ production_ops_security_menu() {
 production_ops_https_menu() {
   require_sudo
   while true; do
-    ui_box_start "HTTPS and Certificates"
+    ui_box_start "$(production_ops_breadcrumb_title "HTTPS and Certificates")"
     echo "1) Production SSL status"
     echo "2) SSL mode status"
     echo "3) Production HTTPS / SSL menu"
@@ -14637,7 +14645,7 @@ production_ops_https_menu() {
 production_ops_support_menu() {
   require_sudo
   while true; do
-    ui_box_start "Support and Diagnostics"
+    ui_box_start "$(production_ops_breadcrumb_title "Support and Diagnostics")"
     echo "1) Doctor"
     echo "2) Doctor JSON"
     echo "3) Production checklist"
@@ -14704,7 +14712,7 @@ production_ops_wizard() {
     echo "9) Go-live validation"
     echo "10) Support and diagnostics"
     echo "11) Final QA"
-    menu_footer
+    menu_footer quit-only
     menu_read_choice ops_choice
     case "$ops_choice" in
       1) show_release_readiness; pause_after_screen "Press Enter to return to Production Operations..." ;;
@@ -14712,13 +14720,14 @@ production_ops_wizard() {
       3) production_ops_backups_menu ;;
       4) off_vm_backup_wizard; pause_after_screen "Press Enter to return to Production Operations..." ;;
       5) production_ops_restore_menu ;;
-      6) health_monitoring_wizard; pause_after_screen "Press Enter to return to Production Operations..." ;;
+      6) PRODUCTION_OPS_CONTEXT=1 health_monitoring_wizard; pause_after_screen "Press Enter to return to Production Operations..." ;;
       7) production_ops_security_menu ;;
       8) production_ops_https_menu ;;
       9) show_go_live_status; pause_after_screen "Press Enter to return to Production Operations..." ;;
       10) production_ops_support_menu ;;
       11) final_qa_wizard; pause_after_screen "Press Enter to return to Production Operations..." ;;
-      b|B|"") return 0 ;;
+      "") continue ;;
+      b|B) return 0 ;;
       q|Q) exit 0 ;;
       *) warn "Invalid option" ;;
     esac
@@ -15784,6 +15793,8 @@ menu_navigation_self_test() {
     "menu|12|q"
     "menu|13|q"
     "health-monitoring-wizard|3|q"
+    "production-ops-wizard|6|b"
+    "production-ops-wizard|10|b"
   )
   local row root select quit
   for row in "${nested_tests[@]}"; do

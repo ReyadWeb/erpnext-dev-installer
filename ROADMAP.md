@@ -1,3 +1,29 @@
+# v1.1.67 roadmap update - production dashboard navigation polish
+
+Status: **implemented as a UX polish patch after v1.1.66 field validation**.
+
+The v1.1.66 production dashboard passed core routing validation on `erp.flowmaya.com`, but the smoke test exposed one usability issue: the top-level dashboard advertised `b) Back` even when opened directly, and nested menus did not visually show enough context. The v1.1.67 patch addresses that without changing the underlying production operations logic.
+
+Completed in v1.1.67:
+
+- Top-level `production-ops-wizard` now advertises only `q) Quit`.
+- Nested Production Operations sections still advertise `b) Back` and `q) Quit`.
+- Production Operations submenus now use breadcrumb-style titles.
+- Health Monitoring receives the breadcrumb title when opened from the dashboard.
+- Documentation and validation plans were updated.
+
+Next active milestone: **operator polish and safe status exports after v1.1.67 production validation**.
+
+Planned next items:
+
+1. Install v1.1.67 on the production VPS and validate the navigation polish.
+2. Keep the production dashboard read-only/status-first by default.
+3. Consider a simple read-only status export later, after dashboard navigation remains stable.
+4. Defer health notifications until the dashboard and health timer have more runtime history.
+5. Keep Docker installation as a separate later track after VM operations remain stable.
+
+---
+
 # v1.1.66 roadmap update - production operations dashboard
 
 Status: **implemented as the unified operator-experience layer over the validated production toolkit commands**.

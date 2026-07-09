@@ -768,7 +768,7 @@ Health checks cover ERPNext runtime, Nginx, MariaDB, Redis, HTTPS, disk usage, l
 
 ## Production operations dashboard
 
-The v1.1.66 dashboard is designed for day-to-day production administration after the VM is installed and validated.
+The v1.1.67 dashboard is designed for day-to-day production administration after the VM is installed and validated. v1.1.67 adds navigation polish on top of the v1.1.66 dashboard: the direct top-level dashboard shows only `q) Quit`, while nested operator sections keep `b) Back` and `q) Quit`.
 
 It starts with a status overview similar to:
 
@@ -798,6 +798,21 @@ Then it provides these operator sections:
 9) Go-live validation
 10) Support and diagnostics
 11) Final QA
+```
+
+
+Navigation behavior:
+
+```text
+Top-level dashboard:             q) Quit
+Nested dashboard sections:       b) Back                        q) Quit
+```
+
+Nested dashboard sections use breadcrumb titles so the operator knows where they are, for example:
+
+```text
+ERPNext Production Operations > Health Monitoring
+ERPNext Production Operations > Support and Diagnostics
 ```
 
 The dashboard intentionally reuses existing tested commands. For example, the backup section calls the same backup-status, backup-verify, scheduled backup, and retention commands; the restore section calls the same restore rehearsal and restore preflight commands; and the support section creates the same redacted evidence bundle.

@@ -1,3 +1,48 @@
+## v1.1.67 production dashboard navigation polish validation
+
+Purpose: validate the dashboard UX polish discovered during v1.1.66 production smoke testing. This patch changes navigation labels and submenu breadcrumbs only; it does not change install, backup, restore, SSL, security, monitoring, or go-live logic.
+
+Package checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh --help | grep -n "production-ops-wizard"
+printf 'q\n' | sudo ./erpnext-dev.sh production-ops-wizard
+printf '6\nb\nq\n' | sudo ./erpnext-dev.sh production-ops-wizard
+printf '10\nb\nq\n' | sudo ./erpnext-dev.sh production-ops-wizard
+unzip -l erpnext-dev-installer-v1.1.67.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.67`.
+- `bash -n erpnext-dev.sh` passes.
+- The top-level Production Operations dashboard footer shows only `q) Quit`.
+- Health Monitoring reached from the dashboard shows `ERPNext Production Operations > Health Monitoring`.
+- Support and Diagnostics reached from the dashboard shows `ERPNext Production Operations > Support and Diagnostics`.
+- Nested menus still show `b) Back` and return cleanly to the dashboard.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
+Production validation checklist after installing v1.1.67 on `erp.flowmaya.com`:
+
+```bash
+sudo erpnext-dev production-ops-wizard
+sudo erpnext-dev final-qa
+sudo erpnext-dev support-bundle
+```
+
+In the dashboard, validate at minimum:
+
+```text
+Top-level footer shows only q) Quit
+6) Health monitoring breadcrumb and Back behavior
+10) Support and diagnostics breadcrumb and Back behavior
+11) Final QA still opens
+```
+
+---
+
 ## v1.1.66 production operations dashboard validation
 
 Purpose: validate the unified Production Operations dashboard without changing production state. The dashboard is an operator-experience layer over mature commands already validated in earlier releases.
