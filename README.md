@@ -310,6 +310,7 @@ The temporary file under `/tmp` is only used for the first bootstrap or update. 
 - [Accessing ERPNext credentials](#accessing-erpnext-credentials)
 - [Production operations](#production-operations)
 - [Health monitoring](#health-monitoring)
+- [Go-live validation](#go-live-validation)
 - [Validated production state](#validated-production-state)
 - [Backups and restore safety](#backups-and-restore-safety)
 - [Restore rehearsal from off-VM backup](#restore-rehearsal-from-off-vm-backup)
@@ -798,9 +799,57 @@ The health timer defaults to an hourly schedule with a randomized delay. During 
 
 ---
 
+## Go-live validation
+
+Some production-readiness checks live outside the ERPNext guest VM. The toolkit cannot directly prove your cloud snapshot, cloud-provider firewall, or Cloudflare dashboard settings unless you confirm and record them. v1.1.64 adds a small record/status workflow for those final checks.
+
+Use these checklist commands first:
+
+```bash
+sudo erpnext-dev cloud-firewall-checklist
+sudo erpnext-dev cloudflare-checklist
+```
+
+Then record the confirmed state on the production ERPNext VM:
+
+```bash
+sudo erpnext-dev go-live-record
+sudo erpnext-dev go-live-status
+```
+
+The record is stored at:
+
+```text
+/etc/erpnext-dev/go-live-validation.env
+```
+
+Record these provider-side confirmations:
+
+```text
+Snapshot: named cloud/provider snapshot created
+Cloud firewall: 22 restricted to admin IP where possible, 80/443 allowed, 8000/9000 blocked
+Cloudflare DNS: production hostname proxied/orange-cloud
+Cloudflare SSL/TLS: Full (strict)
+Cloudflare Origin CA: origin certificate active on Nginx
+```
+
+After recording, `production-checklist`, `final-qa`, and `support-bundle` include the go-live validation state.
+
+Useful commands after recording:
+
+```bash
+sudo erpnext-dev go-live-status
+sudo erpnext-dev production-checklist
+sudo erpnext-dev go-live-status
+sudo erpnext-dev final-qa
+sudo erpnext-dev support-bundle
+```
+
+---
+
 ## Validated production state
 
-The current validated production path is documented from the real `erp.flowmaya.com` VPS and its separate off-VM backup server. This is the reference state for v1.1.63 documentation and monitoring workflow.
+The current validated production path is documented from the real `erp.flowmaya.com` VPS and its separate off-VM backup server. This is the reference state for v1.1.64 documentation, monitoring, and go-live validation workflow.
 
 Validated environment:
 
@@ -827,6 +876,8 @@ Browser/login validation after restore: passed
 Restore rehearsal tracking: passed
 Final QA: Release state OK, ready for production use
 Support bundle creation: passed
+Health monitoring: passed
+Go-live validation record: supported in v1.1.64
 ```
 
 Recommended final validation commands on production:
@@ -835,6 +886,7 @@ Recommended final validation commands on production:
 sudo erpnext-dev restore-rehearsal-status
 sudo erpnext-dev production-checklist
 sudo erpnext-dev backup-status
+sudo erpnext-dev go-live-status
 sudo erpnext-dev final-qa
 sudo erpnext-dev support-bundle
 ```
@@ -853,7 +905,7 @@ Remaining go-live decisions are outside the ERPNext guest VM:
 - Create or confirm a named cloud/provider snapshot.
 - Confirm provider firewall policy: 22 restricted to admin IP if possible, 80/443 allowed, 8000/9000 blocked.
 - Confirm Cloudflare DNS proxy state and SSL/TLS mode Full (strict).
-- Decide whether to enable the optional toolkit health timer for ongoing monitoring.
+- Record those confirmations with `sudo erpnext-dev go-live-record`.
 ```
 
 ## Backups and restore safety

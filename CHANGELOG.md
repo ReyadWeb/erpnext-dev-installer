@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.1.64 - Go-live validation record and evidence bundle polish
+
+### Changed
+
+- Updated the toolkit version to v1.1.64.
+- Added `go-live-record` to record external go-live confirmations on the production VM.
+- Added `go-live-status` to show the saved snapshot, cloud firewall, and Cloudflare validation record.
+- Added `cloud-firewall-checklist` and `cloudflare-checklist` to guide provider-side checks that cannot be fully verified from inside the VM.
+- Updated `production-checklist` and Final QA so go-live validation appears alongside backup, restore rehearsal, and health monitoring status.
+- Added Final QA option `9) Go-live validation status`.
+- Enhanced support bundles with redacted production evidence files: production checklist, backup status, backup verification, off-VM backup status, restore rehearsal status, health check status, and go-live status.
+- Updated README, TESTING, ROADMAP, and PRODUCTION-VALIDATION with the go-live validation workflow.
+
+### Validation scope
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` prints v1.1.64.
+- Help lists `go-live-record`, `go-live-status`, `cloud-firewall-checklist`, and `cloudflare-checklist`.
+- Final QA includes `9) Go-live validation status`.
+- `go-live-record` writes `/etc/erpnext-dev/go-live-validation.env` and `go-live-status` reads it.
+- Support bundle collection includes the new redacted evidence files.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
 ## v1.1.63 - Health timer and production monitoring workflow
 
 ### Changed

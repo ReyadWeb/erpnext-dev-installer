@@ -1,3 +1,48 @@
+## v1.1.64 go-live validation and evidence bundle validation
+
+Purpose: record external go-live confirmations that the VM cannot fully verify by itself, and improve support bundles so they include redacted production evidence.
+
+Package checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh --help | grep -n "go-live-record"
+./erpnext-dev.sh --help | grep -n "go-live-status"
+./erpnext-dev.sh --help | grep -n "cloud-firewall-checklist"
+./erpnext-dev.sh --help | grep -n "cloudflare-checklist"
+printf 'q
+' | sudo ./erpnext-dev.sh final-qa
+unzip -l erpnext-dev-installer-v1.1.64.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.64`.
+- Help lists the new go-live validation commands.
+- Final QA includes `9) Go-live validation status`.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
+Production validation flow:
+
+```bash
+sudo erpnext-dev cloud-firewall-checklist
+sudo erpnext-dev cloudflare-checklist
+sudo erpnext-dev go-live-record
+sudo erpnext-dev go-live-status
+sudo erpnext-dev production-checklist
+sudo erpnext-dev final-qa
+sudo erpnext-dev support-bundle
+```
+
+Expected production behavior:
+
+- `go-live-record` saves `/etc/erpnext-dev/go-live-validation.env`.
+- `go-live-status` reports snapshot, cloud firewall, Cloudflare proxy, Full (strict), and Origin CA status.
+- `production-checklist` shows `Go-live validation OK` after all confirmations are recorded.
+- Final QA includes go-live validation and remains `Release state OK` once the record is complete.
+- Support bundle includes redacted evidence files such as `production-checklist.txt`, `backup-status.txt`, `off-vm-backup-status.txt`, `restore-rehearsal-status.txt`, `health-check-status.txt`, and `go-live-status.txt`.
+
 ## v1.1.63 health monitoring workflow validation
 
 Purpose: add a smoother production monitoring workflow after backup, off-VM backup, and restore rehearsal validation are complete.

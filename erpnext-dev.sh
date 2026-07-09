@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.63"
+SCRIPT_VERSION="1.1.64"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -120,6 +120,7 @@ HEALTH_CHECK_ON_CALENDAR="${HEALTH_CHECK_ON_CALENDAR:-hourly}"
 HEALTH_CHECK_RANDOM_DELAY="${HEALTH_CHECK_RANDOM_DELAY:-10m}"
 HEALTH_CHECK_DISK_WARN_PERCENT="${HEALTH_CHECK_DISK_WARN_PERCENT:-80}"
 HEALTH_CHECK_BACKUP_MAX_AGE_HOURS="${HEALTH_CHECK_BACKUP_MAX_AGE_HOURS:-30}"
+GO_LIVE_RECORD_FILE="${GO_LIVE_RECORD_FILE:-/etc/erpnext-dev/go-live-validation.env}"
 
 # Hard safety gates for fresh installs. These are intentionally conservative because
 # a too-small VM can leave a half-installed ERPNext stack, corrupt user expectations,
@@ -243,7 +244,7 @@ acquire_toolkit_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|health-check-run-now|configure-health-check-timer|health-check-status|health-check-journal|disable-health-check-timer|health-monitoring-wizard|production-monitoring-wizard|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|security-mode-status|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|local-access-doctor|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|host-dns-guide|print-hosts-command|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|firewall-rollback-snapshots|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|repair-site-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|go-live-record|go-live-status|cloud-firewall-checklist|cloudflare-checklist|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|health-check-run-now|configure-health-check-timer|health-check-status|health-check-journal|disable-health-check-timer|health-monitoring-wizard|production-monitoring-wizard|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|security-mode-status|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|local-access-doctor|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|host-dns-guide|print-hosts-command|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|firewall-rollback-snapshots|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|repair-site-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
       return 0
       ;;
     *)
@@ -9773,6 +9774,16 @@ support_bundle_recent_errors() {
   done
 }
 
+
+
+support_bundle_production_checklist() { show_production_checklist; }
+support_bundle_backup_status() { show_backup_status; }
+support_bundle_backup_verify() { verify_latest_backup_set; }
+support_bundle_off_vm_backup_status() { show_off_vm_backup_status; }
+support_bundle_restore_rehearsal_status() { show_restore_rehearsal_status; }
+support_bundle_health_check_status() { show_health_check_status; }
+support_bundle_go_live_status() { show_go_live_status; }
+
 create_support_bundle() {
   require_sudo
 
@@ -9821,6 +9832,13 @@ create_support_bundle() {
   support_bundle_write_file "${bundle_dir}/ssl-status.txt" support_bundle_ssl_status
   support_bundle_write_file "${bundle_dir}/bench-status.txt" support_bundle_bench_status
   support_bundle_write_file "${bundle_dir}/recent-errors.txt" support_bundle_recent_errors
+  support_bundle_write_file "${bundle_dir}/production-checklist.txt" support_bundle_production_checklist
+  support_bundle_write_file "${bundle_dir}/backup-status.txt" support_bundle_backup_status
+  support_bundle_write_file "${bundle_dir}/backup-verify.txt" support_bundle_backup_verify
+  support_bundle_write_file "${bundle_dir}/off-vm-backup-status.txt" support_bundle_off_vm_backup_status
+  support_bundle_write_file "${bundle_dir}/restore-rehearsal-status.txt" support_bundle_restore_rehearsal_status
+  support_bundle_write_file "${bundle_dir}/health-check-status.txt" support_bundle_health_check_status
+  support_bundle_write_file "${bundle_dir}/go-live-status.txt" support_bundle_go_live_status
 
   tar -C "$bundle_parent" -czf "$archive" "$bundle_name"
   chmod 600 "$archive" 2>/dev/null || true
@@ -14464,6 +14482,207 @@ production_ops_wizard() {
   done
 }
 
+
+
+go_live_value() {
+  local key="$1" value=""
+  if value="$(read_config_key_from_file "$GO_LIVE_RECORD_FILE" "$key" 2>/dev/null)" && [[ -n "$value" ]]; then
+    printf '%s\n' "$value"
+    return 0
+  fi
+  return 1
+}
+
+go_live_bool_true() {
+  local key="$1" value
+  value="$(go_live_value "$key" 2>/dev/null || true)"
+  case "${value,,}" in
+    true|yes|y|1|ok|confirmed) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+go_live_recorded_ok() {
+  local status site
+  status="$(go_live_value GO_LIVE_STATUS 2>/dev/null || true)"
+  site="$(go_live_value GO_LIVE_SITE 2>/dev/null || true)"
+  [[ "$status" == "OK" ]] || return 1
+  [[ -z "$site" || "$site" == "$SITE_NAME" ]] || return 1
+  go_live_bool_true GO_LIVE_SNAPSHOT_CONFIRMED || return 1
+  go_live_bool_true GO_LIVE_CLOUD_FIREWALL_CONFIRMED || return 1
+  go_live_bool_true GO_LIVE_CLOUDFLARE_PROXY_CONFIRMED || return 1
+  go_live_bool_true GO_LIVE_CLOUDFLARE_FULL_STRICT_CONFIRMED || return 1
+  return 0
+}
+
+go_live_summary_pair() {
+  local status site recorded_at snapshot_name firewall cf_proxy cf_strict cf_origin notes detail
+  if [[ ! -r "$GO_LIVE_RECORD_FILE" ]]; then
+    printf 'WARN|not recorded; confirm snapshot, cloud firewall, and Cloudflare settings, then run go-live-record\n'
+    return 0
+  fi
+  status="$(go_live_value GO_LIVE_STATUS 2>/dev/null || true)"
+  site="$(go_live_value GO_LIVE_SITE 2>/dev/null || true)"
+  recorded_at="$(go_live_value GO_LIVE_RECORDED_AT 2>/dev/null || true)"
+  snapshot_name="$(go_live_value GO_LIVE_SNAPSHOT_NAME 2>/dev/null || true)"
+  firewall="$(go_live_value GO_LIVE_CLOUD_FIREWALL_CONFIRMED 2>/dev/null || true)"
+  cf_proxy="$(go_live_value GO_LIVE_CLOUDFLARE_PROXY_CONFIRMED 2>/dev/null || true)"
+  cf_strict="$(go_live_value GO_LIVE_CLOUDFLARE_FULL_STRICT_CONFIRMED 2>/dev/null || true)"
+  cf_origin="$(go_live_value GO_LIVE_CLOUDFLARE_ORIGIN_CERT_CONFIRMED 2>/dev/null || true)"
+  notes="$(go_live_value GO_LIVE_NOTES 2>/dev/null || true)"
+  if [[ -n "$site" && "$site" != "$SITE_NAME" ]]; then
+    printf 'WARN|recorded for %s, current site is %s\n' "$site" "$SITE_NAME"
+    return 0
+  fi
+  detail="recorded"
+  [[ -n "$recorded_at" ]] && detail="${detail} ${recorded_at}"
+  [[ -n "$snapshot_name" ]] && detail="${detail}; snapshot ${snapshot_name}"
+  case "${firewall,,}" in true|yes|y|1|ok|confirmed) detail="${detail}; cloud firewall confirmed" ;; *) detail="${detail}; cloud firewall not confirmed" ;; esac
+  case "${cf_proxy,,}" in true|yes|y|1|ok|confirmed) detail="${detail}; Cloudflare proxied" ;; *) detail="${detail}; Cloudflare proxy not confirmed" ;; esac
+  case "${cf_strict,,}" in true|yes|y|1|ok|confirmed) detail="${detail}; Full strict confirmed" ;; *) detail="${detail}; Full strict not confirmed" ;; esac
+  case "${cf_origin,,}" in true|yes|y|1|ok|confirmed) detail="${detail}; origin cert confirmed" ;; esac
+  if go_live_recorded_ok; then
+    printf 'OK|%s\n' "$detail"
+  else
+    printf 'WARN|%s\n' "$detail"
+  fi
+}
+
+go_live_status_line() {
+  local pair state detail
+  pair="$(go_live_summary_pair)"
+  state="${pair%%|*}"
+  detail="${pair#*|}"
+  status_line "Go-live validation" "$state" "$detail"
+}
+
+show_cloud_firewall_checklist() {
+  ui_box_start "Cloud Firewall Checklist"
+  echo "Confirm these rules in the cloud provider firewall, outside the VM."
+  echo
+  status_line "SSH 22" "INFO" "allow only from admin IP where possible"
+  status_line "HTTP 80" "INFO" "allow from the Internet"
+  status_line "HTTPS 443" "INFO" "allow from the Internet"
+  status_line "ERPNext dev 8000" "INFO" "blocked externally"
+  status_line "Socket.io 9000" "INFO" "blocked externally"
+  status_line "Redis 11000/13000" "INFO" "blocked externally"
+  status_line "MariaDB 3306" "INFO" "blocked externally"
+  echo
+  echo "After confirming the cloud firewall, record it with:"
+  echo "  sudo erpnext-dev go-live-record"
+  ui_next "$(toolkit_cmd go-live-record)" "$(toolkit_cmd go-live-status)" "$(toolkit_cmd production-checklist)"
+  ui_box_end
+}
+
+show_cloudflare_checklist() {
+  ui_box_start "Cloudflare Checklist"
+  echo "Confirm these settings in Cloudflare for the production hostname."
+  echo
+  status_line "Hostname" "INFO" "$SITE_NAME"
+  status_line "DNS proxy" "INFO" "proxied / orange-cloud"
+  status_line "SSL/TLS mode" "INFO" "Full (strict)"
+  status_line "Origin certificate" "INFO" "Cloudflare Origin CA certificate installed on Nginx"
+  status_line "Direct dev ports" "INFO" "8000/9000 not publicly exposed"
+  echo
+  echo "After confirming Cloudflare, record it with:"
+  echo "  sudo erpnext-dev go-live-record"
+  ui_next "$(toolkit_cmd go-live-record)" "$(toolkit_cmd go-live-status)" "$(toolkit_cmd production-checklist)"
+  ui_box_end
+}
+
+show_go_live_status() {
+  require_sudo
+  ui_box_start "Go-Live Validation Status"
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "Record file" "$($SUDO test -f "$GO_LIVE_RECORD_FILE" && echo OK || echo WARN)" "$GO_LIVE_RECORD_FILE"
+  go_live_status_line || true
+  if $SUDO test -f "$GO_LIVE_RECORD_FILE"; then
+    echo
+    echo "Recorded metadata:"
+    $SUDO sed -E 's/(PASSWORD|TOKEN|SECRET|KEY)=.*/\1=[REDACTED]/' "$GO_LIVE_RECORD_FILE" | sed 's/^/  /'
+  else
+    echo
+    echo "No go-live validation record exists yet on this VM."
+    echo "After confirming snapshot, cloud firewall, and Cloudflare settings, run:"
+    echo "  sudo erpnext-dev go-live-record"
+  fi
+  echo
+  echo "This records external platform checks that the toolkit cannot fully verify from inside the VM."
+  ui_next "$(toolkit_cmd go-live-record)" "$(toolkit_cmd cloud-firewall-checklist)" "$(toolkit_cmd cloudflare-checklist)"
+  ui_box_end
+}
+
+record_go_live_validation() {
+  require_sudo
+  local snapshot_name snapshot_confirmed firewall_confirmed cf_proxy cf_strict cf_origin notes recorded_at config_dir
+  local answer
+  snapshot_name="${GO_LIVE_SNAPSHOT_NAME:-erp-flowmaya-v${SCRIPT_VERSION}-final-validated-$(date +%Y%m%d)}"
+  snapshot_confirmed="${GO_LIVE_SNAPSHOT_CONFIRMED:-false}"
+  firewall_confirmed="${GO_LIVE_CLOUD_FIREWALL_CONFIRMED:-false}"
+  cf_proxy="${GO_LIVE_CLOUDFLARE_PROXY_CONFIRMED:-false}"
+  cf_strict="${GO_LIVE_CLOUDFLARE_FULL_STRICT_CONFIRMED:-false}"
+  cf_origin="${GO_LIVE_CLOUDFLARE_ORIGIN_CERT_CONFIRMED:-true}"
+  notes="${GO_LIVE_NOTES:-snapshot-firewall-cloudflare-confirmed}"
+
+  ui_box_start "Record Go-Live Validation"
+  echo "Run this on the production ERPNext VM after confirming the external cloud controls."
+  echo "This records snapshot, cloud firewall, and Cloudflare status for production-checklist, final QA, and support bundles."
+  echo
+  status_line "Record file" "INFO" "$GO_LIVE_RECORD_FILE"
+  status_line "Current site" "INFO" "$SITE_NAME"
+  echo
+  echo "Use cloud-firewall-checklist and cloudflare-checklist if you want the exact checklist before recording."
+  echo
+
+  if [[ -t 0 && "$ASSUME_YES" -ne 1 ]]; then
+    read -r -p "Snapshot name [${snapshot_name}]: " answer
+    snapshot_name="${answer:-$snapshot_name}"
+    read -r -p "Snapshot created/verified? [y/N]: " answer
+    case "$answer" in y|Y|yes|YES) snapshot_confirmed="true" ;; *) snapshot_confirmed="false" ;; esac
+    read -r -p "Cloud firewall confirmed? 22 admin IP, 80/443 open, 8000/9000 blocked [y/N]: " answer
+    case "$answer" in y|Y|yes|YES) firewall_confirmed="true" ;; *) firewall_confirmed="false" ;; esac
+    read -r -p "Cloudflare DNS proxied/orange-cloud confirmed? [y/N]: " answer
+    case "$answer" in y|Y|yes|YES) cf_proxy="true" ;; *) cf_proxy="false" ;; esac
+    read -r -p "Cloudflare SSL/TLS Full (strict) confirmed? [y/N]: " answer
+    case "$answer" in y|Y|yes|YES) cf_strict="true" ;; *) cf_strict="false" ;; esac
+    read -r -p "Cloudflare Origin CA certificate active on Nginx? [Y/n]: " answer
+    case "$answer" in n|N|no|NO) cf_origin="false" ;; *) cf_origin="true" ;; esac
+    read -r -p "Notes [${notes}]: " answer
+    notes="${answer:-$notes}"
+  fi
+
+  snapshot_name="$(sanitize_restore_rehearsal_value "$snapshot_name")"
+  notes="$(sanitize_restore_rehearsal_value "$notes")"
+  recorded_at="$(date -Is 2>/dev/null || date)"
+
+  local status="OK"
+  for v in "$snapshot_confirmed" "$firewall_confirmed" "$cf_proxy" "$cf_strict"; do
+    case "${v,,}" in true|yes|y|1|ok|confirmed) : ;; *) status="WARN" ;; esac
+  done
+
+  config_dir="$(dirname "$GO_LIVE_RECORD_FILE")"
+  $SUDO mkdir -p "$config_dir"
+  $SUDO tee "$GO_LIVE_RECORD_FILE" >/dev/null <<EOF_GO_LIVE
+GO_LIVE_STATUS=${status}
+GO_LIVE_RECORDED_AT=${recorded_at}
+GO_LIVE_SITE=${SITE_NAME}
+GO_LIVE_SNAPSHOT_CONFIRMED=${snapshot_confirmed}
+GO_LIVE_SNAPSHOT_NAME=${snapshot_name}
+GO_LIVE_CLOUD_FIREWALL_CONFIRMED=${firewall_confirmed}
+GO_LIVE_CLOUDFLARE_PROXY_CONFIRMED=${cf_proxy}
+GO_LIVE_CLOUDFLARE_FULL_STRICT_CONFIRMED=${cf_strict}
+GO_LIVE_CLOUDFLARE_ORIGIN_CERT_CONFIRMED=${cf_origin}
+GO_LIVE_NOTES=${notes}
+GO_LIVE_RECORDED_BY_TOOLKIT_VERSION=${SCRIPT_VERSION}
+EOF_GO_LIVE
+  $SUDO chown root:root "$GO_LIVE_RECORD_FILE" || true
+  $SUDO chmod 600 "$GO_LIVE_RECORD_FILE" || true
+  status_line "Go-live record" "$status" "saved"
+  go_live_status_line || true
+  ui_next "$(toolkit_cmd go-live-status)" "$(toolkit_cmd production-checklist)" "$(toolkit_cmd final-qa)"
+  ui_box_end
+}
+
 show_production_checklist() {
   require_sudo
   ui_box_start "Production Checklist"
@@ -14538,7 +14757,14 @@ show_production_checklist() {
   else
     status_line "Health timer" "INFO" "not configured; optional"
   fi
-  status_line "Snapshot" "INFO" "take/verify cloud snapshot before go-live"
+  local go_pair go_state go_detail
+  go_pair="$(go_live_summary_pair)"
+  go_state="${go_pair%%|*}"
+  go_detail="${go_pair#*|}"
+  status_line "Go-live validation" "$go_state" "$go_detail"
+  if [[ "$go_state" != "OK" ]]; then
+    status_line "Snapshot" "INFO" "take/verify cloud snapshot before go-live"
+  fi
   echo
   echo "Remaining production decisions:"
   if [[ "$off_state" != "OK" ]]; then
@@ -14554,10 +14780,15 @@ show_production_checklist() {
   else
     echo "  - Configure health timer if ongoing monitoring is required."
   fi
-  echo "  - Confirm cloud firewall: 22 admin IP, 80/443 allowed, 8000/9000 blocked."
-  echo "  - Confirm Cloudflare SSL mode and DNS proxy state."
-  echo "  - Create named cloud snapshot after final validation."
-  ui_next "$(toolkit_cmd backup-status)" "$(toolkit_cmd off-vm-backup-status)" "$(toolkit_cmd support-bundle)"
+  if [[ "$go_state" == "OK" ]]; then
+    echo "  - Go-live validation recorded; repeat after snapshot, firewall, DNS, or SSL changes."
+  else
+    echo "  - Confirm cloud firewall: 22 admin IP, 80/443 allowed, 8000/9000 blocked."
+    echo "  - Confirm Cloudflare SSL mode and DNS proxy state."
+    echo "  - Create named cloud snapshot after final validation."
+    echo "  - Record external go-live validation with go-live-record."
+  fi
+  ui_next "$(toolkit_cmd backup-status)" "$(toolkit_cmd off-vm-backup-status)" "$(toolkit_cmd go-live-status)"
   ui_box_end
 }
 
@@ -14566,7 +14797,7 @@ show_release_readiness() {
   require_sudo
 
   local syntax_status syntax_detail installed runtime ssl_pair ssl_status ssl_detail
-  local ufw_status fail2ban_status latest_lines completeness release_state rehearsal_pair rehearsal_state rehearsal_detail
+  local ufw_status fail2ban_status latest_lines completeness release_state rehearsal_pair rehearsal_state rehearsal_detail go_pair go_state go_detail
 
   if bash -n "$0" >/dev/null 2>&1; then
     syntax_status="OK"; syntax_detail="bash syntax valid"
@@ -14635,6 +14866,13 @@ show_release_readiness() {
   else
     status_line "Health monitoring" "INFO" "timer not configured; optional"
   fi
+  go_pair="$(go_live_summary_pair)"
+  go_state="${go_pair%%|*}"
+  go_detail="${go_pair#*|}"
+  status_line "Go-live validation" "$go_state" "$go_detail"
+  if [[ "${DEPLOYMENT_MODE:-development}" != "development" && "$go_state" != "OK" ]]; then
+    release_state="WARN"
+  fi
   status_line "Release state" "$release_state" "$([[ "$release_state" == OK ]] && echo "ready for production use" || echo "review WARN rows before production use")"
   ui_box_end
 
@@ -14658,6 +14896,7 @@ show_command_audit() {
   status_line "Backup retention" "OK" "backup-retention-plan, backup-retention-status, cleanup-old-backups"
   status_line "Off-VM backup" "OK" "off-vm-backup-plan, configure-rsync-backup-target, run-off-vm-backup"
   status_line "Health monitoring" "OK" "health-monitoring-wizard, health-check, configure-health-check-timer, health-check-status, health-check-journal"
+  status_line "Go-live validation" "OK" "go-live-record, go-live-status, cloud-firewall-checklist, cloudflare-checklist"
   status_line "Restore safety" "OK" "restore-rehearsal-guide, restore-rehearsal-status, restore-rehearsal-record, restore-preflight, restore-db, restore-full"
   status_line "Optional apps" "OK" "app-install-wizard, app-status, app-compatibility, install-payments, install-webshop, install-builder, install-lms, install-education, install-wiki, install-print-designer, install-drive, install-raven, advanced-app-tools"
   ui_box_end
@@ -14666,7 +14905,7 @@ show_command_audit() {
 
 show_release_notes_guide() {
   ui_box_start "v${SCRIPT_VERSION} Release Notes Draft"
-  echo "Release focus: health timer and production monitoring workflow."
+  echo "Release focus: go-live validation record and enhanced production evidence bundles."
   echo
   echo "Changed in this release:"
   echo "  - Added health-monitoring-wizard and health-check-journal."
@@ -14706,6 +14945,7 @@ final_qa_wizard() {
     echo "6) Create support bundle"
     echo "7) Restore rehearsal status"
     echo "8) Health monitoring status"
+    echo "9) Go-live validation status"
     menu_footer
     menu_read_choice choice
 
@@ -14718,6 +14958,7 @@ final_qa_wizard() {
       6) create_support_bundle; pause_after_screen "Press Enter to return to Final QA..." ;;
       7) show_restore_rehearsal_status; pause_after_screen "Press Enter to return to Final QA..." ;;
       8) show_health_check_status; pause_after_screen "Press Enter to return to Final QA..." ;;
+      9) show_go_live_status; pause_after_screen "Press Enter to return to Final QA..." ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *)
@@ -15433,6 +15674,10 @@ Backup / Restore:
   restore-rehearsal-status Show recorded restore rehearsal status
   restore-rehearsal-record Record completed restore rehearsal evidence on production VM
   restore-rehearsal-report Print restore evidence from a disposable restore VM
+  go-live-record    Record snapshot/firewall/Cloudflare go-live validation
+  go-live-status    Show recorded external go-live validation status
+  cloud-firewall-checklist Show provider firewall checklist
+  cloudflare-checklist Show Cloudflare DNS/SSL checklist
   restore-rehearsal-wizard Guided off-VM restore rehearsal workflow
   restore-key-setup   Generate a temporary restore SSH key and exact backup-server command
   pull-off-vm-backup  Pull off-VM backups to this restore VM with rsync
@@ -15571,7 +15816,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|health-check-run-now|configure-health-check-timer|health-check-status|health-check-journal|disable-health-check-timer|health-monitoring-wizard|production-monitoring-wizard|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|go-live-record|go-live-status|cloud-firewall-checklist|cloudflare-checklist|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|health-check-run-now|configure-health-check-timer|health-check-status|health-check-journal|disable-health-check-timer|health-monitoring-wizard|production-monitoring-wizard|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -15675,6 +15920,10 @@ main() {
     restore-rehearsal-status) show_restore_rehearsal_status ;;
     restore-rehearsal-record) record_restore_rehearsal ;;
     restore-rehearsal-report) show_restore_rehearsal_report ;;
+    go-live-record) record_go_live_validation ;;
+    go-live-status) show_go_live_status ;;
+    cloud-firewall-checklist) show_cloud_firewall_checklist ;;
+    cloudflare-checklist) show_cloudflare_checklist ;;
     production-checklist) show_production_checklist ;;
     release-readiness) show_release_readiness ;;
     command-audit) show_command_audit ;;

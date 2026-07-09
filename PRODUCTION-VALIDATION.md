@@ -1,3 +1,67 @@
+# v1.1.64 Go-live validation record and evidence bundle plan
+
+v1.1.64 records the external provider-side checks that cannot be fully proven from inside the ERPNext VM. It complements the already validated install, backup, off-VM backup, restore rehearsal, and health timer.
+
+New go-live commands:
+
+```bash
+sudo erpnext-dev cloud-firewall-checklist
+sudo erpnext-dev cloudflare-checklist
+sudo erpnext-dev go-live-record
+sudo erpnext-dev go-live-status
+```
+
+Production validation sequence:
+
+```bash
+sudo erpnext-dev cloud-firewall-checklist
+sudo erpnext-dev cloudflare-checklist
+sudo erpnext-dev go-live-record
+sudo erpnext-dev go-live-status
+sudo erpnext-dev production-checklist
+sudo erpnext-dev final-qa
+sudo erpnext-dev support-bundle
+```
+
+Record file:
+
+```text
+/etc/erpnext-dev/go-live-validation.env
+```
+
+Provider-side items to confirm before recording:
+
+```text
+Snapshot: named cloud/provider snapshot created and verified
+Cloud firewall: 22 restricted to admin IP where possible, 80/443 allowed, 8000/9000 blocked
+Cloudflare DNS: erp.flowmaya.com proxied/orange-cloud
+Cloudflare SSL/TLS: Full (strict)
+Cloudflare Origin CA: certificate active on Nginx
+```
+
+Expected after recording:
+
+```text
+Go-live validation           OK      recorded ... snapshot ... cloud firewall confirmed; Cloudflare proxied; Full strict confirmed
+Release state                OK      ready for production use
+```
+
+Support bundle improvement:
+
+The redacted support bundle should now include operational evidence files in addition to doctor/system/service diagnostics:
+
+```text
+production-checklist.txt
+backup-status.txt
+backup-verify.txt
+off-vm-backup-status.txt
+restore-rehearsal-status.txt
+health-check-status.txt
+go-live-status.txt
+```
+
+---
+
 # v1.1.63 Health monitoring validation plan
 
 v1.1.63 adds the final optional monitoring workflow after the production path reached a validated backup/restore state in v1.1.62.

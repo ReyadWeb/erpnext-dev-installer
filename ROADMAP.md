@@ -1,3 +1,26 @@
+# v1.1.64 roadmap update - go-live validation record and evidence bundle
+
+Status: **implemented as the next production-readiness polish patch**.
+
+The install, backup, off-VM backup, restore rehearsal, restore status tracking, and health monitoring paths are now validated. v1.1.64 focuses on the provider-side confirmations that must be recorded outside the guest VM.
+
+Completed in v1.1.64:
+
+- `go-live-record` for snapshot, provider firewall, and Cloudflare confirmation.
+- `go-live-status` for saved go-live validation evidence.
+- `cloud-firewall-checklist` and `cloudflare-checklist` as guided provider-side checklists.
+- Production checklist and Final QA awareness of go-live validation.
+- Enhanced support bundles with redacted production evidence files.
+
+Next roadmap items:
+
+1. Validate `go-live-record` on the production VPS after the named snapshot and provider-side settings are confirmed.
+2. Decide whether to add notification targets for health checks, such as email or webhook.
+3. Add longer-term operations dashboard/menu polish if the command surface becomes too large.
+4. Keep Docker installation as a separate later track after VM operations remain stable.
+
+---
+
 # v1.1.63 roadmap update - monitoring workflow
 
 Status: **implemented as the next production-hardening patch**.
