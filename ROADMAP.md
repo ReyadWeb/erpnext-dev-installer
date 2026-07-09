@@ -1,3 +1,32 @@
+## v1.1.60 completed restore rehearsal automation
+
+Status: implementation package ready after successful local restore rehearsal.
+
+- Added a guided restore rehearsal workflow for disposable local/cloud restore VMs.
+- Added restore-key setup and backup-server temporary-key lifecycle commands.
+- Added rsync pull helper for restore VMs.
+- Improved restore-full to select the latest complete backup set by default.
+- Improved database admin credential handling by using the local toolkit credentials file when available.
+- Added restore VM preflight checks for resource sizing and Docker/Kubernetes/Calico conflicts.
+- Documented the restore rehearsal workflow in the README menu and backup/restore section.
+
+Updated readiness after restore rehearsal:
+
+| Case | Rating | Interpretation |
+| --- | ---: | --- |
+| Local VM / developer workflow | 9.5/10 | Passed and ready for normal local development/testing use |
+| Public VPS guided production workflow | 9.3/10 | Real production-candidate path validated with Let's Encrypt and Cloudflare Origin CA |
+| Off-VM backup workflow | 9.2/10 | Real separate backup server and rsync copy validated |
+| Restore rehearsal workflow | 8.7/10 | Local disposable VM restore passed; v1.1.60 reduces manual steps |
+| Full production readiness | 9.2/10 | Core install, HTTPS, firewall, local/off-VM backups, and restore are proven; monitoring/snapshot policy remains operational |
+
+Next milestones:
+
+1. Complete browser/login validation on the restored local VM.
+2. Remove the temporary restore key from the backup server.
+3. Optionally configure the health timer for ongoing monitoring.
+4. Add restore drill status tracking in a future patch if needed.
+
 ## v1.1.59 completed off-VM backup validation and onboarding polish
 
 Status: real two-server off-VM backup validation passed.

@@ -1,3 +1,44 @@
+## v1.1.60 local restore rehearsal validation record
+
+A disposable local KVM restore VM was used to rehearse restoring from the off-VM backup server. This validates backup usability without touching production DNS or restoring onto the live ERPNext VPS.
+
+```text
+Production ERPNext VPS: 65.109.221.4
+Production domain/site: erp.flowmaya.com
+Backup VPS: 65.109.220.250
+Backup volume path: /mnt/HC_Volume_106276869
+Backup target path: /mnt/HC_Volume_106276869/erpnext-backups/erp.flowmaya.com/
+Local restore VM: 192.168.122.215
+Restore OS: Ubuntu 26.04 LTS
+Restore resources observed: 14 GiB RAM, 4 GiB swap, 61 GB root disk
+```
+
+Validated sequence:
+
+1. Prepared a clean local restore VM and removed MicroK8s/Calico conflicts.
+2. Installed the toolkit and matching ERPNext/Frappe v16 stack using site `erp.flowmaya.com`.
+3. Generated a temporary restore key on the restore VM.
+4. Authorized that key on the backup server, restricted to the restore VM's outbound public IP.
+5. Pulled the off-VM backup files by rsync to the restore VM backup folder.
+6. Confirmed `list-backups`, `backup-verify`, and `restore-preflight` passed.
+7. Ran `restore-full` on the restore VM only.
+8. Confirmed database/files restore, post-restore migrate, asset build, cache clear, service restart, and readiness checks completed successfully.
+
+Result:
+
+```text
+Off-VM backup copied: PASS
+Backup files readable: PASS
+Restore preflight: PASS
+Full restore on disposable VM: PASS
+Post-restore maintenance: PASS
+Service/port readiness: PASS
+Browser/login validation: pending user confirmation
+Temporary restore-key cleanup: pending after browser/login validation
+```
+
+This moves the production backup/resilience path from copied backups to proven restorable backups. The remaining operational task is to make the workflow smoother and ensure temporary restore keys are removed after each drill.
+
 ## v1.1.59 off-VM backup validation record
 
 The two-server off-VM backup flow has now been validated on the real Hetzner production test path.

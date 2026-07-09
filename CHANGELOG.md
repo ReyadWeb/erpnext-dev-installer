@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.1.60 - Guided restore rehearsal automation
+
+### Changed
+
+- Updated the toolkit version to v1.1.60.
+- Added `restore-rehearsal-wizard` as a guided workflow for disposable local/cloud restore VMs.
+- Added `restore-key-setup` to generate a temporary restore SSH key on the restore VM and print an exact backup-server command, avoiding placeholder copy/paste mistakes.
+- Added `backup-server-add-restore-key`, `backup-server-list-restore-keys`, and `backup-server-remove-restore-key` to manage temporary restore keys on the backup server with marked `authorized_keys` blocks.
+- Added `pull-off-vm-backup` to pull backups from the off-VM backup server into the restore VM backup folder with rsync and correct file ownership.
+- Improved `restore-full` so it detects the latest complete backup set and lets the user press Enter instead of manually pasting database/public/private backup filenames.
+- Improved restore credential handling so the local VM's `frappe_db_admin` password is read from the local toolkit credentials file when available.
+- Added restore VM preflight warnings for Docker/Kubernetes/Calico-like service conflicts.
+- Updated README, TESTING, ROADMAP, and PRODUCTION-VALIDATION with the successful local restore rehearsal and the new smoother command flow.
+
+### Validated
+
+- Local restore rehearsal succeeded on a disposable KVM VM using Ubuntu 26.04 LTS, site `erp.flowmaya.com`, and the off-VM backup copied from `65.109.220.250`.
+- The restore VM pulled database, public files, private files, and site config backups from `/mnt/HC_Volume_106276869/erpnext-backups/erp.flowmaya.com/`.
+- `backup-verify` and `restore-preflight` passed before restore.
+- `restore-full` completed database and file restore, post-restore migrate, asset build, cache clear, service restart, and port readiness checks.
+- The remaining restore validation item is browser/login confirmation and cleanup of the temporary restore key from the backup server.
+
 ## v1.1.59 - Off-VM backup validation and smoother onboarding
 
 ### Changed

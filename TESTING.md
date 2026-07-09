@@ -1,3 +1,45 @@
+## v1.1.60 restore rehearsal automation validation
+
+Purpose: smooth and automate the off-VM restore rehearsal flow after proving that the manual local restore path works.
+
+Package checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh --help | grep -n "restore-rehearsal-wizard"
+./erpnext-dev.sh --help | grep -n "restore-key-setup"
+./erpnext-dev.sh --help | grep -n "pull-off-vm-backup"
+./erpnext-dev.sh --help | grep -n "backup-server-add-restore-key"
+printf 'q
+' | ./erpnext-dev.sh restore-rehearsal-wizard
+printf 'q
+' | ./erpnext-dev.sh off-vm-backup-wizard
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.60`.
+- Help lists the new restore rehearsal commands.
+- Restore rehearsal wizard opens without running destructive restore actions.
+- Off-VM Backup menu includes restore rehearsal, restore-key setup, and backup-server temporary-key cleanup actions.
+- `restore-full` offers the latest complete backup set before asking for individual filenames.
+- Restore uses the local VM's MariaDB Bench Admin credential from `/home/frappe/erpnext-dev-credentials.txt` when available.
+
+Validated manual path that informed this patch:
+
+```text
+Production ERPNext VPS: 65.109.221.4
+Backup VPS: 65.109.220.250
+Backup path: /mnt/HC_Volume_106276869/erpnext-backups/erp.flowmaya.com/
+Local restore VM: 192.168.122.215
+Restore site: erp.flowmaya.com
+Backup set: 20260709_055928-erp_flowmaya_com
+Result: restore-full completed successfully with files and post-restore maintenance
+```
+
+Post-restore browser/login validation and backup-server restore-key cleanup should be completed before marking the disaster-recovery drill fully closed.
+
 ## v1.1.59 off-VM backup validation and onboarding polish
 
 Purpose: validate the real two-server off-VM backup result and the smoother backup-server wizard defaults.
