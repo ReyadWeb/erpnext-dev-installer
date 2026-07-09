@@ -28,6 +28,10 @@ bash -n lib/common.sh
 bash -n lib/support.sh
 [[ -f lib/backup.sh ]] || fail "lib/backup.sh is missing"
 bash -n lib/backup.sh
+[[ -f lib/ssl.sh ]] || fail "lib/ssl.sh is missing"
+bash -n lib/ssl.sh
+[[ -f lib/firewall.sh ]] || fail "lib/firewall.sh is missing"
+bash -n lib/firewall.sh
 pass "bash syntax valid"
 
 chmod +x erpnext-dev.sh scripts/validate-release.sh scripts/generate-release-checksums.sh scripts/run-shellcheck.sh

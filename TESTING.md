@@ -1,3 +1,26 @@
+## v1.1.78 lib/ssl.sh and lib/firewall.sh extraction
+
+Purpose: move production/local SSL and firewall/security helpers into dedicated library modules.
+
+Package checks:
+
+```bash
+bash -n erpnext-dev.sh
+bash -n lib/common.sh
+bash -n lib/support.sh
+bash -n lib/backup.sh
+bash -n lib/ssl.sh
+bash -n lib/firewall.sh
+./erpnext-dev.sh version
+scripts/validate-release.sh
+```
+
+Expected results:
+
+- Version prints `ERPNext Developer Toolkit v1.1.78`.
+- `lib/ssl.sh` and `lib/firewall.sh` exist and are sourced by `erpnext-dev.sh`.
+- SSL and firewall commands remain available in help output.
+
 ## v1.1.77 lib/backup.sh extraction
 
 Purpose: move local backup, off-VM backup, restore, and rehearsal helpers into `lib/backup.sh`.

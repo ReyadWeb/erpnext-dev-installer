@@ -13,6 +13,8 @@ targets=(
   lib/common.sh
   lib/support.sh
   lib/backup.sh
+  lib/ssl.sh
+  lib/firewall.sh
   scripts/validate-release.sh
   scripts/generate-release-checksums.sh
   scripts/run-shellcheck.sh

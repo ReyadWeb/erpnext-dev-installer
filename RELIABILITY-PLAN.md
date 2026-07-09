@@ -1,3 +1,9 @@
+## v1.1.78 reliability update
+
+v1.1.78 extracts SSL/HTTPS and firewall helpers into `lib/ssl.sh` and `lib/firewall.sh`, continuing modularization with unchanged command names and runtime behavior.
+
+Next reliability milestone: continue thinning `erpnext-dev.sh` toward a dispatcher module layout.
+
 ## v1.1.77 reliability update
 
 v1.1.77 extracts backup and restore helpers into `lib/backup.sh`, continuing modularization with unchanged command names and runtime behavior.

@@ -1,3 +1,29 @@
+# v1.1.78 production validation notes
+
+v1.1.78 extracts SSL/HTTPS and firewall helpers into `lib/ssl.sh` and `lib/firewall.sh`.
+
+Production validation should confirm:
+
+```bash
+VERSION="v1.1.78"
+sudo erpnext-dev version
+sudo erpnext-dev verify-toolkit
+scripts/validate-release.sh
+sudo erpnext-dev ssl-status
+sudo erpnext-dev firewall-hardening-status
+sudo erpnext-dev final-qa
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.78`.
+- `/opt/erpnext-dev/lib/ssl.sh` and `/opt/erpnext-dev/lib/firewall.sh` exist after install/update reuse.
+- SSL and firewall status commands still run.
+
+Runtime/install/backup/health/go-live behavior is unchanged aside from modularization.
+
+---
+
 # v1.1.77 production validation notes
 
 v1.1.77 extracts backup and restore helpers into `lib/backup.sh`.

@@ -1,3 +1,23 @@
+## v1.1.78 - Extract lib/ssl.sh and lib/firewall.sh for HTTPS and security
+
+### Added
+
+- Added `lib/ssl.sh` with production and local SSL/HTTPS planning, wizards, and certificate helpers.
+- Added `lib/firewall.sh` with UFW, Fail2Ban, firewall rollback, and security-hardening helpers.
+
+### Changed
+
+- Updated the toolkit version to v1.1.78.
+- `erpnext-dev.sh` now sources `lib/ssl.sh` and `lib/firewall.sh` after `lib/backup.sh`.
+- `update-toolkit` now downloads `common.sh`, `support.sh`, `backup.sh`, `ssl.sh`, and `firewall.sh` into `/opt/erpnext-dev/lib/`.
+- Expanded `SHA256SUMS`, `RELEASE-MANIFEST.txt`, and shellcheck targets for the new library modules.
+
+### Validation scope
+
+- `bash -n` passes for `erpnext-dev.sh`, `lib/common.sh`, `lib/support.sh`, `lib/backup.sh`, `lib/ssl.sh`, and `lib/firewall.sh`.
+- `erpnext-dev version` prints v1.1.78.
+- `scripts/validate-release.sh` passes locally.
+
 ## v1.1.77 - Extract lib/backup.sh for backup and restore workflows
 
 ### Added

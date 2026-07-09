@@ -1,3 +1,22 @@
+# v1.1.78 roadmap update - lib/ssl.sh and lib/firewall.sh extraction
+
+Status: **implemented as the fourth careful modularization patch**.
+
+v1.1.78 extracts production and local SSL/HTTPS helpers into `lib/ssl.sh` and firewall/UFW/Fail2Ban helpers into `lib/firewall.sh`.
+
+Completed in v1.1.78:
+
+- Added `lib/ssl.sh` and `lib/firewall.sh` and wired `erpnext-dev.sh` to source them.
+- Expanded `update-toolkit` to download the full toolkit lib module set.
+- Expanded checksum, manifest, shellcheck, and validation coverage.
+
+Next active milestones:
+
+1. **v1.1.79+ — continue thinning `erpnext-dev.sh` toward a dispatcher**.
+2. Later: optional GPG-signed release artifacts.
+
+---
+
 # v1.1.77 roadmap update - lib/backup.sh extraction
 
 Status: **implemented as the third careful modularization patch**.
