@@ -1,3 +1,7 @@
+## v1.2.0 reliability update
+
+v1.2.0 completes Phase C security hardening: `security-audit`, checksum-gated `update-toolkit`, credential handoff prompts, and expanded support-bundle audit. Next: Phase D integration testing (v1.2.x).
+
 ## v1.1.90 reliability update
 
 v1.1.90 completes Phase B modularization with `lib/ops.sh`. Main script is ~1,180 lines. Next: Phase C security hardening (v1.2.0).

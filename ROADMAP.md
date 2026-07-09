@@ -1,12 +1,18 @@
-# v1.1.90 roadmap update - lib/ops.sh completes Phase B modularization
+# v1.2.0 roadmap update - Phase C security hardening
 
-Status: **implemented — Phase B modularization complete**.
+Status: **implemented**.
 
-v1.1.90 extracts the production operations dashboard into `lib/ops.sh`. `erpnext-dev.sh` is now ~1,180 lines (dispatcher/menus only).
+v1.2.0 adds Phase C security hardening:
+
+- Production credential handoff prompts after install and public VM guided QA.
+- Expanded support-bundle audit patterns.
+- New `security-audit` command.
+- Checksum-gated, tag-pinned `update-toolkit` with production guard against mutable `main`.
+- Private security disclosure guidance in `SECURITY.md`.
 
 Next active milestone:
 
-1. **v1.2.0 — Phase C security hardening** (credential handoff, `security-audit`, checksum-gated `update-toolkit`, production update policy).
+1. **v1.2.x — Phase D integration testing** (disposable VM CI, Ubuntu 24.04 + 26.04, post-install smoke).
 
 ---
 

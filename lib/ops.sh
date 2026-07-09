@@ -172,7 +172,8 @@ production_ops_security_menu() {
     echo "5) Production firewall profile"
     echo "6) Configure Fail2Ban"
     echo "7) Fail2Ban status"
-    echo "8) Cloud firewall checklist"
+    echo "8) Security audit"
+    echo "9) Cloud firewall checklist"
     menu_footer
     menu_read_choice security_choice
     case "$security_choice" in
@@ -183,7 +184,8 @@ production_ops_security_menu() {
       5) configure_production_vm_firewall; pause_after_screen "Press Enter to return to Security and Firewall..." ;;
       6) configure_fail2ban; pause_after_screen "Press Enter to return to Security and Firewall..." ;;
       7) show_fail2ban_status; pause_after_screen "Press Enter to return to Security and Firewall..." ;;
-      8) show_cloud_firewall_checklist; pause_after_screen "Press Enter to return to Security and Firewall..." ;;
+      8) run_security_audit; pause_after_screen "Press Enter to return to Security and Firewall..." ;;
+      9) show_cloud_firewall_checklist; pause_after_screen "Press Enter to return to Security and Firewall..." ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *) warn "Invalid option" ;;

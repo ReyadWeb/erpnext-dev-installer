@@ -1,6 +1,6 @@
 # ERPNext Developer Toolkit — Quality Assessment
 
-**Version assessed:** v1.1.90  
+**Version assessed:** v1.2.0  
 **Assessment date:** July 9, 2026  
 **Scope:** `erpnext-dev.sh` and the release/operations package around it
 
@@ -214,12 +214,12 @@ Prioritized by impact and dependency order. Status as of v1.1.74.
 
 | # | Task | Priority | Status |
 |---|---|---|---|
-| C1 | Post-install credential deletion prompt on production | P1 | Planned |
-| C2 | Expand support-bundle audit patterns | P1 | Planned |
-| C3 | `security-audit` command | P1 | Planned |
-| C4 | `update-toolkit` requires checksum verification | P1 | Planned |
-| C5 | Block/warn `update-toolkit` from `main` in production | P2 | Planned |
-| C6 | Private security disclosure process in `SECURITY.md` | P2 | Planned |
+| C1 | Post-install credential deletion prompt on production | P1 | **Done (v1.2.0)** |
+| C2 | Expand support-bundle audit patterns | P1 | **Done (v1.2.0)** |
+| C3 | `security-audit` command | P1 | **Done (v1.2.0)** |
+| C4 | `update-toolkit` requires checksum verification | P1 | **Done (v1.2.0)** |
+| C5 | Block/warn `update-toolkit` from `main` in production | P2 | **Done (v1.2.0)** |
+| C6 | Private security disclosure process in `SECURITY.md` | P2 | **Done (v1.2.0)** |
 
 ### Phase D — Integration Testing (v1.2.x – v1.3.0)
 

@@ -586,6 +586,7 @@ run_install() {
     warn "You can still start manually with: sudo -iu ${FRAPPE_USER}; cd $(active_bench_dir); bench start"
   fi
   print_summary
+  prompt_production_credential_handoff_if_needed
 
   local enable_boot start_now
 
@@ -1396,6 +1397,7 @@ public_vm_guided_final_qa() {
   echo
   echo "Take a named post-validation provider snapshot now."
   echo "Recommended name: erpnext-toolkit-v${SCRIPT_VERSION}-post-production-validation"
+  prompt_production_credential_handoff_if_needed
 }
 
 run_public_vm_guided_setup() {

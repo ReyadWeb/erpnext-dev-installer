@@ -735,7 +735,7 @@ support_bundle_audit_archive() {
   file_count="$(grep -cve '/$' "$listing_file" 2>/dev/null || echo 0)"
   status_line "Archive listing" "OK" "${file_count} file(s)"
 
-  if grep -Ei '(^|/)(site_config\.json|site_config_backup\.json|.*credentials.*|id_rsa|id_ed25519|.*\.pem|.*\.key|.*\.sql(\.gz)?|.*database.*\.gz|.*private-files\.tar)$' "$listing_file" > "$hit_file"; then
+  if grep -Ei '(^|/)(site_config\.json|site_config_backup\.json|common_site_config\.json|secrets\.json|\.env(\.|$|/|$)|.*credentials.*|erpnext-dev-credentials\.txt|id_rsa|id_ed25519|authorized_keys|.*\.pem|.*\.key|.*\.enc|.*\.sql(\.gz)?|.*database.*\.gz|.*private-files\.tar|.*passwd.*|.*shadow.*|.*token.*\.(json|txt|env))' "$listing_file" > "$hit_file"; then
     status_line "Forbidden filenames" "FAIL" "potential secret/backup filenames found"
     sed -n '1,80p' "$hit_file"
     rc=1
@@ -744,7 +744,7 @@ support_bundle_audit_archive() {
   fi
 
   if tar -xzf "$archive" -C "$tmpdir" 2>"${tmpdir}/tar-extract.stderr"; then
-    if grep -RInE '(-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|Bearer[[:space:]]+[A-Za-z0-9._~+/=-]+|("?(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|authorization|cookie|db_password|admin_password)"?[[:space:]]*[:=][[:space:]]*[^[:space:],;}]+))'       --exclude='archive-list.txt'       --exclude='audit-hits.txt'       "$tmpdir" > "$hit_file" 2>/dev/null; then
+    if grep -RInE '(-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|Bearer[[:space:]]+[A-Za-z0-9._~+/=-]+|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|sk_(live|test)_[A-Za-z0-9]{10,}|AKIA[0-9A-Z]{16}|aws_secret_access_key[[:space:]]*=[[:space:]]*[^[:space:]"'"'"';]+|("?(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|authorization|cookie|db_password|admin_password|mysql_password|redis_password)"?[[:space:]]*[:=][[:space:]]*[^[:space:],;]"'"'"'`]+))'       --exclude='archive-list.txt'       --exclude='audit-hits.txt'       "$tmpdir" > "$hit_file" 2>/dev/null; then
       status_line "Secret pattern scan" "FAIL" "possible unredacted secret pattern found"
       sed -n '1,80p' "$hit_file"
       rc=1
@@ -782,7 +782,7 @@ show_command_audit() {
   status_line "Credentials" "OK" "credentials-info, credentials-show, credentials-file-status, credentials-secure, credentials-delete, reset-admin-password"
   status_line "Production SSL" "OK" "production-ssl-wizard, production-ssl-status, ssl-mode-status"
   status_line "Cloudflare" "OK" "cloudflare-origin-guide, configure-cloudflare-origin-ssl"
-  status_line "Security" "OK" "security-hardening-wizard, vm-firewall-status, fail2ban-status"
+  status_line "Security" "OK" "security-audit, security-hardening-wizard, vm-firewall-status, fail2ban-status"
   status_line "Firewall" "OK" "firewall-hardening-status, production-firewall-plan"
   status_line "Backups" "OK" "backup-files, backup-status, backup-verify, backup-hardening-wizard"
   status_line "Scheduled backups" "OK" "backup-schedule-plan, configure-backup-schedule, backup-schedule-status, scheduled-backup-status"

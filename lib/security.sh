@@ -1,0 +1,408 @@
+# shellcheck shell=bash
+# Security audit, credential handoff, and checksum-gated toolkit updates.
+# Sourced by the toolkit entry point; do not execute directly.
+
+[[ -n "${_ERPNEXT_DEV_SECURITY_LOADED:-}" ]] && return 0
+_ERPNEXT_DEV_SECURITY_LOADED=1
+
+TOOLKIT_RELEASE_REPO="${TOOLKIT_RELEASE_REPO:-https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer}"
+
+toolkit_release_lib_files() {
+  printf '%s\n' \
+    common.sh config.sh access.sh frappe.sh support.sh backup.sh ssl.sh firewall.sh \
+    apps.sh health.sh storage.sh service.sh status.sh install.sh ops.sh security.sh
+}
+
+find_toolkit_checksum_file() {
+  local active_dir stable_dir candidate
+  active_dir="$(dirname "${ERPNEXT_DEV_ENTRY_SCRIPT:-${BASH_SOURCE[0]}}")"
+  stable_dir="$(dirname "${INSTALLER_CANONICAL_PATH:-/opt/erpnext-dev/erpnext-dev.sh}")"
+
+  for candidate in \
+    "${CHECKSUM_FILE:-}" \
+    "${TOOLKIT_CHECKSUM_FILE:-}" \
+    "./SHA256SUMS" \
+    "${active_dir}/SHA256SUMS" \
+    "${stable_dir}/SHA256SUMS" \
+    "/opt/erpnext-dev/SHA256SUMS"; do
+    [[ -n "$candidate" && -f "$candidate" ]] || continue
+    printf '%s\n' "$candidate"
+    return 0
+  done
+  return 1
+}
+
+checksum_expected_for_release_path() {
+  local checksum_file="$1"
+  local rel_path="$2"
+
+  awk -v p="$rel_path" '
+    $2 == p || $2 == "./" p { print $1; found=1; exit }
+    $2 ~ /\/erpnext-dev\.sh$/ && p == "erpnext-dev.sh" { print $1; found=1; exit }
+    END { if (!found) exit 1 }
+  ' "$checksum_file"
+}
+
+checksum_expected_for_toolkit() {
+  checksum_expected_for_release_path "$1" "erpnext-dev.sh"
+}
+
+verify_release_file_checksum() {
+  local checksum_file="$1"
+  local rel_path="$2"
+  local file_path="$3"
+  local expected actual
+
+  [[ -f "$file_path" ]] || fail "Downloaded file missing: ${rel_path}"
+  expected="$(checksum_expected_for_release_path "$checksum_file" "$rel_path" 2>/dev/null || true)"
+  [[ -n "$expected" ]] || fail "SHA256SUMS has no entry for ${rel_path}"
+  actual="$(sha256sum "$file_path" | awk '{print $1}')"
+  [[ "$actual" == "$expected" ]] || fail "Checksum mismatch for ${rel_path}"
+}
+
+resolve_toolkit_update_version() {
+  local version="${TOOLKIT_UPDATE_VERSION:-}"
+
+  if [[ -n "$version" ]]; then
+    [[ "$version" == v* ]] || version="v${version}"
+    printf '%s\n' "$version"
+    return 0
+  fi
+
+  if [[ -t 0 && "$ASSUME_YES" -ne 1 ]]; then
+    read -r -p "Release tag to install [v${SCRIPT_VERSION}]: " version || version=""
+  fi
+  version="${version:-v${SCRIPT_VERSION}}"
+  [[ "$version" == v* ]] || version="v${version}"
+  printf '%s\n' "$version"
+}
+
+toolkit_update_uses_main_branch() {
+  [[ "${TOOLKIT_UPDATE_CHANNEL:-tag}" == "main" ]] || [[ "${TOOLKIT_UPDATE_FROM_MAIN:-0}" == "1" ]]
+}
+
+toolkit_update_guard_production_channel() {
+  if ! toolkit_update_uses_main_branch; then
+    return 0
+  fi
+
+  if is_public_vm_workflow && [[ "${TOOLKIT_UPDATE_ALLOW_MAIN:-0}" != "1" ]]; then
+    fail "Refusing main-branch update on production/public-vm workflow. Set TOOLKIT_UPDATE_VERSION=vX.Y.Z for a tagged release, or set TOOLKIT_UPDATE_ALLOW_MAIN=1 to override (not recommended)."
+  fi
+
+  warn "Mutable main branch selected. Prefer TOOLKIT_UPDATE_VERSION=vX.Y.Z for production systems."
+}
+
+verify_toolkit_integrity() {
+  local active stable cli_target checksum_file expected active_hash stable_hash cli_hash match_state=0
+  active="${ERPNEXT_DEV_ENTRY_SCRIPT:-$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || printf '%s' "${BASH_SOURCE[0]}")}"
+  stable="${INSTALLER_CANONICAL_PATH:-/opt/erpnext-dev/erpnext-dev.sh}"
+  cli_target="$(readlink -f "${TOOLKIT_CLI_PATH:-/usr/local/bin/erpnext-dev}" 2>/dev/null || true)"
+
+  ui_box_start "Verify ERPNext Toolkit Integrity"
+  status_line "Toolkit version" "INFO" "${SCRIPT_VERSION}"
+  status_line "Active script" "$([[ -f "$active" ]] && echo OK || echo WARN)" "$active"
+  status_line "Stable toolkit" "$([[ -f "$stable" ]] && echo OK || echo WARN)" "$stable"
+  if [[ -n "$cli_target" ]]; then
+    status_line "CLI command" "OK" "${TOOLKIT_CLI_PATH:-/usr/local/bin/erpnext-dev} -> ${cli_target}"
+  else
+    status_line "CLI command" "WARN" "${TOOLKIT_CLI_PATH:-/usr/local/bin/erpnext-dev} not found"
+  fi
+
+  if ! command -v sha256sum >/dev/null 2>&1; then
+    status_line "sha256sum" "FAIL" "sha256sum command not found"
+    ui_box_end
+    return 1
+  fi
+
+  if [[ -f "$active" ]]; then
+    active_hash="$(sha256sum "$active" | awk '{print $1}')"
+    status_line "Active SHA256" "INFO" "$active_hash"
+  fi
+  if [[ -f "$stable" ]]; then
+    stable_hash="$(sha256sum "$stable" | awk '{print $1}')"
+    status_line "Stable SHA256" "INFO" "$stable_hash"
+  fi
+  if [[ -n "$cli_target" && -f "$cli_target" ]]; then
+    cli_hash="$(sha256sum "$cli_target" | awk '{print $1}')"
+    status_line "CLI SHA256" "INFO" "$cli_hash"
+  fi
+
+  if checksum_file="$(find_toolkit_checksum_file 2>/dev/null)"; then
+    status_line "Checksum file" "OK" "$checksum_file"
+    if expected="$(checksum_expected_for_toolkit "$checksum_file" 2>/dev/null)"; then
+      status_line "Expected SHA256" "INFO" "$expected"
+      if [[ -n "${active_hash:-}" && "$active_hash" == "$expected" ]]; then
+        status_line "Active match" "OK" "active script matches SHA256SUMS"
+      else
+        status_line "Active match" "FAIL" "active script does not match SHA256SUMS"
+        match_state=1
+      fi
+      if [[ -n "${stable_hash:-}" ]]; then
+        if [[ "$stable_hash" == "$expected" ]]; then
+          status_line "Stable match" "OK" "stable toolkit matches SHA256SUMS"
+        else
+          status_line "Stable match" "WARN" "stable toolkit does not match SHA256SUMS"
+        fi
+      fi
+      if [[ -n "${cli_hash:-}" ]]; then
+        if [[ "$cli_hash" == "$expected" ]]; then
+          status_line "CLI match" "OK" "CLI target matches SHA256SUMS"
+        else
+          status_line "CLI match" "WARN" "CLI target does not match SHA256SUMS"
+        fi
+      fi
+    else
+      status_line "Expected SHA256" "WARN" "no erpnext-dev.sh entry found in checksum file"
+    fi
+  else
+    status_line "Checksum file" "WARN" "not found; download SHA256SUMS beside erpnext-dev.sh or set CHECKSUM_FILE=/path/SHA256SUMS"
+  fi
+
+  echo
+  echo "Verified tag-pinned update example:"
+  echo "  TOOLKIT_UPDATE_VERSION=v${SCRIPT_VERSION} sudo erpnext-dev update-toolkit"
+  echo
+  echo "Manual verified download:"
+  echo "  VERSION=\"v${SCRIPT_VERSION}\""
+  echo '  workdir="$(mktemp -d /tmp/erpnext-dev-update.XXXXXX)"; cd "$workdir" || exit 1'
+  echo '  curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"'
+  echo '  curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"'
+  echo "  sha256sum -c SHA256SUMS"
+  echo "  sudo mkdir -p /opt/erpnext-dev"
+  echo "  sudo install -m 0755 erpnext-dev.sh /opt/erpnext-dev/erpnext-dev.sh"
+  echo "  sudo install -m 0644 SHA256SUMS /opt/erpnext-dev/SHA256SUMS"
+  echo "  sudo ln -sf /opt/erpnext-dev/erpnext-dev.sh /usr/local/bin/erpnext-dev"
+  echo "  sudo erpnext-dev verify-toolkit"
+  ui_box_end
+  return "$match_state"
+}
+
+update_toolkit() {
+  require_sudo
+
+  local version release_base workdir checksum_file lib_file lib_dest lib_dir stable_dir
+
+  command -v curl >/dev/null 2>&1 || fail "curl is required. Install it with: sudo apt-get install -y curl ca-certificates"
+  command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is required for checksum-gated updates."
+
+  toolkit_update_guard_production_channel
+  version="$(resolve_toolkit_update_version)"
+  if toolkit_update_uses_main_branch; then
+    release_base="${TOOLKIT_RELEASE_REPO}/main"
+  else
+    release_base="${TOOLKIT_RELEASE_REPO}/${version}"
+  fi
+
+  workdir="$(mktemp -d /tmp/erpnext-dev-update.XXXXXX)" || fail "Could not create temporary update directory."
+
+  ui_box_start "Update ERPNext Toolkit"
+  status_line "Release tag" "INFO" "$version"
+  status_line "Download base" "INFO" "$release_base"
+  status_line "Stable toolkit" "INFO" "$INSTALLER_CANONICAL_PATH"
+  status_line "Checksum gate" "OK" "required before install"
+
+  log "Downloading release manifest checksums"
+  curl -fsSL "${release_base}/SHA256SUMS" -o "${workdir}/SHA256SUMS" || fail "Failed to download SHA256SUMS for ${version}."
+  checksum_file="${workdir}/SHA256SUMS"
+
+  log "Downloading erpnext-dev.sh"
+  curl -fsSL "${release_base}/erpnext-dev.sh" -o "${workdir}/erpnext-dev.sh" || fail "Failed to download erpnext-dev.sh for ${version}."
+  verify_release_file_checksum "$checksum_file" "erpnext-dev.sh" "${workdir}/erpnext-dev.sh"
+  chmod +x "${workdir}/erpnext-dev.sh"
+  bash -n "${workdir}/erpnext-dev.sh" || fail "Downloaded toolkit failed bash syntax validation."
+
+  mkdir -p "${workdir}/lib"
+  while IFS= read -r lib_file; do
+    [[ -n "$lib_file" ]] || continue
+    log "Downloading lib/${lib_file}"
+    curl -fsSL "${release_base}/lib/${lib_file}" -o "${workdir}/lib/${lib_file}" || fail "Failed to download lib/${lib_file} for ${version}."
+    verify_release_file_checksum "$checksum_file" "lib/${lib_file}" "${workdir}/lib/${lib_file}"
+    status_line "Library ${lib_file}" "OK" "checksum verified"
+  done < <(toolkit_release_lib_files)
+
+  stable_dir="$(dirname "$INSTALLER_CANONICAL_PATH")"
+  mkdir -p "$stable_dir"
+  mkdir -p "${stable_dir}/lib"
+
+  cp "${workdir}/erpnext-dev.sh" "$INSTALLER_CANONICAL_PATH"
+  chmod 755 "$INSTALLER_CANONICAL_PATH"
+  chown root:root "$INSTALLER_CANONICAL_PATH" 2>/dev/null || true
+
+  cp "$checksum_file" "${stable_dir}/SHA256SUMS"
+  chmod 644 "${stable_dir}/SHA256SUMS" 2>/dev/null || true
+  chown root:root "${stable_dir}/SHA256SUMS" 2>/dev/null || true
+
+  while IFS= read -r lib_file; do
+    [[ -n "$lib_file" ]] || continue
+    lib_dest="${stable_dir}/lib/${lib_file}"
+    cp "${workdir}/lib/${lib_file}" "$lib_dest"
+    chmod 644 "$lib_dest" 2>/dev/null || true
+    chown root:root "$lib_dest" 2>/dev/null || true
+  done < <(toolkit_release_lib_files)
+
+  rm -rf "$workdir"
+
+  install_toolkit_cli_entry || fail "Updated toolkit, but failed to recreate ${TOOLKIT_CLI_PATH}."
+
+  ok "Toolkit updated from verified release ${version}."
+  "$INSTALLER_CANONICAL_PATH" version
+  ui_box_end
+}
+
+prompt_production_credential_handoff_if_needed() {
+  local cred_file reply
+
+  is_public_vm_workflow || return 0
+
+  cred_file="${FRAPPE_HOME}/erpnext-dev-credentials.txt"
+  path_is_file "$cred_file" || return 0
+
+  echo
+  echo "============================================================"
+  echo "Production Credential Handoff"
+  echo "============================================================"
+  warn "Plaintext credentials remain on this VM at ${cred_file}."
+  echo
+  echo "Before treating this system as production-ready:"
+  echo "  1. Save credentials in a password manager or secure handoff vault."
+  echo "  2. Run: $(toolkit_cmd credentials-secure)"
+  echo "  3. Remove the local plaintext file: $(toolkit_cmd credentials-delete)"
+  echo
+  echo "The toolkit never prints passwords in support bundles or shared logs."
+  echo "============================================================"
+
+  if [[ ! -t 0 || "$ASSUME_YES" -eq 1 ]]; then
+    return 0
+  fi
+
+  if ! confirm "Have you saved the credentials outside this VM?"; then
+    warn "Complete credential handoff before go-live. Run: $(toolkit_cmd credentials-info)"
+    return 0
+  fi
+
+  echo
+  warn "Optional: remove the local plaintext credentials file now."
+  echo "This does not change the ERPNext Administrator password."
+  read -r -p "Type DELETE to remove ${cred_file} now: " reply || reply=""
+  if [[ "$reply" == "DELETE" ]]; then
+    credentials_delete
+  else
+    echo "Skipped deletion. Remove the file before external handoff: $(toolkit_cmd credentials-delete)"
+  fi
+}
+
+security_audit_sshd_setting() {
+  local key="$1"
+  local file="$2"
+  awk -v k="$key" '
+    $1 ~ /^[[:space:]]*#/ { next }
+    $1 == k { print $2; found=1; exit }
+    END { if (!found) exit 1 }
+  ' "$file" 2>/dev/null
+}
+
+run_security_audit() {
+  require_sudo
+
+  local cred_file sshd_config root_login password_auth ufw_detail fail2ban_detail
+  local ssl_pair ssl_state ssl_detail reboot_required pending_upgrades
+
+  ui_box_start "ERPNext VM Security Audit"
+  status_line "Mode" "INFO" "read-only checks; no changes applied automatically"
+  status_line "Environment" "INFO" "$(security_environment_label 2>/dev/null || echo unknown)"
+
+  cred_file="${FRAPPE_HOME}/erpnext-dev-credentials.txt"
+  if path_is_file "$cred_file"; then
+    status_line "Credentials file" "WARN" "plaintext file still present at ${cred_file}"
+    echo "  Recommended: $(toolkit_cmd credentials-delete) after password-manager handoff"
+  else
+    status_line "Credentials file" "OK" "no plaintext credentials file detected"
+  fi
+
+  sshd_config="/etc/ssh/sshd_config"
+  if [[ -r "$sshd_config" ]]; then
+    root_login="$(security_audit_sshd_setting PermitRootLogin "$sshd_config" 2>/dev/null || echo unknown)"
+    password_auth="$(security_audit_sshd_setting PasswordAuthentication "$sshd_config" 2>/dev/null || echo unknown)"
+    if [[ "$root_login" == "no" || "$root_login" == "prohibit-password" ]]; then
+      status_line "SSH PermitRootLogin" "OK" "$root_login"
+    else
+      status_line "SSH PermitRootLogin" "WARN" "${root_login:-not set}; prefer no or prohibit-password"
+    fi
+    if [[ "$password_auth" == "no" ]]; then
+      status_line "SSH PasswordAuthentication" "OK" "disabled"
+    else
+      status_line "SSH PasswordAuthentication" "WARN" "${password_auth:-enabled or unset}; prefer key-based SSH"
+    fi
+  else
+    status_line "SSH config" "INFO" "${sshd_config} not readable"
+  fi
+
+  if ufw_is_active; then
+    ufw_detail="$(ufw status 2>/dev/null | head -n 1 | sed 's/^Status: //' || echo active)"
+    status_line "UFW firewall" "OK" "$ufw_detail"
+  else
+    status_line "UFW firewall" "WARN" "inactive; run $(toolkit_cmd security-hardening-wizard)"
+  fi
+
+  if command -v fail2ban-client >/dev/null 2>&1 && systemctl is-active --quiet fail2ban 2>/dev/null; then
+    status_line "Fail2Ban" "OK" "active"
+  else
+    status_line "Fail2Ban" "WARN" "not active; run $(toolkit_cmd configure-fail2ban)"
+  fi
+
+  if port_listens 22; then
+    status_line "SSH port 22" "INFO" "listening (expected for admin access)"
+  fi
+  if port_listens 8000; then
+    if is_public_vm_workflow; then
+      status_line "Bench port 8000" "WARN" "listening; should be blocked externally on production"
+    else
+      status_line "Bench port 8000" "INFO" "listening"
+    fi
+  else
+    status_line "Bench port 8000" "INFO" "not listening"
+  fi
+  if port_listens 443; then
+    status_line "HTTPS port 443" "OK" "listening"
+  else
+    status_line "HTTPS port 443" "INFO" "not listening"
+  fi
+
+  ssl_pair="$(production_ssl_overall_status 2>/dev/null || echo 'WARN|not configured')"
+  ssl_state="${ssl_pair%%|*}"
+  ssl_detail="${ssl_pair#*|}"
+  status_line "Production HTTPS" "$ssl_state" "$ssl_detail"
+
+  if [[ -f /var/run/reboot-required ]]; then
+    reboot_required="yes"
+    status_line "Reboot required" "WARN" "$(cat /var/run/reboot-required 2>/dev/null | head -n 1 || echo yes)"
+  else
+    status_line "Reboot required" "OK" "no"
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    pending_upgrades="$(apt-get -s upgrade 2>/dev/null | awk '/^Inst / { c++ } END { print c+0 }')"
+    if [[ "${pending_upgrades:-0}" -gt 0 ]]; then
+      status_line "Pending apt upgrades" "WARN" "${pending_upgrades} package(s)"
+    else
+      status_line "Pending apt upgrades" "OK" "none reported"
+    fi
+  fi
+
+  if dpkg -l unattended-upgrades 2>/dev/null | awk '$2=="unattended-upgrades" && $1=="ii" { found=1 } END { exit !found }'; then
+    status_line "Unattended upgrades" "OK" "package installed"
+  else
+    status_line "Unattended upgrades" "INFO" "unattended-upgrades not installed"
+  fi
+
+  echo
+  echo "Recommended follow-up commands:"
+  echo "  $(toolkit_cmd firewall-hardening-status)"
+  echo "  $(toolkit_cmd fail2ban-status)"
+  echo "  $(toolkit_cmd production-ssl-status)"
+  echo "  $(toolkit_cmd credentials-file-status)"
+  echo "  $(toolkit_cmd verify-toolkit)"
+  echo "  $(toolkit_cmd support-bundle-audit)"
+  ui_box_end
+}

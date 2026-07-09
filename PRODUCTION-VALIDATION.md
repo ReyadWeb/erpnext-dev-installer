@@ -1,3 +1,19 @@
+# v1.2.0 production validation notes
+
+v1.2.0 adds Phase C security hardening. Validate on a disposable VM before production rollout.
+
+```bash
+VERSION="v1.2.0"
+sudo erpnext-dev version
+scripts/validate-release.sh
+sudo erpnext-dev security-audit
+TOOLKIT_UPDATE_VERSION=v1.2.0 sudo erpnext-dev update-toolkit
+sudo erpnext-dev verify-toolkit
+sudo erpnext-dev support-bundle-audit
+```
+
+---
+
 # v1.1.90 production validation notes
 
 v1.1.90 completes Phase B modularization with `lib/ops.sh`.

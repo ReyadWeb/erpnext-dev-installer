@@ -52,6 +52,8 @@ bash -n lib/status.sh
 bash -n lib/install.sh
 [[ -f lib/ops.sh ]] || fail "lib/ops.sh is missing"
 bash -n lib/ops.sh
+[[ -f lib/security.sh ]] || fail "lib/security.sh is missing"
+bash -n lib/security.sh
 pass "bash syntax valid"
 
 chmod +x erpnext-dev.sh scripts/validate-release.sh scripts/generate-release-checksums.sh scripts/run-shellcheck.sh

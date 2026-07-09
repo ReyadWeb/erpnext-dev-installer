@@ -1,3 +1,12 @@
+## v1.2.0 Phase C security hardening
+
+```bash
+bash -n lib/security.sh
+scripts/validate-release.sh
+sudo erpnext-dev security-audit
+TOOLKIT_UPDATE_VERSION=v1.2.0 sudo erpnext-dev update-toolkit
+```
+
 ## v1.1.90 lib/ops.sh extraction — Phase B complete
 
 ```bash

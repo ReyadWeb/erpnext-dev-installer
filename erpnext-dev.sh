@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.90"
+SCRIPT_VERSION="1.2.0"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -135,6 +135,7 @@ MIN_INSTALL_TMP_GB="${MIN_INSTALL_TMP_GB:-4}"
 ERPNEXT_ALLOW_UNSAFE_INSTALL="${ERPNEXT_ALLOW_UNSAFE_INSTALL:-false}"
 
 _ERPNEXT_DEV_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ERPNEXT_DEV_ENTRY_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || printf '%s/%s' "${_ERPNEXT_DEV_ROOT}" "$(basename "${BASH_SOURCE[0]}")")"
 if [[ ! -f "${_ERPNEXT_DEV_ROOT}/lib/common.sh" ]]; then
   echo "ERROR: Missing toolkit library: ${_ERPNEXT_DEV_ROOT}/lib/common.sh" >&2
   exit 1
@@ -225,6 +226,12 @@ if [[ ! -f "${_ERPNEXT_DEV_ROOT}/lib/ops.sh" ]]; then
 fi
 # shellcheck source=lib/ops.sh disable=SC1091
 source "${_ERPNEXT_DEV_ROOT}/lib/ops.sh"
+if [[ ! -f "${_ERPNEXT_DEV_ROOT}/lib/security.sh" ]]; then
+  echo "ERROR: Missing toolkit library: ${_ERPNEXT_DEV_ROOT}/lib/security.sh" >&2
+  exit 1
+fi
+# shellcheck source=lib/security.sh disable=SC1091
+source "${_ERPNEXT_DEV_ROOT}/lib/security.sh"
 erpnext_dev_init_terminal_colors
 
 prepare_log_file
@@ -299,191 +306,6 @@ show_where_installed() {
   ui_box_end
 }
 
-find_toolkit_checksum_file() {
-  local active_dir stable_dir candidate
-  active_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || printf '%s' "${BASH_SOURCE[0]}")")"
-  stable_dir="$(dirname "${INSTALLER_CANONICAL_PATH:-/opt/erpnext-dev/erpnext-dev.sh}")"
-
-  for candidate in \
-    "${CHECKSUM_FILE:-}" \
-    "${TOOLKIT_CHECKSUM_FILE:-}" \
-    "./SHA256SUMS" \
-    "${active_dir}/SHA256SUMS" \
-    "${stable_dir}/SHA256SUMS" \
-    "/opt/erpnext-dev/SHA256SUMS"; do
-    [[ -n "$candidate" && -f "$candidate" ]] || continue
-    printf '%s\n' "$candidate"
-    return 0
-  done
-  return 1
-}
-
-checksum_expected_for_toolkit() {
-  local checksum_file="$1"
-  awk '
-    $2 == "erpnext-dev.sh" { print $1; found=1; exit }
-    $2 == "./erpnext-dev.sh" { print $1; found=1; exit }
-    $2 ~ /\/erpnext-dev\.sh$/ { print $1; found=1; exit }
-    END { if (!found) exit 1 }
-  ' "$checksum_file"
-}
-
-verify_toolkit_integrity() {
-  local active stable cli_target checksum_file expected active_hash stable_hash cli_hash match_state=0
-  active="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || printf '%s' "${BASH_SOURCE[0]}")"
-  stable="${INSTALLER_CANONICAL_PATH:-/opt/erpnext-dev/erpnext-dev.sh}"
-  cli_target="$(readlink -f "${TOOLKIT_CLI_PATH:-/usr/local/bin/erpnext-dev}" 2>/dev/null || true)"
-
-  ui_box_start "Verify ERPNext Toolkit Integrity"
-  status_line "Toolkit version" "INFO" "${SCRIPT_VERSION}"
-  status_line "Active script" "$([[ -f "$active" ]] && echo OK || echo WARN)" "$active"
-  status_line "Stable toolkit" "$([[ -f "$stable" ]] && echo OK || echo WARN)" "$stable"
-  if [[ -n "$cli_target" ]]; then
-    status_line "CLI command" "OK" "${TOOLKIT_CLI_PATH:-/usr/local/bin/erpnext-dev} -> ${cli_target}"
-  else
-    status_line "CLI command" "WARN" "${TOOLKIT_CLI_PATH:-/usr/local/bin/erpnext-dev} not found"
-  fi
-
-  if ! command -v sha256sum >/dev/null 2>&1; then
-    status_line "sha256sum" "FAIL" "sha256sum command not found"
-    ui_box_end
-    return 1
-  fi
-
-  if [[ -f "$active" ]]; then
-    active_hash="$(sha256sum "$active" | awk '{print $1}')"
-    status_line "Active SHA256" "INFO" "$active_hash"
-  fi
-  if [[ -f "$stable" ]]; then
-    stable_hash="$(sha256sum "$stable" | awk '{print $1}')"
-    status_line "Stable SHA256" "INFO" "$stable_hash"
-  fi
-  if [[ -n "$cli_target" && -f "$cli_target" ]]; then
-    cli_hash="$(sha256sum "$cli_target" | awk '{print $1}')"
-    status_line "CLI SHA256" "INFO" "$cli_hash"
-  fi
-
-  if checksum_file="$(find_toolkit_checksum_file 2>/dev/null)"; then
-    status_line "Checksum file" "OK" "$checksum_file"
-    if expected="$(checksum_expected_for_toolkit "$checksum_file" 2>/dev/null)"; then
-      status_line "Expected SHA256" "INFO" "$expected"
-      if [[ -n "${active_hash:-}" && "$active_hash" == "$expected" ]]; then
-        status_line "Active match" "OK" "active script matches SHA256SUMS"
-      else
-        status_line "Active match" "FAIL" "active script does not match SHA256SUMS"
-        match_state=1
-      fi
-      if [[ -n "${stable_hash:-}" ]]; then
-        if [[ "$stable_hash" == "$expected" ]]; then
-          status_line "Stable match" "OK" "stable toolkit matches SHA256SUMS"
-        else
-          status_line "Stable match" "WARN" "stable toolkit does not match SHA256SUMS"
-        fi
-      fi
-      if [[ -n "${cli_hash:-}" ]]; then
-        if [[ "$cli_hash" == "$expected" ]]; then
-          status_line "CLI match" "OK" "CLI target matches SHA256SUMS"
-        else
-          status_line "CLI match" "WARN" "CLI target does not match SHA256SUMS"
-        fi
-      fi
-    else
-      status_line "Expected SHA256" "WARN" "no erpnext-dev.sh entry found in checksum file"
-    fi
-  else
-    status_line "Checksum file" "WARN" "not found; download SHA256SUMS beside erpnext-dev.sh or set CHECKSUM_FILE=/path/SHA256SUMS"
-  fi
-
-  echo
-  echo "Verified stable-path update example:"
-  echo "  VERSION=\"v${SCRIPT_VERSION}\""
-  echo '  workdir="$(mktemp -d /tmp/erpnext-dev-update.XXXXXX)"; cd "$workdir" || exit 1'
-  echo '  curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"'
-  echo '  curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"'
-  echo "  sha256sum -c SHA256SUMS"
-  echo "  sudo mkdir -p /opt/erpnext-dev"
-  echo "  sudo install -m 0755 erpnext-dev.sh /opt/erpnext-dev/erpnext-dev.sh"
-  echo "  sudo install -m 0644 SHA256SUMS /opt/erpnext-dev/SHA256SUMS"
-  echo "  sudo ln -sf /opt/erpnext-dev/erpnext-dev.sh /usr/local/bin/erpnext-dev"
-  echo "  sudo erpnext-dev verify-toolkit"
-  ui_box_end
-  return "$match_state"
-}
-
-install_toolkit_cli() {
-  require_sudo
-  install_self_for_reuse
-  ui_box_start "Install ERPNext Toolkit CLI"
-  if [[ -x "${INSTALLER_CANONICAL_PATH}" ]]; then
-    status_line "Stable toolkit" "OK" "${INSTALLER_CANONICAL_PATH}"
-  else
-    status_line "Stable toolkit" "FAIL" "${INSTALLER_CANONICAL_PATH} missing"
-    ui_box_end
-    return 1
-  fi
-
-  if install_toolkit_cli_entry; then
-    status_line "CLI command" "OK" "${TOOLKIT_CLI_PATH}"
-    echo
-    echo "You can now run:"
-    echo "  erpnext-dev --help"
-    echo "  sudo erpnext-dev menu"
-  else
-    status_line "CLI command" "FAIL" "could not create ${TOOLKIT_CLI_PATH}"
-    ui_box_end
-    return 1
-  fi
-  ui_box_end
-}
-
-repair_toolkit_cli() {
-  install_toolkit_cli
-}
-
-update_toolkit() {
-  require_sudo
-  local url tmp lib_file lib_url lib_dest lib_dir cache_bust
-  url="https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)"
-  cache_bust="$(date +%s)"
-  tmp="$(mktemp /tmp/erpnext-dev-update.XXXXXX.sh)" || fail "Could not create temporary update file."
-
-  ui_box_start "Update ERPNext Toolkit"
-  status_line "Download URL" "INFO" "$url"
-  status_line "Temporary file" "INFO" "$tmp"
-  status_line "Stable toolkit" "INFO" "$INSTALLER_CANONICAL_PATH"
-
-  command -v curl >/dev/null 2>&1 || fail "curl is required. Install it with: sudo apt-get install -y curl ca-certificates"
-
-  log "Downloading latest toolkit"
-  curl -fsSL "$url" -o "$tmp" || fail "Failed to download latest toolkit."
-  chmod +x "$tmp"
-  bash -n "$tmp" || fail "Downloaded toolkit failed bash syntax validation."
-
-  mkdir -p "$(dirname "$INSTALLER_CANONICAL_PATH")"
-  cp "$tmp" "$INSTALLER_CANONICAL_PATH"
-  chmod 755 "$INSTALLER_CANONICAL_PATH"
-  chown root:root "$INSTALLER_CANONICAL_PATH" 2>/dev/null || true
-
-  lib_dir="$(dirname "$INSTALLER_CANONICAL_PATH")/lib"
-  mkdir -p "$lib_dir"
-  for lib_file in common.sh config.sh access.sh frappe.sh support.sh backup.sh ssl.sh firewall.sh apps.sh health.sh storage.sh service.sh status.sh install.sh ops.sh; do
-    lib_url="https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/lib/${lib_file}?cache_bust=${cache_bust}"
-    lib_dest="${lib_dir}/${lib_file}"
-    if curl -fsSL "$lib_url" -o "$lib_dest"; then
-      chmod 644 "$lib_dest" 2>/dev/null || true
-      chown root:root "$lib_dest" 2>/dev/null || true
-      status_line "Library ${lib_file}" "OK" "$lib_dest"
-    else
-      status_line "Library ${lib_file}" "WARN" "could not download lib/${lib_file}"
-    fi
-  done
-
-  install_toolkit_cli_entry || fail "Updated toolkit, but failed to recreate ${TOOLKIT_CLI_PATH}."
-
-  ok "Toolkit updated."
-  "$INSTALLER_CANONICAL_PATH" version
-  ui_box_end
-}
 
 
 
@@ -715,7 +537,8 @@ Core:
   verify-toolkit      Show installed script SHA256 and compare against SHA256SUMS when available
   install-cli         Install or repair the erpnext-dev command
   repair-cli          Alias for install-cli
-  update-toolkit      Download latest erpnext-dev.sh from GitHub and update /opt copy
+  update-toolkit      Download a tag-pinned release with SHA256SUMS verification
+  security-audit      Read-only SSH, firewall, HTTPS, credential, and patch posture review
   menu-self-test      Validate q/Q and b/B handling across interactive menus
   guided-setup        Guided install / repair workflow
   status              Compact ERPNext status
@@ -945,7 +768,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|support-bundle-audit|audit-support-bundle|support-bundle-audit-test|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|go-live-record|go-live-status|cloud-firewall-checklist|cloudflare-checklist|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|health-check-run-now|configure-health-check-timer|health-check-status|health-check-journal|disable-health-check-timer|health-monitoring-wizard|production-monitoring-wizard|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|production-ops-dashboard|operations-wizard|operations-dashboard|ops-wizard|ops-dashboard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|verify-toolkit|toolkit-verify|verify-install|install-cli|repair-cli|update-toolkit|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|support-bundle-audit|audit-support-bundle|support-bundle-audit-test|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|go-live-record|go-live-status|cloud-firewall-checklist|cloudflare-checklist|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|health-check-run-now|configure-health-check-timer|health-check-status|health-check-journal|disable-health-check-timer|health-monitoring-wizard|production-monitoring-wizard|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|production-ops-dashboard|operations-wizard|operations-dashboard|ops-wizard|ops-dashboard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|verify-toolkit|toolkit-verify|verify-install|install-cli|repair-cli|update-toolkit|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-audit|security-audit-test|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -1158,6 +981,7 @@ main() {
     vm-firewall-status|ufw-status) show_vm_firewall_status ;;
     configure-fail2ban) configure_fail2ban ;;
     fail2ban-status) show_fail2ban_status ;;
+    security-audit|security-audit-test) run_security_audit ;;
     security-hardening-wizard|vm-firewall-wizard) security_hardening_wizard ;;
     ufw-ssh-admin-only) configure_ufw_ssh_admin_only ;;
     production-ssl-menu|production-https|production-https-menu) show_production_ssl_menu ;;

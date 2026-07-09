@@ -25,6 +25,7 @@ targets=(
   lib/status.sh
   lib/install.sh
   lib/ops.sh
+  lib/security.sh
   scripts/validate-release.sh
   scripts/generate-release-checksums.sh
   scripts/run-shellcheck.sh

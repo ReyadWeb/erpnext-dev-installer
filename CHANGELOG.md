@@ -1,3 +1,25 @@
+## v1.2.0 - Phase C security hardening
+
+### Added
+
+- Added `lib/security.sh` with `security-audit`, checksum-gated `update-toolkit`, and production credential handoff prompts.
+- Added `security-audit` command for read-only SSH, firewall, HTTPS, credential, and patch posture review.
+
+### Changed
+
+- Updated the toolkit version to v1.2.0.
+- `update-toolkit` now downloads tag-pinned releases (default `TOOLKIT_UPDATE_VERSION` or prompt) and verifies every downloaded artifact against `SHA256SUMS` before install.
+- Production/public-vm workflows refuse mutable `main`-branch updates unless `TOOLKIT_UPDATE_ALLOW_MAIN=1`.
+- Post-install and public VM guided QA now prompt operators to secure-handoff and optionally delete plaintext credentials.
+- Expanded support-bundle audit forbidden filenames and secret-pattern detection.
+- Documented private security disclosure expectations in `SECURITY.md`.
+
+### Validation scope
+
+- `bash -n` passes for `erpnext-dev.sh` and `lib/security.sh`.
+- `erpnext-dev version` prints v1.2.0.
+- `scripts/validate-release.sh` passes locally.
+
 ## v1.1.90 - Extract lib/ops.sh for production operations menus
 
 ### Added

@@ -1,3 +1,7 @@
+## v1.2.0 Phase C security hardening
+
+v1.2.0 adds `lib/security.sh` with `security-audit`, checksum-gated tag-pinned `update-toolkit`, production credential handoff prompts, and expanded support-bundle audit patterns.
+
 ## v1.1.90 ops module extraction — Phase B complete
 
 v1.1.90 extracts the production operations dashboard into `lib/ops.sh`. Next: Phase C security hardening (v1.2.0).
@@ -227,12 +231,16 @@ Add minimal GitHub Actions CI:
 
 ## Reporting security issues
 
-For now, report suspected security issues privately to the project maintainer before public disclosure. Include:
+Report suspected security issues **privately** before public disclosure.
 
-- toolkit version;
-- operating system version;
-- command used;
-- redacted logs or support bundle evidence;
-- whether the system is local development, production VPS, backup server, or disposable restore VM.
+1. Email or direct message the project maintainer with:
+   - toolkit version (`erpnext-dev version`);
+   - OS version (`/etc/os-release`);
+   - command used;
+   - redacted logs or support-bundle audit output;
+   - environment type (local dev VM, production VPS, backup server, restore VM).
+2. Do **not** include passwords, private keys, API tokens, raw `site_config.json`, database dumps, or customer data.
+3. Allow reasonable time for investigation and a fix before public discussion.
+4. For urgent production exposure (e.g. credentials left on a public-facing VM), run `sudo erpnext-dev security-audit` and `sudo erpnext-dev credentials-delete` after password-manager handoff while waiting for maintainer response.
 
-Do not include passwords, private SSH keys, API tokens, raw `site_config.json`, database dumps, or unredacted customer data.
+## v1.2.0 Phase C security hardening
