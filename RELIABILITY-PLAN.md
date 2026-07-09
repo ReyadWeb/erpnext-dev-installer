@@ -1,3 +1,9 @@
+## v1.1.83 reliability update
+
+v1.1.83 extracts the core install engine into `lib/install.sh`, continuing modularization with unchanged command names and runtime behavior.
+
+Next reliability milestone: install Tier B (post-install summaries) and Tier C (guided setup workflows).
+
 ## v1.1.82 reliability update
 
 v1.1.82 extracts ERPNext service and runtime helpers into `lib/service.sh`, continuing modularization with unchanged command names and runtime behavior.

@@ -1,3 +1,26 @@
+# v1.1.83 production validation notes
+
+v1.1.83 extracts the core install engine into `lib/install.sh`.
+
+Production validation should confirm:
+
+```bash
+VERSION="v1.1.83"
+sudo erpnext-dev version
+sudo erpnext-dev verify-toolkit
+scripts/validate-release.sh
+sudo erpnext-dev install-preflight
+sudo erpnext-dev install-status
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.83`.
+- `/opt/erpnext-dev/lib/install.sh` exists after install/update reuse.
+- Preflight and install-status commands still run.
+
+---
+
 # v1.1.82 production validation notes
 
 v1.1.82 extracts ERPNext service and runtime helpers into `lib/service.sh`.

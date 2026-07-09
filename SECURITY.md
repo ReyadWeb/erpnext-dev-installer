@@ -1,3 +1,7 @@
+## v1.1.83 install module extraction (Tier A)
+
+v1.1.83 extracts install preflight, system package setup, Frappe stack bootstrap, and install/repair/uninstall commands into `lib/install.sh`. Install and update paths keep the full toolkit `lib/` tree under `/opt/erpnext-dev/lib/`.
+
 ## v1.1.82 service module extraction
 
 v1.1.82 extracts ERPNext systemd service management and runtime state helpers into `lib/service.sh`. Install and update paths keep the full toolkit `lib/` tree under `/opt/erpnext-dev/lib/`.
@@ -150,6 +154,7 @@ lib/apps.sh                curated app install library
 lib/health.sh              health check and timers
 lib/storage.sh             root storage detection and expansion
 lib/service.sh             ERPNext systemd service and runtime state
+lib/install.sh             install and preflight (Tier A core engine)
 lib/backup.sh              local backup and retention
 lib/offvm-backup.sh        off-VM backup setup and rsync
 lib/restore.sh             restore preflight and rehearsal

@@ -1,3 +1,22 @@
+## v1.1.83 - Extract lib/install.sh Tier A for core install engine
+
+### Added
+
+- Added `lib/install.sh` with install preflight, system package setup, Frappe stack bootstrap, credential file writing, and install/repair/uninstall commands.
+
+### Changed
+
+- Updated the toolkit version to v1.1.83.
+- `erpnext-dev.sh` now sources `lib/install.sh` after `lib/service.sh`.
+- `update-toolkit` now downloads `install.sh` into `/opt/erpnext-dev/lib/`.
+- Expanded `SHA256SUMS`, `RELEASE-MANIFEST.txt`, and shellcheck targets for `lib/install.sh`.
+
+### Validation scope
+
+- `bash -n` passes for `erpnext-dev.sh` and all `lib/*.sh` modules.
+- `erpnext-dev version` prints v1.1.83.
+- `scripts/validate-release.sh` passes locally.
+
 ## v1.1.82 - Extract lib/service.sh for ERPNext service and runtime helpers
 
 ### Added

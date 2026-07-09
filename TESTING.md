@@ -1,3 +1,22 @@
+## v1.1.83 lib/install.sh Tier A extraction
+
+Purpose: move install preflight, package setup, Frappe stack bootstrap, and install/repair/uninstall into `lib/install.sh`.
+
+Package checks:
+
+```bash
+bash -n lib/install.sh
+./erpnext-dev.sh version
+scripts/validate-release.sh
+sudo erpnext-dev install-preflight
+```
+
+Expected results:
+
+- Version prints `ERPNext Developer Toolkit v1.1.83`.
+- `lib/install.sh` exists and is sourced by `erpnext-dev.sh`.
+- Install and repair commands remain available in help output.
+
 ## v1.1.82 lib/service.sh extraction
 
 Purpose: move ERPNext systemd service management and runtime state helpers into `lib/service.sh`.

@@ -40,6 +40,8 @@ bash -n lib/health.sh
 bash -n lib/storage.sh
 [[ -f lib/service.sh ]] || fail "lib/service.sh is missing"
 bash -n lib/service.sh
+[[ -f lib/install.sh ]] || fail "lib/install.sh is missing"
+bash -n lib/install.sh
 pass "bash syntax valid"
 
 chmod +x erpnext-dev.sh scripts/validate-release.sh scripts/generate-release-checksums.sh scripts/run-shellcheck.sh

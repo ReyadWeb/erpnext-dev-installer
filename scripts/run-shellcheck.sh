@@ -19,6 +19,7 @@ targets=(
   lib/health.sh
   lib/storage.sh
   lib/service.sh
+  lib/install.sh
   scripts/validate-release.sh
   scripts/generate-release-checksums.sh
   scripts/run-shellcheck.sh

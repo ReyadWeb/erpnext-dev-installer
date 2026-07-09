@@ -1,3 +1,22 @@
+# v1.1.83 roadmap update - lib/install.sh Tier A extraction
+
+Status: **implemented as the ninth careful modularization patch**.
+
+v1.1.83 extracts the core install engine into `lib/install.sh` (preflight, packages, Frappe stack, repair, uninstall).
+
+Completed in v1.1.83:
+
+- Added `lib/install.sh` and wired `erpnext-dev.sh` to source it.
+- Expanded `update-toolkit` to download the full toolkit lib module set.
+- Expanded checksum, manifest, shellcheck, and validation coverage.
+
+Next active milestones:
+
+1. **v1.1.84 — install Tier B** (post-install summaries and checkpoint).
+2. **v1.1.85 — install Tier C** (guided setup and quickstart workflows).
+
+---
+
 # v1.1.82 roadmap update - lib/service.sh extraction
 
 Status: **implemented as the eighth careful modularization patch**.
