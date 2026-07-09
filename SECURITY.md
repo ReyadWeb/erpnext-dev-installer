@@ -1,3 +1,7 @@
+## v1.3.0 signed releases (Phase C P0 milestone)
+
+v1.3.0 adds maintainer-identity verification on top of the existing SHA256 integrity workflow: a `release.yml` workflow signs `SHA256SUMS` with the maintainer GPG key on every `v*` tag and attaches `SHA256SUMS.asc` to the GitHub Release, and a new `verify-signature` command verifies that signature. See "Verifying release signatures" below. This closes the gap noted under P0: SHA256-only verification cannot detect an attacker who controls both the script and its checksum, whereas a signature they cannot forge can.
+
 ## v1.2.0 Phase C security hardening
 
 v1.2.0 adds `lib/security.sh` with `security-audit`, checksum-gated tag-pinned `update-toolkit`, production credential handoff prompts, and expanded support-bundle audit patterns.
@@ -129,11 +133,50 @@ The preferred direction is now partially implemented:
 2. publish SHA256 checksums per release;
 3. document checksum verification before `sudo` execution;
 4. add a `verify-toolkit` command that reports installed path, installed version, installed SHA256, and match/mismatch against a known checksum when available; **implemented in v1.1.71**;
-5. optionally add GPG-signed releases after the checksum workflow is stable.
+5. GPG-signed releases; **implemented in v1.3.0** (`release.yml` signs `SHA256SUMS`; `verify-signature` checks it).
 
-v1.1.70 implements items 1-3 for the `erpnext-dev.sh` script artifact by adding `SHA256SUMS` and tag-pinned README examples. v1.1.71 implements item 4 with `verify-toolkit`. v1.1.72 adds minimal CI and `scripts/validate-release.sh` so release checks are repeatable before publishing tags. Operators should prefer the verified tag workflow for production systems. The mutable `main` branch raw URL remains a development convenience path only.
+v1.1.70 implements items 1-3 for the `erpnext-dev.sh` script artifact by adding `SHA256SUMS` and tag-pinned README examples. v1.1.71 implements item 4 with `verify-toolkit`. v1.1.72 adds minimal CI and `scripts/validate-release.sh` so release checks are repeatable before publishing tags. v1.3.0 implements item 5. Operators should prefer the verified, signed tag workflow for production systems. The mutable `main` branch raw URL remains a development convenience path only.
 
-This is integrity verification, not maintainer identity verification. A malicious actor who can change both the script and checksum in the release can still defeat SHA256-only verification. GPG-signed releases remain a later optional hardening milestone.
+With signing enabled, verification is no longer integrity-only: SHA256 proves the files match the checksum list, and the GPG signature proves the checksum list itself came from the maintainer. An attacker who changes both the script and its checksum can no longer defeat verification without also forging the maintainer signature.
+
+### Verifying release signatures
+
+**Operator (maintainer) one-time setup** — required to activate signing:
+
+1. Generate a signing key (once): `gpg --full-generate-key` (Ed25519 or RSA 4096).
+2. Export the private key and add it as the repository secret `GPG_PRIVATE_KEY` (and `GPG_PASSPHRASE` if the key is protected):
+   `gpg --armor --export-secret-keys <KEYID>` → paste into the Actions secret.
+3. Publish the public key and its fingerprint (in this file and/or the repository), so users can pin it:
+   `gpg --armor --export <KEYID>` and `gpg --fingerprint <KEYID>`.
+
+Once `GPG_PRIVATE_KEY` is set, `release.yml` signs `SHA256SUMS` on every `v*` tag and attaches `SHA256SUMS.asc` to the release. Until then, releases publish unsigned (with a CI warning).
+
+**End-user verification** — before running the toolkit as root:
+
+```bash
+# Download the artifacts from the release (tag-pinned):
+VERSION="vX.Y.Z"
+base="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+curl -fsSLO "${base}/erpnext-dev.sh"
+curl -fsSLO "${base}/SHA256SUMS"
+curl -fsSLO "${base}/SHA256SUMS.asc"
+
+# Import the maintainer public key once, then verify signature + checksums:
+curl -fsSL "https://github.com/ReyadWeb.gpg" | gpg --import   # or the published key
+gpg --verify SHA256SUMS.asc SHA256SUMS
+sha256sum -c SHA256SUMS
+```
+
+Or use the toolkit, which runs the same check in a throwaway keyring and can pin the fingerprint:
+
+```bash
+export TOOLKIT_SIGNING_PUBKEY="/path/to/maintainer-public-key.asc"   # path or https URL
+export TOOLKIT_SIGNING_KEY_FINGERPRINT="<full fingerprint>"          # optional identity pin
+sudo -E erpnext-dev verify-signature
+sudo erpnext-dev verify-toolkit
+```
+
+`<PLACEHOLDER: publish the maintainer key fingerprint here once the signing key exists.>`
 
 ### P1: Plaintext credentials on disk
 

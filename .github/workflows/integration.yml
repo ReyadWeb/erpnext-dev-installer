@@ -146,11 +146,70 @@ jobs:
           curl -sv -H "Host: ${SITE_NAME}" "http://127.0.0.1:8000/api/method/ping" 2>&1 | head -40 || true
           exit 1
 
+      - name: Backup and restore round trip
+        run: |
+          set -uo pipefail
+          echo "== Create backup set (database + files) =="
+          sudo -E ./erpnext-dev.sh backup-files
+
+          echo "== Backup status =="
+          sudo -E ./erpnext-dev.sh backup-status || true
+
+          echo "== Verify latest backup set =="
+          sudo -E ./erpnext-dev.sh backup-verify
+
+          echo "== Restore the latest complete set (non-interactive) =="
+          # restore-full auto-selects the latest complete set under -y and
+          # auto-detects the DB admin credential from the toolkit credentials
+          # file; only the destructive confirmation reads stdin, so we pipe the
+          # required "RESTORE" token. This exercises the real restore code path,
+          # including the pre-restore emergency backup and post-restore migrate.
+          echo RESTORE | sudo -E ./erpnext-dev.sh -y restore-full
+
+      - name: Post-restore health check (hard gate)
+        run: |
+          set -uo pipefail
+          sudo -E ./erpnext-dev.sh wait-ready || true
+
+          # doctor's install_state=Installed requires the site dir, apps.txt, and
+          # apps/erpnext to be present, so a healthy verdict here proves the
+          # database and site survived the destructive restore intact.
+          sudo -E ./erpnext-dev.sh doctor --json > doctor-post-restore.out 2> doctor-post-restore.err || true
+          python3 - <<'PY'
+          import json, re, sys
+          raw = open('doctor-post-restore.out', encoding='utf-8', errors='replace').read()
+          match = re.search(r'\{.*\}\s*$', raw, re.S)
+          if not match:
+              sys.stderr.write("No JSON in post-restore doctor output. Tail:\n" + raw[-2000:] + "\n")
+              sys.exit(1)
+          data = json.loads(match.group(0))
+          state = data.get('context', {}).get('install_state')
+          print("post-restore install_state:", state)
+          if state != 'Installed':
+              sys.stderr.write("Expected install_state=Installed after restore\n")
+              sys.exit(1)
+          print("Post-restore doctor smoke passed.")
+          PY
+
+          for i in $(seq 1 18); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${SITE_NAME}" http://127.0.0.1:8000/api/method/ping || true)"
+            echo "post-restore attempt ${i}/18: http=${code}"
+            case "$code" in
+              200|401|403) echo "Site reachable after restore (http=${code})"; exit 0 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::Site not reachable on :8000 after restore."
+          sudo systemctl status erpnext-dev.service --no-pager -l 2>/dev/null || true
+          sudo journalctl -u erpnext-dev.service --no-pager -n 200 2>/dev/null || true
+          exit 1
+
       - name: Collect diagnostics
         if: always()
         run: |
           mkdir -p artifacts
-          cp -v doctor.out doctor.err artifacts/ 2>/dev/null || true
+          cp -v doctor.out doctor.err doctor-post-restore.out doctor-post-restore.err artifacts/ 2>/dev/null || true
+          sudo -E ./erpnext-dev.sh list-backups > artifacts/list-backups.txt 2>&1 || true
           sudo cp -rv /var/log/erpnext-dev artifacts/toolkit-logs 2>/dev/null || true
           sudo journalctl -u erpnext-dev.service --no-pager > artifacts/service-journal.txt 2>/dev/null || true
           sudo chown -R "$USER" artifacts 2>/dev/null || true

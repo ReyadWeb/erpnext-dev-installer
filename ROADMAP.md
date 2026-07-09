@@ -1,3 +1,28 @@
+# v1.3.0 roadmap update - "verified & signed" milestone
+
+Status: **implemented** (activation of signing pending maintainer key).
+
+v1.3.0 closes the two highest-value maturity gaps from the professional evaluation: an unverified restore path and integrity-only (unsigned) releases.
+
+- **Restore-rehearsal in CI (D4).** The integration job now runs a real backup -> restore round trip on the disposable-VM runner and re-asserts health afterward (`install_state=Installed` + `/api/method/ping`). Backups are now proven restorable in automation, not just creatable. A restore that has never been rehearsed is the single scariest gap for a data-stewardship tool; this converts it into a continuously exercised path.
+- **Signed releases (A5 / P0 item 5).** `release.yml` signs `SHA256SUMS` on every `v*` tag and publishes the signature with the release; `verify-signature` checks it in a throwaway keyring with optional fingerprint pinning. This adds maintainer-identity verification on top of SHA256 integrity.
+
+## Remaining to fully activate signing
+
+1. Maintainer generates a signing key and adds `GPG_PRIVATE_KEY` (+ optional `GPG_PASSPHRASE`) as repository secrets.
+2. Publish the public key and pin its fingerprint in `SECURITY.md` (there is a placeholder marker to replace).
+3. First signed tag validates the end-to-end path; then document the pinned fingerprint in the README bootstrap.
+
+## Next milestones after v1.3.0
+
+1. **Confirm the first live integration run** (install + restore round trip) on hosted runners; tune the reachability/restore windows from real timing.
+2. **Enable the Ubuntu 26.04 matrix leg** once a hosted runner label exists (D2).
+3. **E5 — `update-preflight` + `safe-update-wizard`:** guarded, backup-first ERPNext version upgrades (the next big operator-trust item).
+4. **F4/F6 — module-list single source of truth** + a CI consistency check.
+5. **F5 — raise shellcheck to `-S warning`** after triage.
+
+---
+
 # v1.2.4 roadmap update - Phase D: reachability hard gate
 
 Status: **implemented**.

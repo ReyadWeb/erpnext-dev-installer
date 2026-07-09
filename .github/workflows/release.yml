@@ -1,0 +1,87 @@
+name: Release (sign & publish)
+
+# On every v* tag: validate the release tree, sign SHA256SUMS with the
+# maintainer GPG key (if configured), and publish a GitHub Release with the
+# checksums and detached signature attached.
+#
+# Signing is gated on the GPG_PRIVATE_KEY secret so the workflow does not hard
+# fail before a key is configured; once the secret is set, releases are signed
+# automatically. See SECURITY.md ("Verifying release signatures") for the
+# operator setup and end-user verification steps.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Sign and publish ${{ github.ref_name }}
+    runs-on: ubuntu-24.04
+    env:
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate release tree
+        run: scripts/validate-release.sh
+
+      - name: Confirm tag matches SCRIPT_VERSION
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          ver="v$(grep -E '^SCRIPT_VERSION=' erpnext-dev.sh | head -n 1 | cut -d'"' -f2)"
+          echo "tag=${tag} script_version=${ver}"
+          if [[ "$tag" != "$ver" ]]; then
+            echo "::error::Tag ${tag} does not match SCRIPT_VERSION ${ver}."
+            exit 1
+          fi
+
+      - name: Sign SHA256SUMS
+        run: |
+          set -euo pipefail
+          if [[ -z "${GPG_PRIVATE_KEY:-}" ]]; then
+            echo "::warning::GPG_PRIVATE_KEY secret is not set; publishing WITHOUT a signature."
+            echo "Configure the signing key to enable signed releases (see SECURITY.md)."
+            exit 0
+          fi
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          keyid="$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ {print $5; exit}')"
+          [[ -n "$keyid" ]] || { echo "::error::No secret key found after import."; exit 1; }
+
+          sign_args=(--batch --yes --pinentry-mode loopback --local-user "$keyid"
+                     --armor --detach-sign --output SHA256SUMS.asc)
+          if [[ -n "${GPG_PASSPHRASE:-}" ]]; then
+            sign_args=(--passphrase "$GPG_PASSPHRASE" "${sign_args[@]}")
+          fi
+          gpg "${sign_args[@]}" SHA256SUMS
+          gpg --verify SHA256SUMS.asc SHA256SUMS
+          echo "Signed SHA256SUMS with key ${keyid}."
+
+      - name: Publish GitHub release
+        run: |
+          set -euo pipefail
+          assets=(SHA256SUMS erpnext-dev.sh RELEASE-MANIFEST.txt)
+          [[ -f SHA256SUMS.asc ]] && assets+=(SHA256SUMS.asc)
+
+          notes="Automated release for ${GITHUB_REF_NAME}.
+
+          Verify integrity:
+          1. Download SHA256SUMS (and SHA256SUMS.asc if present).
+          2. If signed: import the maintainer key, then \`gpg --verify SHA256SUMS.asc SHA256SUMS\`.
+          3. \`sha256sum -c SHA256SUMS\` for the files you downloaded.
+
+          See SECURITY.md for the pinned key fingerprint and \`erpnext-dev verify-signature\`."
+
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${assets[@]}" \
+              --title "${GITHUB_REF_NAME}" --notes "$notes"
+          fi

@@ -194,7 +194,7 @@ Prioritized by impact and dependency order. Status as of v1.2.1 (Phases A–C co
 | A2 | Expand checksum coverage beyond `erpnext-dev.sh` | P0 | **Done (v1.1.74)** |
 | A3 | CI menu smoke tests (`menu-self-test`, wizard quit) | P1 | **Done (v1.1.74)** |
 | A4 | Version consistency check in CI | P1 | **Done (v1.1.74)** |
-| A5 | GPG-signed releases | P2 | Planned |
+| A5 | GPG-signed releases | P2 | **Done (v1.3.0)** |
 | A6 | Dependabot for GitHub Actions | P2 | Planned |
 
 ### Phase B — Structural Reliability (v1.1.75 – v1.2.0)
@@ -231,7 +231,7 @@ Prioritized by impact and dependency order. Status as of v1.2.1 (Phases A–C co
 | D1 | Disposable VM integration job (weekly or on tag) | P1 | **Done (v1.2.3)** |
 | D2 | Test matrix: Ubuntu 24.04 + 26.04 | P1 | Partial (24.04 live; 26.04 pending hosted runner label) |
 | D3 | Post-install smoke in CI | P1 | **Done (v1.2.3)** |
-| D4 | Optional restore rehearsal in CI | P2 | Planned |
+| D4 | Optional restore rehearsal in CI | P2 | **Done (v1.3.0)** |
 
 ### Phase E — Operator Experience (ongoing)
 

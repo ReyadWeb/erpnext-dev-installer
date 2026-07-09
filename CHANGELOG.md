@@ -1,3 +1,32 @@
+## v1.3.0 - Verified & signed: restore-rehearsal CI and GPG-signed releases
+
+### Added
+
+- **Restore-rehearsal in CI (Phase D, D4).** The integration workflow now performs a real backup -> restore round trip on the freshly installed disposable-VM runner: `backup-files`, `backup-verify`, then a non-interactive `restore-full` (auto-selects the latest complete set under `-y`, auto-detects DB credentials, and the required `RESTORE` confirmation is piped in). A post-restore hard gate re-asserts `doctor --json` `install_state=Installed` and that the site still answers `/api/method/ping`. This proves toolkit backups are actually restorable, not just creatable.
+- **Signed releases (Phase C P0, item 5).** Added `.github/workflows/release.yml`: on every `v*` tag it validates the release tree, confirms the tag matches `SCRIPT_VERSION`, signs `SHA256SUMS` with the maintainer GPG key (when the `GPG_PRIVATE_KEY` secret is configured), and publishes a GitHub Release with `SHA256SUMS`, `SHA256SUMS.asc`, and the script attached.
+- **`verify-signature` command.** Verifies the detached GPG signature over `SHA256SUMS` in a throwaway keyring (no changes to the operator's GnuPG state). Honours `TOOLKIT_SIGNING_PUBKEY` (path or https URL), an optional `TOOLKIT_SIGNING_KEY_FINGERPRINT` identity pin, and `TOOLKIT_SIGNATURE_FILE`. Aliases: `verify-release-signature`, `verify-sig`.
+- Documented maintainer signing setup and end-user verification in `SECURITY.md` ("Verifying release signatures") and a production-verification note in `README.md`.
+- Listed `.github/workflows/release.yml` in `RELEASE-MANIFEST.txt`.
+
+### Changed
+
+- Updated the toolkit version to v1.3.0.
+- Regenerated `SHA256SUMS`.
+
+### Security
+
+- Signed releases add maintainer-identity verification on top of SHA256 integrity, closing the P0 gap where an attacker controlling both the script and its checksum could defeat SHA256-only verification.
+
+### Notes
+
+- Signing activates once the maintainer configures the `GPG_PRIVATE_KEY` (and optional `GPG_PASSPHRASE`) repository secret and publishes the public key fingerprint; until then `release.yml` publishes unsigned with a CI warning rather than failing.
+
+### Validation scope
+
+- `bash -n` passes for all shell files; `integration.yml` and `release.yml` parse as valid YAML.
+- `erpnext-dev version` prints v1.3.0; `help` exposes `verify-signature`.
+- `scripts/validate-release.sh` passes locally.
+
 ## v1.2.4 - Phase D: promote integration site reachability to a hard gate
 
 ### Changed
