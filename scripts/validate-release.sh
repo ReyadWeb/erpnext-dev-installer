@@ -23,7 +23,9 @@ pass() {
 
 bash -n erpnext-dev.sh
 [[ -f lib/common.sh ]] || fail "lib/common.sh is missing"
+[[ -f lib/support.sh ]] || fail "lib/support.sh is missing"
 bash -n lib/common.sh
+bash -n lib/support.sh
 pass "bash syntax valid"
 
 chmod +x erpnext-dev.sh scripts/validate-release.sh scripts/generate-release-checksums.sh scripts/run-shellcheck.sh

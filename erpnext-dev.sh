@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.75"
+SCRIPT_VERSION="1.1.76"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -141,6 +141,12 @@ if [[ ! -f "${_ERPNEXT_DEV_ROOT}/lib/common.sh" ]]; then
 fi
 # shellcheck source=lib/common.sh disable=SC1091
 source "${_ERPNEXT_DEV_ROOT}/lib/common.sh"
+if [[ ! -f "${_ERPNEXT_DEV_ROOT}/lib/support.sh" ]]; then
+  echo "ERROR: Missing toolkit library: ${_ERPNEXT_DEV_ROOT}/lib/support.sh" >&2
+  exit 1
+fi
+# shellcheck source=lib/support.sh disable=SC1091
+source "${_ERPNEXT_DEV_ROOT}/lib/support.sh"
 erpnext_dev_init_terminal_colors
 
 prepare_log_file
@@ -388,6 +394,17 @@ update_toolkit() {
     status_line "Toolkit library" "OK" "$lib_dest"
   else
     status_line "Toolkit library" "WARN" "could not download lib/common.sh"
+  fi
+
+  local support_url support_dest
+  support_url="https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/lib/support.sh?cache_bust=$(date +%s)"
+  support_dest="$(dirname "$INSTALLER_CANONICAL_PATH")/lib/support.sh"
+  if curl -fsSL "$support_url" -o "$support_dest"; then
+    chmod 644 "$support_dest" 2>/dev/null || true
+    chown root:root "$support_dest" 2>/dev/null || true
+    status_line "Support library" "OK" "$support_dest"
+  else
+    status_line "Support library" "WARN" "could not download lib/support.sh"
   fi
 
   install_toolkit_cli_entry || fail "Updated toolkit, but failed to recreate ${TOOLKIT_CLI_PATH}."

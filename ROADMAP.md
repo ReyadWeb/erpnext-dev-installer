@@ -1,3 +1,21 @@
+# v1.1.76 roadmap update - lib/support.sh extraction
+
+Status: **implemented as the second careful modularization patch**.
+
+v1.1.76 extracts doctor, support-bundle, support-bundle audit, and command-audit helpers into `lib/support.sh`.
+
+Completed in v1.1.76:
+
+- Added `lib/support.sh` and wired `erpnext-dev.sh` to source it.
+- Expanded checksum, manifest, shellcheck, and update-toolkit coverage for the new module.
+
+Next active milestones:
+
+1. **v1.1.77 — extract backup/restore helpers into lib/backup.sh**.
+2. Later: optional GPG-signed release artifacts.
+
+---
+
 # v1.1.75 roadmap update - lib/common.sh and shellcheck in CI
 
 Status: **implemented as the first careful modularization patch**.

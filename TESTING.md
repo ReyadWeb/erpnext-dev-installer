@@ -1,3 +1,24 @@
+## v1.1.76 lib/support.sh extraction
+
+Purpose: move doctor, support-bundle, support-bundle audit, and command-audit helpers into `lib/support.sh`.
+
+Package checks:
+
+```bash
+bash -n erpnext-dev.sh
+bash -n lib/common.sh
+bash -n lib/support.sh
+./erpnext-dev.sh version
+scripts/run-shellcheck.sh
+scripts/validate-release.sh
+```
+
+Expected results:
+
+- Version prints `ERPNext Developer Toolkit v1.1.76`.
+- `lib/support.sh` exists and is sourced by `erpnext-dev.sh`.
+- Support-bundle audit fixture still passes in release validation.
+
 ## v1.1.75 lib/common.sh and shellcheck
 
 Purpose: begin careful modularization and add static analysis for release scripts and the first extracted module.

@@ -1,3 +1,22 @@
+## v1.1.76 - Extract lib/support.sh for diagnostics and support bundles
+
+### Added
+
+- Added `lib/support.sh` with doctor diagnostics, support-bundle creation, support-bundle audit, and command-audit helpers.
+
+### Changed
+
+- Updated the toolkit version to v1.1.76.
+- `erpnext-dev.sh` now sources `lib/support.sh` after `lib/common.sh`.
+- `update-toolkit` now downloads `lib/support.sh` into `/opt/erpnext-dev/lib/`.
+- Expanded `SHA256SUMS`, `RELEASE-MANIFEST.txt`, and shellcheck targets for `lib/support.sh`.
+
+### Validation scope
+
+- `bash -n erpnext-dev.sh`, `bash -n lib/common.sh`, and `bash -n lib/support.sh` pass.
+- `erpnext-dev version` prints v1.1.76.
+- `scripts/validate-release.sh` passes locally.
+
 ## v1.1.75 - Begin modularization and add shellcheck to CI
 
 ### Added

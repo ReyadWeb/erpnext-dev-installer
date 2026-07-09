@@ -1,3 +1,9 @@
+## v1.1.76 reliability update
+
+v1.1.76 extracts support and diagnostics helpers into `lib/support.sh`, reducing monolith size for doctor, support-bundle, and audit workflows.
+
+Next reliability milestone: extract backup/restore helpers into `lib/backup.sh`.
+
 ## v1.1.75 reliability update
 
 v1.1.75 extracts `lib/common.sh` from the monolith and adds shellcheck to CI via `scripts/run-shellcheck.sh`. Install and update paths now copy or download the toolkit `lib/` tree into `/opt/erpnext-dev/lib`.
