@@ -92,6 +92,8 @@ During the production HTTPS step, the guided setup recommends **Let's Encrypt** 
 
 **v1.1.56 Cloudflare note:** when a Cloudflare record is orange-cloud/proxied, public DNS returns Cloudflare edge IPs instead of the VPS origin IP. That is expected for Cloudflare Origin CA. The guided setup now asks whether to stop for DNS-only/gray-cloud Let's Encrypt or continue with the Cloudflare proxied / Origin CA path. Only continue with the Cloudflare path when the hidden Cloudflare A-record content points to the VPS IP and Cloudflare SSL/TLS will be set to Full (strict).
 
+**v1.1.57 validation note:** Cloudflare Origin CA / Full (strict) was validated on the real Hetzner VPS path. Expected passing status is Cloudflare-proxied DNS returning Cloudflare edge IPs, Cloudflare Origin CA active on the VM, `cloudflare-origin-ssl-status` showing `HTTP/2 200`, and direct backend ports `8000` and `9000` blocked externally.
+
 Example production site name:
 
 ```text
@@ -106,16 +108,18 @@ The completed local VM validation stage proves the `.test` local-development wor
 
 The core production VPS guided path has also been validated on a fresh Hetzner VPS using Ubuntu 26.04 LTS, a real DNS record, Let’s Encrypt, Nginx, UFW, Fail2Ban, scheduled local backups, external backend-port blocking, browser login testing, and a redacted support bundle.
 
+Cloudflare Origin CA / Full (strict): validated in v1.1.57 using Cloudflare orange-cloud/proxied DNS, Cloudflare Origin CA certificate/key on the VM, Nginx, external `HTTP/2 200` through Cloudflare, UFW production profile, Fail2Ban sshd jail, scheduled local backups, and external 8000/9000 blocking.
+
 Validated production milestone:
 
 ```text
-Toolkit: v1.1.53 core path; v1.1.54/v1.1.55 polish builds afterward
+Toolkit: v1.1.53 core Let's Encrypt path; v1.1.56/v1.1.57 Cloudflare Origin CA path
 Provider: Hetzner Cloud VPS
 OS: Ubuntu 26.04 LTS
 Domain test: real public subdomain
-HTTPS: Let’s Encrypt directly on the VM
+HTTPS: Let’s Encrypt directly on the VM; Cloudflare Origin CA / Full (strict) also validated
 External result: HTTPS OK; public 8000/9000 blocked
-Status: core production guided setup passed
+Status: core production guided setup passed; both main production HTTPS paths validated
 ```
 
 Remaining production hardening before real client go-live:
@@ -123,7 +127,7 @@ Remaining production hardening before real client go-live:
 ```text
 Configure and test off-VM backups.
 Rehearse restore on a disposable VM.
-Test Cloudflare Origin CA / Full (strict) as a separate SSL path.
+Cloudflare Origin CA / Full (strict) is validated. Keep using a fresh/rollback VPS for future SSL-path regression tests.
 Optionally configure health timer/monitoring.
 ```
 

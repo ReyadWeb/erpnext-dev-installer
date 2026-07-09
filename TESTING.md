@@ -1,3 +1,43 @@
+## v1.1.57 Cloudflare Origin CA validation record
+
+This release records the successful real VPS validation of the Cloudflare Origin CA / Full (strict) SSL path after the v1.1.56 proxied-DNS gate fix.
+
+Validated Cloudflare result:
+
+```text
+Toolkit path tested: public-vm-guided-setup + Production SSL Provider Wizard
+Provider: Hetzner Cloud VPS
+OS: Ubuntu 26.04 LTS
+Domain: erp.flowmaya.com
+Cloudflare DNS: proxied / orange-cloud
+Public DNS result: Cloudflare edge IPs, not the origin VPS IP
+Cloudflare SSL/TLS mode: Full (strict)
+Origin SSL: Cloudflare Origin CA certificate + private key installed on the VM
+HTTPS result: HTTP/2 200 through Cloudflare
+External backend ports: 8000/9000 timed out from workstation
+UFW: active after completing security hardening
+Fail2Ban: sshd jail enabled
+Scheduled local backups: timer active after completing backup schedule step
+Support note: off-VM backup remains required before real go-live
+```
+
+Regression checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+grep -n "v1.1.57" CHANGELOG.md TESTING.md ROADMAP.md PRODUCTION-VALIDATION.md
+grep -n "Cloudflare Origin CA / Full (strict): validated" README.md ROADMAP.md PRODUCTION-VALIDATION.md
+grep -n "Cloudflare Origin CA validation record" CHANGELOG.md TESTING.md
+```
+
+Expected results:
+
+- Version prints `ERPNext Developer Toolkit v1.1.57`.
+- Documentation marks Let's Encrypt direct DNS and Cloudflare Origin CA Full strict as validated production HTTPS paths.
+- Remaining required production work is still off-VM backup, real off-VM backup run, restore rehearsal, and optional health timer validation.
+- If guided setup is interrupted after HTTPS, running `security-hardening-wizard` and `configure-backup-schedule` completes UFW, Fail2Ban, and scheduled backup validation.
+
 ## v1.1.56 Cloudflare proxied DNS guided setup check
 
 Finding from real VPS testing: Cloudflare Origin CA can be installed and validated successfully, but public DNS returns Cloudflare edge IPs when the record is orange-cloud/proxied. The guided setup must not treat that as a hard DNS failure when the user intentionally chooses the Cloudflare Origin CA path.

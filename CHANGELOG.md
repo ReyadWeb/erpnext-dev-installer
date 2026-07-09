@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.1.57 - Cloudflare Origin CA validation record
+
+### Changed
+
+- Updated the toolkit version to v1.1.57.
+- Documented the successful Cloudflare Origin CA / Cloudflare Full (strict) validation on the real Hetzner VPS path.
+- Updated README, TESTING, ROADMAP, and PRODUCTION-VALIDATION to mark both supported production HTTPS paths as validated: direct Let's Encrypt and Cloudflare Origin CA behind orange-cloud/proxied DNS.
+- Recorded that the v1.1.56 Cloudflare proxied DNS guided setup fix was validated with Cloudflare edge DNS, Origin CA certificate/key, Nginx, Cloudflare HTTPS `HTTP/2 200`, UFW, Fail2Ban, scheduled backups, and external 8000/9000 blocking.
+- Kept remaining production-hardening work focused on off-VM backup, restore rehearsal, and optional health monitoring.
+
+### Validated
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` reports v1.1.57.
+- Cloudflare Origin CA status reports active provider, certificate/key present, Nginx site enabled, and HTTPS `HTTP/2 200` through Cloudflare.
+- External workstation tests confirmed `https://erp.flowmaya.com` returns through Cloudflare and direct backend ports `8000` and `9000` time out.
+- Production checklist after completing interrupted steps shows UFW active, Fail2Ban sshd jail enabled, scheduled backups active, and only expected off-VM backup warnings.
+
 ## v1.1.56 - Cloudflare proxied DNS guided setup fix
 
 ### Changed

@@ -1,3 +1,40 @@
+## v1.1.57 Cloudflare Origin CA validation record
+
+Cloudflare Origin CA / Full (strict) has now been validated on the real Hetzner VPS production path.
+
+```text
+Validated release path: v1.1.56 fix confirmed and recorded in v1.1.57
+Provider: Hetzner Cloud VPS
+OS: Ubuntu 26.04 LTS
+Domain: erp.flowmaya.com
+Cloudflare DNS: proxied / orange-cloud
+Public DNS: Cloudflare edge IPs, not origin VPS IP
+Cloudflare SSL/TLS mode: Full (strict)
+Origin certificate: Cloudflare Origin CA installed on VM
+Nginx: Cloudflare Origin CA HTTPS config enabled
+External HTTPS: HTTP/2 200 through Cloudflare
+External backend ports: 8000/9000 timed out from workstation
+UFW: active production profile
+Fail2Ban: sshd jail enabled
+Scheduled backups: local systemd timer active
+```
+
+Production HTTPS validation status:
+
+```text
+Let's Encrypt direct DNS-only path: validated.
+Cloudflare Origin CA / Full (strict): validated.
+```
+
+Remaining required hardening before relying on a real client production system:
+
+```text
+Configure an off-VM backup target.
+Run an off-VM backup dry run and real copy.
+Rehearse restore on a disposable VM.
+Optionally configure health timer/monitoring.
+```
+
 ## v1.1.56 Cloudflare proxied DNS behavior
 
 For Cloudflare Origin CA / Full (strict), orange-cloud/proxied DNS returns Cloudflare edge IPs, not the VPS origin IP. This is expected and must be handled differently from the default Let's Encrypt path.
@@ -37,7 +74,7 @@ Remaining production hardening before relying on a real client system:
 Configure and test an off-VM backup target.
 Run off-VM backup dry run and real run.
 Rehearse restore on a disposable VM.
-Validate Cloudflare Origin CA / Full (strict) as a separate SSL provider path.
+Cloudflare Origin CA / Full (strict) has been validated; continue with off-VM backup and restore rehearsal validation.
 Optionally configure health timer/monitoring.
 ```
 
@@ -247,7 +284,7 @@ The production VPS validation stage should not be marked passed until all of the
 | Maintenance / Final QA / support bundle | 8.8/10 | Passed locally |
 | Public VPS quickstart | 6.5/10 | Implemented, requires real VPS validation |
 | Let's Encrypt production HTTPS | 6.5/10 | Implemented, requires real DNS/domain validation |
-| Cloudflare Origin CA / Full strict | 6.0/10 | Requires separate Cloudflare test after Let's Encrypt baseline |
+| Cloudflare Origin CA / Full strict | 9.0/10 | Validated through Cloudflare orange-cloud/proxied DNS with Origin CA and Full (strict) |
 | Production firewall + Fail2Ban | 6.5/10 | UFW tested locally; cloud firewall and Fail2Ban need VPS validation |
 | Off-VM backup | 5.5/10 | Workflow exists; remote target validation needed |
 | Health timer / monitoring | 5.5/10 | Available; production-stage validation needed |

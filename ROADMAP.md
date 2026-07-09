@@ -1,3 +1,24 @@
+## v1.1.57 completed Cloudflare Origin CA validation record
+
+- Recorded successful Cloudflare Origin CA / Full (strict) validation on the real Hetzner VPS production path.
+- Confirmed Cloudflare orange-cloud/proxied DNS can be handled safely after the v1.1.56 guided DNS gate fix.
+- Confirmed both production HTTPS paths are now validated:
+  - Let's Encrypt direct DNS-only path: validated.
+  - Cloudflare Origin CA / Full (strict): validated.
+- Confirmed the production hardening follow-up after an interrupted guided flow: UFW active, Fail2Ban sshd jail enabled, scheduled local backups active, external backend ports blocked.
+
+Current ratings after Cloudflare validation:
+
+| Case | Rating | Interpretation |
+| --- | ---: | --- |
+| Local VM / developer workflow | 9.5/10 | Passed and ready for normal local development/testing use |
+| Public VPS guided production workflow | 8.8/10 | Core production path validated on real Hetzner VPS with both Let's Encrypt and Cloudflare Origin CA HTTPS paths |
+| Production HTTPS choices | 9.0/10 | Let's Encrypt direct DNS and Cloudflare Origin CA Full strict paths validated |
+| Backup + restore foundation | 9.0/10 | Local backups and readable verification pass; production restore rehearsal still required |
+| Off-VM backup / production monitoring | 6.0/10 | Planning and local timers exist; real off-VM target, real copy, restore rehearsal, and optional health timer remain open |
+
+Active next milestone: validate off-VM backup target configuration, off-VM backup dry run/real run, and disposable-VM restore rehearsal. Avoid broad feature work until backup survivability is validated.
+
 ## v1.1.56 completed Cloudflare proxied DNS guided setup fix
 
 - Fixed the guided production DNS gate so Cloudflare orange-cloud/proxied DNS can continue through the Cloudflare Origin CA path instead of failing because public DNS returns Cloudflare edge IPs.
@@ -22,9 +43,9 @@ Updated readiness after real VPS validation:
 | Backup + restore foundation | 9.0/10 local / 7.5/10 production | Local restore passed; production restore still needs disposable-VM rehearsal |
 | Final QA and support bundle | 9.0/10 | Passed on local and production validation paths; support bundle contents reviewed |
 | Off-VM backup / production monitoring | 5.8/10 | Planning and local timers exist; real off-VM target and health timer validation remain open |
-| Cloudflare Origin CA SSL path | 6.8/10 | Available in the wizard and worked in older testing, but needs focused retest after v1.1.54 SSL-provider choice change |
+| Cloudflare Origin CA SSL path | 9.0/10 | Validated through Cloudflare orange-cloud/proxied DNS with Origin CA and Full (strict) |
 
-Active next milestone: validate v1.1.54+ guided SSL provider choice and Cloudflare Origin CA path on a fresh/rollback VPS, then validate off-VM backup and restore rehearsal.
+Active next milestone: validate off-VM backup target, off-VM backup dry run/real run, and disposable-VM restore rehearsal.
 
 ## v1.1.52 completed production guided setup UX fix
 
