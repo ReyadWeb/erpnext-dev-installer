@@ -1,0 +1,146 @@
+name: Integration (disposable VM)
+
+# Phase D integration testing.
+#
+# This workflow performs a REAL, non-interactive ERPNext install on an
+# ephemeral GitHub-hosted runner (used as a disposable VM) and runs a
+# post-install smoke check. It is intentionally NOT run on pull requests
+# or ordinary pushes: the fast lint/validate gate lives in ci.yml. A full
+# install takes tens of minutes and depends on upstream Frappe/ERPNext
+# repositories, so it runs on demand, weekly, and on release tags.
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_name:
+        description: "ERPNext site name to install"
+        default: "erp.test"
+        required: false
+  schedule:
+    # Mondays 06:00 UTC. Catches upstream package/repo drift once a week.
+    - cron: "0 6 * * 1"
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  install-smoke:
+    name: Install + smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          # The toolkit targets Ubuntu 24.04 and 26.04. Enable the 26.04 entry
+          # once a GitHub-hosted "ubuntu-26.04" runner label is available; the
+          # steps below are OS-agnostic and need no other change.
+          # - ubuntu-26.04
+    env:
+      # erp.test keeps parity with the toolkit default; workflow_dispatch can override.
+      SITE_NAME: ${{ github.event.inputs.site_name || 'erp.test' }}
+      # Hosted runners expose well under the 30 GB preflight minimum, so the
+      # blocking disk gate must be overridden for CI. Real VMs should not.
+      ERPNEXT_ALLOW_UNSAFE_INSTALL: "true"
+      # Never let the installer grow the runner's root disk.
+      AUTO_EXPAND_ROOT: "false"
+      # Start the service so the smoke step can probe it; no boot autostart needed.
+      AUTO_START: "true"
+      ENABLE_AUTOSTART: "false"
+      DEPLOYMENT_MODE: "development"
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Report runner capacity
+        run: |
+          echo "== OS =="; . /etc/os-release && echo "$PRETTY_NAME"
+          echo "== CPU =="; nproc
+          echo "== Memory =="; free -h
+          echo "== Disk =="; df -h /
+
+      - name: Free up disk space
+        run: |
+          # ERPNext (bench + node_modules + apps) needs several GB; hosted runners
+          # ship with large toolchains we do not use. Reclaim space best-effort.
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet \
+            /opt/hostedtoolcache/CodeQL /usr/local/.ghcup 2>/dev/null || true
+          sudo docker image prune --all --force 2>/dev/null || true
+          df -h /
+
+      - name: Verify release checksums
+        run: sha256sum -c SHA256SUMS
+
+      - name: Install preflight (read-only)
+        run: sudo -E ./erpnext-dev.sh install-preflight || true
+
+      - name: Install ERPNext (non-interactive)
+        run: sudo -E ./erpnext-dev.sh -y install
+
+      - name: Doctor JSON smoke assertions
+        run: |
+          set -uo pipefail
+          sudo -E ./erpnext-dev.sh doctor --json > doctor.out 2> doctor.err || true
+          python3 - <<'PY'
+          import json, re, sys
+          raw = open('doctor.out', encoding='utf-8', errors='replace').read()
+          match = re.search(r'\{.*\}\s*$', raw, re.S)
+          if not match:
+              sys.stderr.write("No JSON object found in doctor output. Tail:\n")
+              sys.stderr.write(raw[-2000:] + "\n")
+              sys.exit(1)
+          data = json.loads(match.group(0))
+          ctx = data.get('context', {})
+          print("install_state:", ctx.get('install_state'))
+          print("runtime_state:", ctx.get('runtime_state'))
+          print("service_state:", ctx.get('service_state'))
+          fails = [c for c in data.get('checks', []) if c.get('status') == 'FAIL']
+          for c in fails:
+              print("FAIL:", c.get('name'), '-', c.get('detail'))
+          if ctx.get('install_state') != 'Installed':
+              sys.stderr.write("Expected install_state=Installed\n")
+              sys.exit(1)
+          print("Doctor smoke passed: install_state=Installed")
+          PY
+
+      - name: Site reachability smoke
+        run: |
+          sudo -E ./erpnext-dev.sh wait-ready || true
+          for i in $(seq 1 12); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/method/ping || true)"
+            echo "attempt ${i}: http=${code}"
+            case "$code" in
+              200|401|403) echo "Site is reachable on :8000"; exit 0 ;;
+            esac
+            sleep 10
+          done
+          # Reachability is not yet a hard gate: the service may still be warming
+          # up, and the install-state assertion above already proves the core path.
+          echo "::warning::Site not reachable on :8000 within timeout (non-fatal)."
+
+      - name: Collect diagnostics
+        if: always()
+        run: |
+          mkdir -p artifacts
+          cp -v doctor.out doctor.err artifacts/ 2>/dev/null || true
+          sudo cp -rv /var/log/erpnext-dev artifacts/toolkit-logs 2>/dev/null || true
+          sudo journalctl -u erpnext-dev.service --no-pager > artifacts/service-journal.txt 2>/dev/null || true
+          sudo chown -R "$USER" artifacts 2>/dev/null || true
+          df -h / | tee artifacts/disk-after.txt
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-${{ matrix.os }}
+          path: artifacts/
+          if-no-files-found: ignore

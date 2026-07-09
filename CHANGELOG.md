@@ -1,3 +1,30 @@
+## v1.2.3 - Phase D groundwork: disposable-VM integration testing
+
+### Added
+
+- Added `.github/workflows/integration.yml`, a separate integration workflow that performs a real, non-interactive ERPNext install on an ephemeral GitHub-hosted runner (used as a disposable VM) and runs a post-install smoke check.
+  - Triggers: `workflow_dispatch` (manual, with a `site_name` input), a weekly `schedule` (Mondays 06:00 UTC), and release tags (`v*`). It intentionally does not run on pull requests, so the fast `ci.yml` lint/validate gate remains the PR path.
+  - CI-safety environment: `ERPNEXT_ALLOW_UNSAFE_INSTALL=true` (hosted runners are under the 30 GB preflight minimum), `AUTO_EXPAND_ROOT=false` (never grow the runner disk), `AUTO_START=true`, `ENABLE_AUTOSTART=false`.
+  - Smoke assertions: verifies `SHA256SUMS`, runs `install-preflight`, installs with `-y`, then asserts `doctor --json` reports `install_state=Installed`, surfaces any `FAIL` checks, probes `http://localhost:8000/api/method/ping`, and uploads toolkit logs and the service journal as artifacts.
+- Listed `.github/workflows/integration.yml` in `RELEASE-MANIFEST.txt`.
+
+### Changed
+
+- Updated the toolkit version to v1.2.3.
+- Regenerated `SHA256SUMS` for the updated `erpnext-dev.sh` and `RELEASE-MANIFEST.txt`.
+
+### Notes
+
+- The Ubuntu 26.04 matrix entry is present but commented out until a GitHub-hosted `ubuntu-26.04` runner label is available; the steps are OS-agnostic and need no other change to enable it (roadmap D2).
+- Site reachability is currently a non-fatal warning; the `install_state=Installed` assertion is the hard gate for this increment.
+
+### Validation scope
+
+- `bash -n` passes for all shell files.
+- `integration.yml` parses as valid YAML.
+- `erpnext-dev version` prints v1.2.3.
+- `scripts/validate-release.sh` passes locally.
+
 ## v1.2.2 - Maintenance: remove dead code (Phase F3)
 
 ### Removed

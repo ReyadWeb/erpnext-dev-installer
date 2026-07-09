@@ -228,9 +228,9 @@ Prioritized by impact and dependency order. Status as of v1.2.1 (Phases A–C co
 
 | # | Task | Priority | Status |
 |---|---|---|---|
-| D1 | Disposable VM integration job (weekly or on tag) | P1 | Planned |
-| D2 | Test matrix: Ubuntu 24.04 + 26.04 | P1 | Planned |
-| D3 | Post-install smoke in CI | P1 | Planned |
+| D1 | Disposable VM integration job (weekly or on tag) | P1 | **Done (v1.2.3)** |
+| D2 | Test matrix: Ubuntu 24.04 + 26.04 | P1 | Partial (24.04 live; 26.04 pending hosted runner label) |
+| D3 | Post-install smoke in CI | P1 | **Done (v1.2.3)** |
 | D4 | Optional restore rehearsal in CI | P2 | Planned |
 
 ### Phase E — Operator Experience (ongoing)

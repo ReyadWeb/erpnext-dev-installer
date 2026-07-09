@@ -1,3 +1,34 @@
+# v1.2.3 roadmap update - Phase D groundwork (disposable-VM integration testing)
+
+Status: **first increment implemented**.
+
+Phase D converts "field-validated by the maintainer" into "continuously verified in CI." v1.2.3 lands the first increment:
+
+- **`.github/workflows/integration.yml`** — a dedicated workflow, separate from the fast `ci.yml` PR gate. It performs a real, non-interactive ERPNext install on an ephemeral GitHub-hosted runner (used as a disposable VM) and asserts post-install health.
+- **Triggers:** manual (`workflow_dispatch` with a `site_name` input), weekly (`schedule`, Mondays 06:00 UTC), and release tags (`v*`). It does not run on pull requests, so PR latency is unchanged.
+- **CI-safety env (verified against the install path):** `ERPNEXT_ALLOW_UNSAFE_INSTALL=true` (hosted runners are below the 30 GB preflight minimum), `AUTO_EXPAND_ROOT=false` (never grow the runner disk — the installer would otherwise auto-expand under `-y`), `AUTO_START=true`, `ENABLE_AUTOSTART=false`.
+- **Smoke gate:** verify `SHA256SUMS`, run `install-preflight`, install with `-y`, then assert `doctor --json` reports `install_state=Installed`. `FAIL` checks are surfaced, `http://localhost:8000/api/method/ping` is probed, and toolkit logs plus the service journal are uploaded as artifacts.
+
+## Phase D status
+
+| Step | Deliverable | Status |
+|---|---|---|
+| D1 | Disposable VM integration job (on tag / weekly / manual) | Done (v1.2.3) |
+| D2 | Ubuntu 24.04 + 26.04 matrix | 24.04 live; 26.04 entry present but commented until a hosted `ubuntu-26.04` label exists |
+| D3 | Post-install smoke (`doctor --json` install_state gate) | Done (v1.2.3) |
+| D4 | Optional restore-rehearsal job | Planned (P2) |
+
+## Next Phase D increments
+
+1. **Harden the smoke into a hard gate:** promote site reachability (`:8000` ping) from warning to required once the first live runs confirm timing on hosted runners.
+2. **Enable the 26.04 matrix leg** when the hosted runner label is available (D2).
+3. **Restore-rehearsal job (D4):** exercise `restore-preflight` / restore flow against a freshly installed site.
+4. **Feed results back:** if upstream Frappe/ERPNext drift breaks installs, capture the failure signature in `TESTING.md`.
+
+After Phase D stabilizes, the highest-ROI items remain the Phase F hygiene tasks (F4/F6 module-list single-source, F5 shellcheck `-S warning`), GPG-signed releases (A5), and operator-experience items (E1–E5).
+
+---
+
 # v1.2.1 roadmap update - professional evaluation and maintenance patch
 
 Status: **implemented**.
