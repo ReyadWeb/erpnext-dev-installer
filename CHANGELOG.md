@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.1.66 - Production operations dashboard
+
+### Changed
+
+- Updated the toolkit version to v1.1.66.
+- Rebuilt `production-ops-wizard` into a unified Production Operations dashboard.
+- Added current-state summary rows for runtime, install state, HTTPS, UFW/security, local backups, off-VM backups, restore rehearsal, health monitoring, and go-live validation.
+- Grouped mature operational commands into operator-focused sections: system readiness, services/recovery, local backups, off-VM backups, restore readiness, health monitoring, security/firewall, HTTPS/certificates, go-live validation, and support/diagnostics.
+- Added dashboard aliases: `production-ops-dashboard`, `operations-dashboard`, and `ops-dashboard`.
+- Added a support/diagnostics submenu helper to list the latest support bundle contents safely.
+- Updated README, TESTING, ROADMAP, and PRODUCTION-VALIDATION to document the dashboard workflow.
+- Kept existing direct commands stable; the dashboard orchestrates already validated commands instead of duplicating their logic.
+
+### Validation scope
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` prints v1.1.66.
+- Help lists `production-ops-wizard` and `production-ops-dashboard`.
+- `production-ops-wizard` opens, displays the current-state summary, and exits cleanly with `q`.
+- `operations-dashboard` alias opens the same dashboard.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
 ## v1.1.65 - Final v1.1.64 production validation record
 
 ### Changed

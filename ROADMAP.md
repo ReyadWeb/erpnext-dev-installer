@@ -1,3 +1,27 @@
+# v1.1.66 roadmap update - production operations dashboard
+
+Status: **implemented as the unified operator-experience layer over the validated production toolkit commands**.
+
+Completed in v1.1.66:
+
+- Rebuilt `production-ops-wizard` into a top-level Production Operations dashboard.
+- Added a current-state summary so operators can see runtime, HTTPS, security, backup, restore rehearsal, health monitoring, and go-live state before choosing an action.
+- Grouped operational actions into clear areas: services, local backups, off-VM backups, restore readiness, health monitoring, security/firewall, HTTPS/certificates, go-live validation, and support/diagnostics.
+- Added aliases: `production-ops-dashboard`, `operations-dashboard`, and `ops-dashboard`.
+- Reused existing tested command implementations instead of duplicating business logic.
+
+Next active milestone: **production dashboard field validation and polish**.
+
+Planned next items:
+
+1. Install v1.1.66 on the production VPS and validate dashboard option routing.
+2. Confirm support/diagnostics dashboard flow creates and reviews the enhanced support bundle.
+3. Decide whether to add notification targets for health checks, such as email or webhook.
+4. Consider a read-only HTML/status export later, but keep the Bash toolkit stable first.
+5. Keep Docker installation as a separate later track after VM operations remain stable.
+
+---
+
 # v1.1.65 roadmap update - final production validation record
 
 Status: **documentation/validation patch completed after the v1.1.64 production go-live workflow passed**.
@@ -14,15 +38,15 @@ Completed and recorded in v1.1.65:
 - Final QA option `9) Go-live validation status` passed.
 - Enhanced support bundle includes production evidence files for backups, restore rehearsal, monitoring, go-live status, and checklist state.
 
-Next active milestone: **v1.1.66 production operations dashboard / unified operations experience**.
+Completed follow-up milestone: **v1.1.66 production operations dashboard / unified operations experience**.
 
-Planned v1.1.66 goals:
+Implemented v1.1.66 goals:
 
 1. Provide a clean top-level production operations dashboard with concise current-state summaries.
 2. Group health, services, backups, off-VM backup, restore readiness, monitoring, security, HTTPS, go-live validation, and support actions into a coherent operator flow.
 3. Prefer status-first screens and suggested next actions so operators do not need to remember command names.
 4. Keep existing CLI commands as stable direct entry points.
-5. Avoid duplicating logic; the dashboard should orchestrate existing tested commands.
+5. Avoid duplicating logic; the dashboard orchestrates existing tested commands.
 6. Keep Docker installation as a separate later track after VM operations remain stable.
 
 ---

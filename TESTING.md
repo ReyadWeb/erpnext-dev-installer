@@ -1,3 +1,47 @@
+## v1.1.66 production operations dashboard validation
+
+Purpose: validate the unified Production Operations dashboard without changing production state. The dashboard is an operator-experience layer over mature commands already validated in earlier releases.
+
+Package checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh --help | grep -n "production-ops-wizard"
+./erpnext-dev.sh --help | grep -n "production-ops-dashboard"
+printf 'q\n' | sudo ./erpnext-dev.sh production-ops-wizard
+printf 'q\n' | sudo ./erpnext-dev.sh operations-dashboard
+unzip -l erpnext-dev-installer-v1.1.66.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.66`.
+- `bash -n erpnext-dev.sh` passes.
+- Help lists the unified operations dashboard command and alias.
+- Dashboard opens with a current-state summary for runtime, install, HTTPS, security, backups, restore rehearsal, health monitoring, and go-live validation.
+- Dashboard exits cleanly with `q`.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
+Production validation checklist after installing v1.1.66 on `erp.flowmaya.com`:
+
+```bash
+sudo erpnext-dev production-ops-wizard
+sudo erpnext-dev final-qa
+sudo erpnext-dev support-bundle
+```
+
+In the dashboard, validate at minimum:
+
+```text
+1) System health and readiness
+6) Health monitoring
+9) Go-live validation
+10) Support and diagnostics
+```
+
+---
+
 ## v1.1.65 final v1.1.64 production validation documentation
 
 Purpose: record the completed v1.1.64 production go-live evidence and prepare the roadmap for the next operator-experience milestone. This patch is documentation/validation only apart from the version bump.

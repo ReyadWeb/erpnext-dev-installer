@@ -1,3 +1,64 @@
+# v1.1.66 Production operations dashboard validation plan
+
+v1.1.66 adds the unified Production Operations dashboard. The core production path was already validated through v1.1.64/v1.1.65; this patch focuses on operator experience and safe command routing.
+
+## Package validation
+
+```text
+Toolkit version: 1.1.66
+Syntax check: passed
+Dashboard command: production-ops-wizard
+Dashboard aliases: production-ops-dashboard, operations-dashboard, ops-dashboard
+Package contains GITHUB-UPDATE files: no
+```
+
+## Dashboard design
+
+The dashboard shows a compact current-state summary before any operator action:
+
+```text
+Runtime
+Install
+HTTPS
+Security
+Local backup
+Off-VM backup
+Restore rehearsal
+Health monitoring
+Go-live validation
+```
+
+The action groups are:
+
+```text
+1) System health and readiness
+2) Services and recovery
+3) Local backups
+4) Off-VM backups
+5) Restore readiness and rehearsal
+6) Health monitoring
+7) Security and firewall
+8) HTTPS and certificates
+9) Go-live validation
+10) Support and diagnostics
+11) Final QA
+```
+
+## Production validation commands
+
+After installing v1.1.66 on the production VPS, run:
+
+```bash
+sudo erpnext-dev production-ops-wizard
+sudo erpnext-dev operations-dashboard
+sudo erpnext-dev final-qa
+sudo erpnext-dev support-bundle
+```
+
+Expected result: the dashboard opens, shows the current production state, nested sections route to mature commands, and `q` exits cleanly without changing production state.
+
+---
+
 # v1.1.65 Final v1.1.64 production validation record
 
 This section records the final field evidence collected after v1.1.64 was installed on the production ERPNext VPS and its go-live validation workflow was completed. v1.1.65 is documentation-only apart from the version bump; it does not change production behavior.
@@ -99,7 +160,7 @@ The bundle intentionally excludes credential files, private keys, raw `site_conf
 
 The production path is validated end to end for the tested environment. Remaining work is no longer a blocker for this validated path; future work should focus on operator experience, recurring policy decisions, notification integrations, broader environment coverage, and periodic revalidation after major changes.
 
-Recommended next milestone: v1.1.66 unified production operations dashboard/menu built on the existing tested commands rather than new duplicated logic.
+Follow-up milestone: v1.1.66 implements the unified production operations dashboard/menu built on the existing tested commands rather than new duplicated logic.
 
 ---
 

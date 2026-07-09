@@ -309,6 +309,7 @@ The temporary file under `/tmp` is only used for the first bootstrap or update. 
 - [Reusable toolkit command](#reusable-toolkit-command)
 - [Accessing ERPNext credentials](#accessing-erpnext-credentials)
 - [Production operations](#production-operations)
+- [Production operations dashboard](#production-operations-dashboard)
 - [Health monitoring](#health-monitoring)
 - [Go-live validation](#go-live-validation)
 - [Validated production state](#validated-production-state)
@@ -732,13 +733,23 @@ The credentials file is intentionally excluded from diagnostics, support bundles
 
 ## Production operations
 
-Open the production operations wizard:
+Open the production operations dashboard:
 
 ```bash
 sudo erpnext-dev production-ops-wizard
 ```
 
-Common operations commands:
+Equivalent aliases:
+
+```bash
+sudo erpnext-dev production-ops-dashboard
+sudo erpnext-dev operations-dashboard
+sudo erpnext-dev ops-dashboard
+```
+
+v1.1.66 turns this command into the main operator entry point for an existing production VM. It shows a compact current-state summary first, then groups mature commands into clear sections so the operator does not need to memorize individual command names.
+
+Common direct operations commands remain available:
 
 ```bash
 sudo erpnext-dev release-readiness
@@ -752,6 +763,46 @@ sudo erpnext-dev service-recovery-plan
 ```
 
 Health checks cover ERPNext runtime, Nginx, MariaDB, Redis, HTTPS, disk usage, latest backup state, UFW, Fail2Ban, scheduled backup timer, and off-VM backup state.
+
+---
+
+## Production operations dashboard
+
+The v1.1.66 dashboard is designed for day-to-day production administration after the VM is installed and validated.
+
+It starts with a status overview similar to:
+
+```text
+Runtime
+Install
+HTTPS
+Security
+Local backup
+Off-VM backup
+Restore rehearsal
+Health monitoring
+Go-live validation
+```
+
+Then it provides these operator sections:
+
+```text
+1) System health and readiness
+2) Services and recovery
+3) Local backups
+4) Off-VM backups
+5) Restore readiness and rehearsal
+6) Health monitoring
+7) Security and firewall
+8) HTTPS and certificates
+9) Go-live validation
+10) Support and diagnostics
+11) Final QA
+```
+
+The dashboard intentionally reuses existing tested commands. For example, the backup section calls the same backup-status, backup-verify, scheduled backup, and retention commands; the restore section calls the same restore rehearsal and restore preflight commands; and the support section creates the same redacted evidence bundle.
+
+Use direct commands for automation and scripts. Use the dashboard for interactive operations and handoff.
 
 ---
 
@@ -838,6 +889,7 @@ After recording, `production-checklist`, `final-qa`, and `support-bundle` includ
 Useful commands after recording:
 
 ```bash
+sudo erpnext-dev production-ops-wizard
 sudo erpnext-dev go-live-status
 sudo erpnext-dev production-checklist
 sudo erpnext-dev go-live-status
@@ -849,7 +901,7 @@ sudo erpnext-dev support-bundle
 
 ## Validated production state
 
-The current validated production path is documented from the real `erp.flowmaya.com` VPS and its separate off-VM backup server. v1.1.65 records the final field evidence from the v1.1.64 go-live validation workflow and is the reference state for the next production-operations milestone.
+The current validated production path is documented from the real `erp.flowmaya.com` VPS and its separate off-VM backup server. v1.1.65 records the final field evidence from the v1.1.64 go-live validation workflow. v1.1.66 adds the unified Production Operations dashboard as the operator entry point over that validated foundation.
 
 Validated environment:
 
