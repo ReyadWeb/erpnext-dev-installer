@@ -1,3 +1,22 @@
+# v1.1.82 roadmap update - lib/service.sh extraction
+
+Status: **implemented as the eighth careful modularization patch**.
+
+v1.1.82 extracts ERPNext systemd service management and runtime state helpers into `lib/service.sh`.
+
+Completed in v1.1.82:
+
+- Added `lib/service.sh` and wired `erpnext-dev.sh` to source it.
+- Expanded `update-toolkit` to download the full toolkit lib module set.
+- Expanded checksum, manifest, shellcheck, and validation coverage.
+
+Next active milestones:
+
+1. **v1.1.83+ — extract install/setup helpers**.
+2. Later: optional GPG-signed release artifacts.
+
+---
+
 # v1.1.81 roadmap update - lib/storage.sh extraction
 
 Status: **implemented as the seventh careful modularization patch**.

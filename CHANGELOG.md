@@ -1,3 +1,22 @@
+## v1.1.82 - Extract lib/service.sh for ERPNext service and runtime helpers
+
+### Added
+
+- Added `lib/service.sh` with systemd service management, bench readiness checks, runtime state helpers, and the service manager menu.
+
+### Changed
+
+- Updated the toolkit version to v1.1.82.
+- `erpnext-dev.sh` now sources `lib/service.sh` after `lib/storage.sh`.
+- `update-toolkit` now downloads `service.sh` into `/opt/erpnext-dev/lib/`.
+- Expanded `SHA256SUMS`, `RELEASE-MANIFEST.txt`, and shellcheck targets for `lib/service.sh`.
+
+### Validation scope
+
+- `bash -n` passes for `erpnext-dev.sh` and all `lib/*.sh` modules.
+- `erpnext-dev version` prints v1.1.82.
+- `scripts/validate-release.sh` passes locally.
+
 ## v1.1.81 - Extract lib/storage.sh for root storage detection and expansion
 
 ### Added

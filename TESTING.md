@@ -1,3 +1,22 @@
+## v1.1.82 lib/service.sh extraction
+
+Purpose: move ERPNext systemd service management and runtime state helpers into `lib/service.sh`.
+
+Package checks:
+
+```bash
+bash -n lib/service.sh
+./erpnext-dev.sh version
+scripts/validate-release.sh
+sudo erpnext-dev runtime-status
+```
+
+Expected results:
+
+- Version prints `ERPNext Developer Toolkit v1.1.82`.
+- `lib/service.sh` exists and is sourced by `erpnext-dev.sh`.
+- Service and runtime commands remain available in help output.
+
 ## v1.1.81 lib/storage.sh extraction
 
 Purpose: move root storage detection, status, and expansion helpers into `lib/storage.sh`.

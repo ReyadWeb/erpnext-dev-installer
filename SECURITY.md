@@ -1,3 +1,7 @@
+## v1.1.82 service module extraction
+
+v1.1.82 extracts ERPNext systemd service management and runtime state helpers into `lib/service.sh`. Install and update paths keep the full toolkit `lib/` tree under `/opt/erpnext-dev/lib/`.
+
 ## v1.1.81 storage module extraction
 
 v1.1.81 extracts root storage detection, status, and expansion helpers into `lib/storage.sh`. Install and update paths keep the full toolkit `lib/` tree under `/opt/erpnext-dev/lib/`.
@@ -145,6 +149,7 @@ lib/firewall.sh            UFW, Fail2Ban, rollback helpers
 lib/apps.sh                curated app install library
 lib/health.sh              health check and timers
 lib/storage.sh             root storage detection and expansion
+lib/service.sh             ERPNext systemd service and runtime state
 lib/backup.sh              local backup and retention
 lib/offvm-backup.sh        off-VM backup setup and rsync
 lib/restore.sh             restore preflight and rehearsal

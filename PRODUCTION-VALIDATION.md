@@ -1,3 +1,26 @@
+# v1.1.82 production validation notes
+
+v1.1.82 extracts ERPNext service and runtime helpers into `lib/service.sh`.
+
+Production validation should confirm:
+
+```bash
+VERSION="v1.1.82"
+sudo erpnext-dev version
+sudo erpnext-dev verify-toolkit
+scripts/validate-release.sh
+sudo erpnext-dev runtime-status
+sudo erpnext-dev service-summary
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.82`.
+- `/opt/erpnext-dev/lib/service.sh` exists after install/update reuse.
+- Service and runtime status commands still run.
+
+---
+
 # v1.1.81 production validation notes
 
 v1.1.81 extracts root storage detection and expansion helpers into `lib/storage.sh`.

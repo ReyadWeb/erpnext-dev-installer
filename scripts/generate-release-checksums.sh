@@ -14,6 +14,7 @@ checksum_files=(
   lib/apps.sh
   lib/health.sh
   lib/storage.sh
+  lib/service.sh
   scripts/validate-release.sh
   scripts/run-shellcheck.sh
   RELEASE-MANIFEST.txt
