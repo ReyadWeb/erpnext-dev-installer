@@ -1,9 +1,9 @@
-# v1.1.88 production validation notes
+# v1.1.89 production validation notes
 
-v1.1.88 extracts `lib/frappe.sh` and thins `erpnext-dev.sh` to dispatcher/menus.
+v1.1.89 extracts install/runtime status helpers into `lib/status.sh`.
 
 ```bash
-VERSION="v1.1.88"
+VERSION="v1.1.89"
 sudo erpnext-dev version
 scripts/validate-release.sh
 sudo erpnext-dev first-run

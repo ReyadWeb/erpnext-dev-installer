@@ -1,3 +1,22 @@
+## v1.1.89 - Extract lib/status.sh for install/runtime status helpers
+
+### Added
+
+- Added `lib/status.sh` with status summaries, runtime/install/service reports, status menu, and full health report.
+
+### Changed
+
+- Updated the toolkit version to v1.1.89.
+- `erpnext-dev.sh` now sources `lib/status.sh` after `lib/service.sh`.
+- `update-toolkit` now downloads `status.sh` into `/opt/erpnext-dev/lib/`.
+- Expanded `SHA256SUMS`, `RELEASE-MANIFEST.txt`, and shellcheck targets for `lib/status.sh`.
+
+### Validation scope
+
+- `bash -n` passes for `erpnext-dev.sh` and `lib/status.sh`.
+- `erpnext-dev version` prints v1.1.89.
+- `scripts/validate-release.sh` passes locally.
+
 ## v1.1.88 - Extract lib/frappe.sh and remove duplicate support/doctor code
 
 ### Added

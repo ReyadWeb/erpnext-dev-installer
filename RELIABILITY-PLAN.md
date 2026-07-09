@@ -1,3 +1,7 @@
+## v1.1.89 reliability update
+
+v1.1.89 extracts install/runtime status helpers into `lib/status.sh`. Main script is now ~1,460 lines.
+
 ## v1.1.88 reliability update
 
 v1.1.88 extracts `lib/frappe.sh` and thins `erpnext-dev.sh` to dispatcher/menus (~1,900 lines). Phase B5 dispatcher thinning is largely complete.

@@ -1,3 +1,16 @@
+# v1.1.89 roadmap update - lib/status.sh extraction
+
+Status: **implemented as the fourteenth careful modularization patch**.
+
+v1.1.89 extracts install/runtime status helpers into `lib/status.sh`.
+
+Next active milestones:
+
+1. **v1.1.90+ — optional lib/ops.sh for production-ops menus or further menu thinning**.
+2. Later: optional GPG-signed release artifacts.
+
+---
+
 # v1.1.88 roadmap update - lib/frappe.sh extraction and dispatcher thinning
 
 Status: **implemented as the thirteenth careful modularization patch**.

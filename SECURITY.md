@@ -1,3 +1,7 @@
+## v1.1.89 status module extraction
+
+v1.1.89 extracts install/runtime status helpers into `lib/status.sh`.
+
 ## v1.1.88 frappe module extraction and dispatcher thinning
 
 v1.1.88 extracts Frappe/bench helpers into `lib/frappe.sh` and removes duplicate support/doctor code from the main script.

@@ -18,6 +18,7 @@ checksum_files=(
   lib/health.sh
   lib/storage.sh
   lib/service.sh
+  lib/status.sh
   lib/install.sh
   scripts/validate-release.sh
   scripts/run-shellcheck.sh

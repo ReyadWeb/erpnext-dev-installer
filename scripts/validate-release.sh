@@ -46,6 +46,8 @@ bash -n lib/health.sh
 bash -n lib/storage.sh
 [[ -f lib/service.sh ]] || fail "lib/service.sh is missing"
 bash -n lib/service.sh
+[[ -f lib/status.sh ]] || fail "lib/status.sh is missing"
+bash -n lib/status.sh
 [[ -f lib/install.sh ]] || fail "lib/install.sh is missing"
 bash -n lib/install.sh
 pass "bash syntax valid"

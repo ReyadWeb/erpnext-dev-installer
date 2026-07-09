@@ -1,3 +1,10 @@
+## v1.1.89 lib/status.sh extraction
+
+```bash
+bash -n lib/status.sh
+scripts/validate-release.sh
+```
+
 ## v1.1.88 lib/frappe.sh extraction and duplicate cleanup
 
 ```bash
