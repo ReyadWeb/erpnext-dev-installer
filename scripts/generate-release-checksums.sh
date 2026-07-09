@@ -9,6 +9,7 @@ checksum_files=(
   lib/common.sh
   lib/config.sh
   lib/access.sh
+  lib/frappe.sh
   lib/support.sh
   lib/backup.sh
   lib/ssl.sh

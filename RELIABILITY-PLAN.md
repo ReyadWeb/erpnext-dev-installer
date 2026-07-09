@@ -1,3 +1,7 @@
+## v1.1.88 reliability update
+
+v1.1.88 extracts `lib/frappe.sh` and thins `erpnext-dev.sh` to dispatcher/menus (~1,900 lines). Phase B5 dispatcher thinning is largely complete.
+
 ## v1.1.87 reliability update
 
 v1.1.87 extracts browser access and credentials UI into `lib/access.sh`. Next reliability milestone: thin dispatcher or shared frappe/bench helpers (Phase B5).

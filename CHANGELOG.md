@@ -1,3 +1,24 @@
+## v1.1.88 - Extract lib/frappe.sh and remove duplicate support/doctor code
+
+### Added
+
+- Added `lib/frappe.sh` with path helpers, bench detection, Frappe user execution, VM context guards, and site/app probes.
+
+### Changed
+
+- Updated the toolkit version to v1.1.88.
+- `erpnext-dev.sh` now sources `lib/frappe.sh` after `lib/access.sh`.
+- Removed duplicate doctor, support-bundle, and command-audit implementations from `erpnext-dev.sh`; `lib/support.sh` is now the single source.
+- `erpnext-dev.sh` is reduced to menus, status glue, production-ops wizard, and dispatcher logic (~1,900 lines).
+- `update-toolkit` now downloads `frappe.sh` into `/opt/erpnext-dev/lib/`.
+- Expanded `SHA256SUMS`, `RELEASE-MANIFEST.txt`, and shellcheck targets for `lib/frappe.sh`.
+
+### Validation scope
+
+- `bash -n` passes for `erpnext-dev.sh` and `lib/frappe.sh`.
+- `erpnext-dev version` prints v1.1.88.
+- `scripts/validate-release.sh` passes locally.
+
 ## v1.1.87 - Extract lib/access.sh for browser access and credentials UI
 
 ### Added

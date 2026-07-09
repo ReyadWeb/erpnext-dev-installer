@@ -1,6 +1,6 @@
 # ERPNext Developer Toolkit — Quality Assessment
 
-**Version assessed:** v1.1.87  
+**Version assessed:** v1.1.88  
 **Assessment date:** July 9, 2026  
 **Scope:** `erpnext-dev.sh` and the release/operations package around it
 
@@ -202,9 +202,10 @@ Prioritized by impact and dependency order. Status as of v1.1.74.
 | B2 | Extract `lib/support.sh` | P1 | **Done (v1.1.76)** |
 | B3 | Extract backup/restore modules | P1 | **Done (v1.1.77)** |
 | B4 | Extract SSL/firewall modules | P2 | **Done (v1.1.78)** |
-| B5 | Thin `erpnext-dev.sh` dispatcher | P1 | Planned |
+| B5 | Thin `erpnext-dev.sh` dispatcher | P1 | **Done (v1.1.88)** |
 | B7 | Extract `lib/config.sh` | P1 | **Done (v1.1.86)** |
 | B8 | Extract `lib/access.sh` | P1 | **Done (v1.1.87)** |
+| B9 | Extract `lib/frappe.sh` | P1 | **Done (v1.1.88)** |
 | B6 | Add shellcheck to CI | P1 | **Done (v1.1.75)** |
 
 ### Phase C — Security Hardening (v1.2.x)

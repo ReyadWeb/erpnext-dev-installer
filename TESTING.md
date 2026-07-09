@@ -1,3 +1,10 @@
+## v1.1.88 lib/frappe.sh extraction and duplicate cleanup
+
+```bash
+bash -n lib/frappe.sh
+scripts/validate-release.sh
+```
+
 ## v1.1.87 lib/access.sh extraction
 
 ```bash

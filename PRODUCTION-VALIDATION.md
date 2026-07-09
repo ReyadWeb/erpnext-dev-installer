@@ -1,9 +1,9 @@
-# v1.1.87 production validation notes
+# v1.1.88 production validation notes
 
-v1.1.87 extracts browser access and credentials UI into `lib/access.sh`.
+v1.1.88 extracts `lib/frappe.sh` and thins `erpnext-dev.sh` to dispatcher/menus.
 
 ```bash
-VERSION="v1.1.87"
+VERSION="v1.1.88"
 sudo erpnext-dev version
 scripts/validate-release.sh
 sudo erpnext-dev first-run

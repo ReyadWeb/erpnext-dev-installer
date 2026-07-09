@@ -25,10 +25,12 @@ bash -n erpnext-dev.sh
 [[ -f lib/common.sh ]] || fail "lib/common.sh is missing"
 [[ -f lib/config.sh ]] || fail "lib/config.sh is missing"
 [[ -f lib/access.sh ]] || fail "lib/access.sh is missing"
+[[ -f lib/frappe.sh ]] || fail "lib/frappe.sh is missing"
 [[ -f lib/support.sh ]] || fail "lib/support.sh is missing"
 bash -n lib/common.sh
 bash -n lib/config.sh
 bash -n lib/access.sh
+bash -n lib/frappe.sh
 bash -n lib/support.sh
 [[ -f lib/backup.sh ]] || fail "lib/backup.sh is missing"
 bash -n lib/backup.sh

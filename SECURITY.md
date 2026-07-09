@@ -1,3 +1,7 @@
+## v1.1.88 frappe module extraction and dispatcher thinning
+
+v1.1.88 extracts Frappe/bench helpers into `lib/frappe.sh` and removes duplicate support/doctor code from the main script.
+
 ## v1.1.87 access module extraction
 
 v1.1.87 extracts browser access, host DNS, networking guides, and credentials UI into `lib/access.sh`.

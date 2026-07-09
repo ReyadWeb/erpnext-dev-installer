@@ -1,3 +1,16 @@
+# v1.1.88 roadmap update - lib/frappe.sh extraction and dispatcher thinning
+
+Status: **implemented as the thirteenth careful modularization patch**.
+
+v1.1.88 extracts Frappe/bench helpers into `lib/frappe.sh`, removes duplicate support/doctor code from `erpnext-dev.sh`, and leaves the main script as menus plus dispatcher glue (~1,900 lines).
+
+Next active milestones:
+
+1. **v1.1.89+ — optional lib/status.sh or further menu extraction**.
+2. Later: optional GPG-signed release artifacts.
+
+---
+
 # v1.1.87 roadmap update - lib/access.sh extraction
 
 Status: **implemented as the twelfth careful modularization patch**.
