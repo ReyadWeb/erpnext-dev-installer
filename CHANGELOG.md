@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.1.56 - Cloudflare proxied DNS guided setup fix
+
+### Changed
+
+- Updated the toolkit version to v1.1.56.
+- Fixed `public-vm-guided-setup` Step 3 so Cloudflare proxied/orange-cloud DNS no longer hard-stops the guided flow when the user intentionally chooses the Cloudflare Origin CA path.
+- Added a guided DNS mismatch choice: stop for DNS-only/gray-cloud Let's Encrypt, continue with Cloudflare proxied / Origin CA, or view SSL mode guidance.
+- When Cloudflare Origin CA is active or selected, public DNS returning Cloudflare edge IPs is treated as expected, while the user is reminded to confirm the hidden Cloudflare origin A-record points to the VM IP.
+- Updated README, TESTING, PRODUCTION-VALIDATION, and ROADMAP with the Cloudflare proxied DNS validation finding.
+
+### Validated
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` reports v1.1.56.
+- Cloudflare Origin CA manual wizard installs the origin certificate/key, writes Nginx config, and responds through the Cloudflare HTTPS route.
+
 ## v1.1.55 - Production validation record and polish fixes
 
 ### Changed

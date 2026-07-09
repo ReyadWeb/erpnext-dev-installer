@@ -1,3 +1,9 @@
+## v1.1.56 completed Cloudflare proxied DNS guided setup fix
+
+- Fixed the guided production DNS gate so Cloudflare orange-cloud/proxied DNS can continue through the Cloudflare Origin CA path instead of failing because public DNS returns Cloudflare edge IPs.
+- Kept Let's Encrypt as the default when DNS points directly to the VM.
+- Remaining validation: run a clean guided Cloudflare Origin CA install from a fresh/rollback VPS and confirm final QA after proxy + Full (strict).
+
 # Roadmap
 
 ## v1.1.55 completed production VPS validation record and polish fixes

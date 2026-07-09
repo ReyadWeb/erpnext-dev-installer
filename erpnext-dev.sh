@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.55"
+SCRIPT_VERSION="1.1.56"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -4029,7 +4029,7 @@ public_vm_guided_step() {
 }
 
 public_vm_guided_require_dns_ready() {
-  local vm_ip dns_ip domain
+  local vm_ip dns_ip domain ctx mode detail provider choice
   domain="${PRODUCTION_DOMAIN:-}"
   vm_ip="$(get_vm_ip 2>/dev/null || echo unknown)"
   dns_ip="$(resolve_ipv4_first "$domain")"
@@ -4047,17 +4047,75 @@ public_vm_guided_require_dns_ready() {
     return 1
   fi
 
-  if [[ "$dns_ip" != "$vm_ip" ]]; then
-    echo
-    err "DNS does not point to this VM."
-    echo "Expected: ${vm_ip}"
-    echo "Actual:   ${dns_ip}"
-    echo
-    echo "For the first Let's Encrypt validation, use DNS-only / gray cloud if using Cloudflare."
+  if [[ "$dns_ip" == "$vm_ip" ]]; then
+    ok "DNS points to this VM."
+    return 0
+  fi
+
+  ctx="$(ssl_mode_context)"
+  mode="${ctx%%|*}"; ctx="${ctx#*|}"
+  detail="${ctx%%|*}"; ctx="${ctx#*|}"
+  provider="${ctx%%|*}"
+
+  echo
+  warn "DNS does not resolve directly to this VM."
+  echo "Expected origin IP: ${vm_ip}"
+  echo "Public DNS result:  ${dns_ip}"
+  echo
+
+  if [[ "$provider" == "Cloudflare Origin CA" || "${PRODUCTION_SSL_MODE:-planned}" == "cloudflare-origin-ca" ]]; then
+    status_line "Cloudflare path" "OK" "Cloudflare Origin CA is active/selected; public DNS may return Cloudflare edge IPs"
+    ok "Continuing with Cloudflare Origin CA mode. Confirm Cloudflare DNS origin remains ${vm_ip}."
+    return 0
+  fi
+
+  echo "This is expected only when Cloudflare proxy/orange-cloud is active."
+  echo "For the default Let's Encrypt HTTP-01 path, switch Cloudflare to DNS-only/gray-cloud first."
+  echo "For Cloudflare Origin CA, confirm the hidden Cloudflare A-record content points to this VM."
+  echo
+
+  if [[ "$ASSUME_YES" -eq 1 ]]; then
+    err "Cannot auto-confirm Cloudflare proxied DNS in non-interactive mode."
     return 1
   fi
 
-  ok "DNS points to this VM."
+  echo "1) Stop and use DNS-only/gray-cloud for Let's Encrypt (recommended default)"
+  echo "2) Continue with Cloudflare proxied / Origin CA path"
+  echo "3) Show SSL mode guide/status"
+  menu_footer
+  menu_read_choice choice
+  case "$choice" in
+    2)
+      echo
+      status_line "Cloudflare proxy" "INFO" "public DNS returns ${dns_ip}, not the origin IP"
+      echo "Required Cloudflare dashboard state:"
+      echo "  DNS record ${domain}: A record content ${vm_ip}, Proxied / orange-cloud"
+      echo "  SSL/TLS encryption mode: Full (strict) after Origin CA is installed"
+      echo
+      if confirm "Cloudflare DNS origin is ${vm_ip} and proxy/orange-cloud is intended"; then
+        PRODUCTION_SSL_MODE="cloudflare-origin-ca"
+        write_dev_config_file >/dev/null || true
+        ok "Cloudflare Origin CA path selected. Public DNS returning Cloudflare IPs is expected."
+        return 0
+      fi
+      warn "Stop here. Confirm Cloudflare DNS origin/proxy settings, then rerun: $(toolkit_cmd public-vm-guided-setup)"
+      return 1
+      ;;
+    3)
+      show_ssl_mode_status || true
+      show_ssl_mode_guide || true
+      warn "Rerun guided setup after choosing DNS-only Let's Encrypt or Cloudflare Origin CA."
+      return 1
+      ;;
+    b|B|q|Q|1|"")
+      warn "Stop here. Use DNS-only/gray-cloud for Let's Encrypt, or rerun and choose the Cloudflare Origin CA path."
+      return 1
+      ;;
+    *)
+      warn "Invalid option: ${choice}"
+      return 1
+      ;;
+  esac
 }
 
 public_vm_guided_external_gate() {

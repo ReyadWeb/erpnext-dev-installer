@@ -1,3 +1,13 @@
+## v1.1.56 Cloudflare proxied DNS behavior
+
+For Cloudflare Origin CA / Full (strict), orange-cloud/proxied DNS returns Cloudflare edge IPs, not the VPS origin IP. This is expected and must be handled differently from the default Let's Encrypt path.
+
+Guided setup behavior:
+
+- If DNS resolves directly to the VM IP, continue with the default Let's Encrypt path.
+- If DNS resolves to a different IP and the user wants Let's Encrypt HTTP-01, stop and switch Cloudflare to DNS-only/gray-cloud first.
+- If DNS resolves to a Cloudflare edge IP and the user wants Cloudflare Origin CA, continue only after the user confirms the hidden Cloudflare DNS record content points to the VM IP and proxy/orange-cloud is intended.
+
 # Production VPS Validation
 
 ## Validated milestone

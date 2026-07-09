@@ -1,3 +1,24 @@
+## v1.1.56 Cloudflare proxied DNS guided setup check
+
+Finding from real VPS testing: Cloudflare Origin CA can be installed and validated successfully, but public DNS returns Cloudflare edge IPs when the record is orange-cloud/proxied. The guided setup must not treat that as a hard DNS failure when the user intentionally chooses the Cloudflare Origin CA path.
+
+Validation checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+grep -n "Continue with Cloudflare proxied" erpnext-dev.sh
+grep -n "Cloudflare Origin CA path selected" erpnext-dev.sh
+grep -n "v1.1.56" CHANGELOG.md TESTING.md ROADMAP.md PRODUCTION-VALIDATION.md
+```
+
+Expected behavior:
+
+- DNS directly to VM continues to the default Let's Encrypt path.
+- DNS returning Cloudflare edge IPs offers a safe choice instead of hard-stopping.
+- Choosing Cloudflare Origin CA records the intended mode and continues, while reminding the user to verify the hidden Cloudflare origin A-record points to the VM IP.
+- Non-interactive mode does not auto-accept proxied DNS because the toolkit cannot inspect Cloudflare dashboard origin settings without API credentials.
+
 # Testing
 
 ## v1.1.55 Production VPS validation record and polish checks

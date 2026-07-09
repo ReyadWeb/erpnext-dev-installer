@@ -90,6 +90,8 @@ Use this inside a fresh public VM when you have a real domain or subdomain ready
 
 During the production HTTPS step, the guided setup recommends **Let's Encrypt** by default when DNS points directly to the VM. The user can still choose the advanced SSL provider wizard from that step, including **Cloudflare Origin CA** for Cloudflare-proxied Full (strict) deployments.
 
+**v1.1.56 Cloudflare note:** when a Cloudflare record is orange-cloud/proxied, public DNS returns Cloudflare edge IPs instead of the VPS origin IP. That is expected for Cloudflare Origin CA. The guided setup now asks whether to stop for DNS-only/gray-cloud Let's Encrypt or continue with the Cloudflare proxied / Origin CA path. Only continue with the Cloudflare path when the hidden Cloudflare A-record content points to the VPS IP and Cloudflare SSL/TLS will be set to Full (strict).
+
 Example production site name:
 
 ```text
