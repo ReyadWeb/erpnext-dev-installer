@@ -32,6 +32,8 @@ bash -n lib/backup.sh
 bash -n lib/ssl.sh
 [[ -f lib/firewall.sh ]] || fail "lib/firewall.sh is missing"
 bash -n lib/firewall.sh
+[[ -f lib/apps.sh ]] || fail "lib/apps.sh is missing"
+bash -n lib/apps.sh
 pass "bash syntax valid"
 
 chmod +x erpnext-dev.sh scripts/validate-release.sh scripts/generate-release-checksums.sh scripts/run-shellcheck.sh

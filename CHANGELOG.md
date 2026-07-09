@@ -1,3 +1,22 @@
+## v1.1.79 - Extract lib/apps.sh for curated app installation
+
+### Added
+
+- Added `lib/apps.sh` with curated Frappe app profiles, install wizards, compatibility checks, and app library menus.
+
+### Changed
+
+- Updated the toolkit version to v1.1.79.
+- `erpnext-dev.sh` now sources `lib/apps.sh` after `lib/firewall.sh`.
+- `update-toolkit` now downloads `apps.sh` into `/opt/erpnext-dev/lib/`.
+- Expanded `SHA256SUMS`, `RELEASE-MANIFEST.txt`, and shellcheck targets for `lib/apps.sh`.
+
+### Validation scope
+
+- `bash -n` passes for `erpnext-dev.sh` and all `lib/*.sh` modules.
+- `erpnext-dev version` prints v1.1.79.
+- `scripts/validate-release.sh` passes locally.
+
 ## v1.1.78 - Extract lib/ssl.sh and lib/firewall.sh for HTTPS and security
 
 ### Added

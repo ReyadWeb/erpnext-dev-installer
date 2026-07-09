@@ -1,3 +1,22 @@
+# v1.1.79 roadmap update - lib/apps.sh extraction
+
+Status: **implemented as the fifth careful modularization patch**.
+
+v1.1.79 extracts curated Frappe app profiles, install wizards, and compatibility helpers into `lib/apps.sh`.
+
+Completed in v1.1.79:
+
+- Added `lib/apps.sh` and wired `erpnext-dev.sh` to source it.
+- Expanded `update-toolkit` to download the full toolkit lib module set.
+- Expanded checksum, manifest, shellcheck, and validation coverage.
+
+Next active milestones:
+
+1. **v1.1.80+ — extract health monitoring or install/setup helpers**.
+2. Later: optional GPG-signed release artifacts.
+
+---
+
 # v1.1.78 roadmap update - lib/ssl.sh and lib/firewall.sh extraction
 
 Status: **implemented as the fourth careful modularization patch**.

@@ -11,6 +11,7 @@ checksum_files=(
   lib/backup.sh
   lib/ssl.sh
   lib/firewall.sh
+  lib/apps.sh
   scripts/validate-release.sh
   scripts/run-shellcheck.sh
   RELEASE-MANIFEST.txt

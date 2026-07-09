@@ -1,3 +1,9 @@
+## v1.1.79 reliability update
+
+v1.1.79 extracts curated app installation helpers into `lib/apps.sh`, continuing modularization with unchanged command names and runtime behavior.
+
+Next reliability milestone: extract health monitoring or install/setup helpers into dedicated lib modules.
+
 ## v1.1.78 reliability update
 
 v1.1.78 extracts SSL/HTTPS and firewall helpers into `lib/ssl.sh` and `lib/firewall.sh`, continuing modularization with unchanged command names and runtime behavior.

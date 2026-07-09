@@ -1,3 +1,7 @@
+## v1.1.79 app library module extraction
+
+v1.1.79 extracts curated Frappe app profiles, install wizards, and compatibility helpers into `lib/apps.sh`. Install and update paths keep the full toolkit `lib/` tree under `/opt/erpnext-dev/lib/`.
+
 ## v1.1.78 SSL and firewall module extraction
 
 v1.1.78 extracts production and local SSL/HTTPS helpers into `lib/ssl.sh` and firewall/UFW/Fail2Ban helpers into `lib/firewall.sh`. Install and update paths keep the full toolkit `lib/` tree under `/opt/erpnext-dev/lib/`.
@@ -130,6 +134,7 @@ lib/common.sh              logging, prompts, locks, shared helpers
 lib/install.sh             install and preflight
 lib/ssl.sh                 local and production SSL
 lib/firewall.sh            UFW, Fail2Ban, rollback helpers
+lib/apps.sh                curated app install library
 lib/backup.sh              local backup and retention
 lib/offvm-backup.sh        off-VM backup setup and rsync
 lib/restore.sh             restore preflight and rehearsal

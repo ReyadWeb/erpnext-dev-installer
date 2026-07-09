@@ -1,3 +1,23 @@
+## v1.1.79 lib/apps.sh extraction
+
+Purpose: move curated app installation, compatibility checks, and app library menus into `lib/apps.sh`.
+
+Package checks:
+
+```bash
+bash -n erpnext-dev.sh
+bash -n lib/apps.sh
+./erpnext-dev.sh version
+scripts/validate-release.sh
+sudo erpnext-dev app-status
+```
+
+Expected results:
+
+- Version prints `ERPNext Developer Toolkit v1.1.79`.
+- `lib/apps.sh` exists and is sourced by `erpnext-dev.sh`.
+- App library commands remain available in help output.
+
 ## v1.1.78 lib/ssl.sh and lib/firewall.sh extraction
 
 Purpose: move production/local SSL and firewall/security helpers into dedicated library modules.

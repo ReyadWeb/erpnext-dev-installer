@@ -1,3 +1,26 @@
+# v1.1.79 production validation notes
+
+v1.1.79 extracts curated app installation helpers into `lib/apps.sh`.
+
+Production validation should confirm:
+
+```bash
+VERSION="v1.1.79"
+sudo erpnext-dev version
+sudo erpnext-dev verify-toolkit
+scripts/validate-release.sh
+sudo erpnext-dev app-status
+sudo erpnext-dev final-qa
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.79`.
+- `/opt/erpnext-dev/lib/apps.sh` exists after install/update reuse.
+- App status and install commands still run.
+
+---
+
 # v1.1.78 production validation notes
 
 v1.1.78 extracts SSL/HTTPS and firewall helpers into `lib/ssl.sh` and `lib/firewall.sh`.
