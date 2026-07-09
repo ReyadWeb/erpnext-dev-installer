@@ -1,3 +1,22 @@
+## v1.1.87 - Extract lib/access.sh for browser access and credentials UI
+
+### Added
+
+- Added `lib/access.sh` with VM IP detection, host DNS helpers, access verification, networking guides, access menu, and credentials workflows.
+
+### Changed
+
+- Updated the toolkit version to v1.1.87.
+- `erpnext-dev.sh` now sources `lib/access.sh` after `lib/config.sh`.
+- `update-toolkit` now downloads `access.sh` into `/opt/erpnext-dev/lib/`.
+- Expanded `SHA256SUMS`, `RELEASE-MANIFEST.txt`, and shellcheck targets for `lib/access.sh`.
+
+### Validation scope
+
+- `bash -n` passes for `erpnext-dev.sh` and `lib/access.sh`.
+- `erpnext-dev version` prints v1.1.87.
+- `scripts/validate-release.sh` passes locally.
+
 ## v1.1.86 - Extract lib/config.sh for site and domain configuration
 
 ### Added

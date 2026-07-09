@@ -1,9 +1,9 @@
-# v1.1.86 production validation notes
+# v1.1.87 production validation notes
 
-v1.1.86 extracts site and domain configuration into `lib/config.sh`.
+v1.1.87 extracts browser access and credentials UI into `lib/access.sh`.
 
 ```bash
-VERSION="v1.1.86"
+VERSION="v1.1.87"
 sudo erpnext-dev version
 scripts/validate-release.sh
 sudo erpnext-dev first-run

@@ -1,3 +1,7 @@
+## v1.1.87 reliability update
+
+v1.1.87 extracts browser access and credentials UI into `lib/access.sh`. Next reliability milestone: thin dispatcher or shared frappe/bench helpers (Phase B5).
+
 ## v1.1.86 reliability update
 
 v1.1.86 extracts site and domain configuration into `lib/config.sh`. Next reliability milestone: access/credentials extraction or dispatcher thinning (Phase B5).

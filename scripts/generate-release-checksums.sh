@@ -8,6 +8,7 @@ checksum_files=(
   erpnext-dev.sh
   lib/common.sh
   lib/config.sh
+  lib/access.sh
   lib/support.sh
   lib/backup.sh
   lib/ssl.sh

@@ -1,3 +1,10 @@
+## v1.1.87 lib/access.sh extraction
+
+```bash
+bash -n lib/access.sh
+scripts/validate-release.sh
+```
+
 ## v1.1.86 lib/config.sh extraction
 
 ```bash

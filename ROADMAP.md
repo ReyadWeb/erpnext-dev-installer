@@ -1,3 +1,16 @@
+# v1.1.87 roadmap update - lib/access.sh extraction
+
+Status: **implemented as the twelfth careful modularization patch**.
+
+v1.1.87 extracts browser access, host DNS helpers, networking guides, and credentials UI into `lib/access.sh`.
+
+Next active milestones:
+
+1. **v1.1.88+ — thin dispatcher or shared frappe/bench helpers (Phase B5)**.
+2. Later: optional GPG-signed release artifacts.
+
+---
+
 # v1.1.86 roadmap update - lib/config.sh extraction
 
 Status: **implemented as the eleventh careful modularization patch**.

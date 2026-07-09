@@ -1,3 +1,7 @@
+## v1.1.87 access module extraction
+
+v1.1.87 extracts browser access, host DNS, networking guides, and credentials UI into `lib/access.sh`.
+
 ## v1.1.86 config module extraction
 
 v1.1.86 extracts site and domain configuration into `lib/config.sh`.
