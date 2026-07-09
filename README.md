@@ -26,6 +26,8 @@ When running an interactive menu command such as `sudo erpnext-dev final-qa`, ru
 > Version history is maintained in [`CHANGELOG.md`](CHANGELOG.md). This README intentionally focuses on current installation, operations, and usage.
 >
 > Security posture, threat model, and release-trust work are tracked in [`SECURITY.md`](SECURITY.md). Release reliability, CI, checksum, and modularization planning are tracked in [`RELIABILITY-PLAN.md`](RELIABILITY-PLAN.md).
+>
+> Preferred bootstrap method: use a pinned release tag plus `SHA256SUMS` verification before running the toolkit with `sudo`. The `main` branch raw URL is now treated as a development convenience path, not the recommended production bootstrap path.
 
 ---
 
@@ -35,10 +37,22 @@ Copy one command into a fresh **Debian-family Linux VM** such as Ubuntu or Debia
 
 Most users should start with the **general guided setup** because it lets them choose local or production from the installer menu.
 
+### Verified release bootstrap
+
+v1.1.70 introduces a release checksum artifact: `SHA256SUMS`. The preferred production pattern is to pin the download to a release tag, download `SHA256SUMS`, run `sha256sum -c SHA256SUMS`, and only then execute the script with `sudo`.
+
+The current `SHA256SUMS` file verifies the `erpnext-dev.sh` file for that release tag. Future releases may add a broader package checksum workflow and a `verify-toolkit` command for installed-file verification.
+
 ### General guided setup — choose local or production
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" start-here
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+VERSION="v1.1.70"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+chmod +x erpnext-dev.sh
+sudo ./erpnext-dev.sh start-here
 ```
 
 Use this when you want the toolkit to ask which path to follow. The wizard offers:
@@ -61,7 +75,13 @@ For local VMs, the installer prints the correct host `/etc/hosts` command using 
 ### Local VM install
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" local-dev-quickstart
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+VERSION="v1.1.70"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+chmod +x erpnext-dev.sh
+sudo ./erpnext-dev.sh local-dev-quickstart
 ```
 
 Use this inside a local VM for development, testing, or app evaluation. The wizard asks for the local domain near the beginning. Press **Enter** to use:
@@ -85,7 +105,13 @@ Run the printed `/etc/hosts` command on the **host machine**, not inside the VM.
 ### Production VPS / cloud VM install
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" public-vm-guided-setup
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+VERSION="v1.1.70"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+chmod +x erpnext-dev.sh
+sudo ./erpnext-dev.sh public-vm-guided-setup
 ```
 
 Use this inside a fresh public VM when you have a real domain or subdomain ready. This command runs the guided production flow; the manual production menu remains available with `sudo erpnext-dev public-vm-quickstart`.
@@ -113,7 +139,13 @@ sudo erpnext-dev generate-off-vm-backup-key
 2. On the separate backup server, run the backup-server setup and paste that public key when prompted:
 
 ```bash
-sudo apt-get update && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" backup-server-setup
+sudo apt-get update && sudo apt-get install -y curl ca-certificates
+VERSION="v1.1.70"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+chmod +x erpnext-dev.sh
+sudo ./erpnext-dev.sh backup-server-setup
 ```
 
 The backup-server setup creates/uses a backup user, prepares the backup folder, installs the ERPNext VM public key when provided, and prints the rsync target URI to use on the ERPNext VPS. Press **Enter** to accept suggested values when they are correct.
@@ -234,7 +266,13 @@ See [`PRODUCTION-VALIDATION.md`](PRODUCTION-VALIDATION.md) for the full VPS vali
 ### Check the VM before installing
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" install-preflight
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+VERSION="v1.1.70"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+chmod +x erpnext-dev.sh
+sudo ./erpnext-dev.sh install-preflight
 ```
 
 Use this when you only want to verify OS, internet access, CPU, RAM, disk, and temporary storage before starting the full install.
@@ -244,7 +282,13 @@ If the VM is clearly unsafe for ERPNext, the installer blocks the install and pr
 ### Update or repair the `erpnext-dev` command
 
 ```bash
-tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" install-cli && erpnext-dev version
+VERSION="v1.1.70"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+chmod +x erpnext-dev.sh
+sudo ./erpnext-dev.sh install-cli
+erpnext-dev version
 ```
 
 Use this on an existing VM to install, update, or repair the reusable toolkit command.
@@ -429,7 +473,13 @@ Some longer app menus use two columns when the terminal is wide enough, and fall
 Run this inside a fresh local Ubuntu/Debian-family VM:
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" local-dev-quickstart
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+VERSION="v1.1.70"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+chmod +x erpnext-dev.sh
+sudo ./erpnext-dev.sh local-dev-quickstart
 ```
 
 The quickstart installs the toolkit into the VM and creates the short command:
@@ -545,7 +595,13 @@ Recommended local VM test order:
 Run this inside a fresh public Ubuntu/Debian-family VM:
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" public-vm-guided-setup
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+VERSION="v1.1.70"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+chmod +x erpnext-dev.sh
+sudo ./erpnext-dev.sh public-vm-guided-setup
 ```
 
 Use a real subdomain, for example:
@@ -669,10 +725,16 @@ sudo erpnext-dev verify-access
 sudo erpnext-dev production-ops-wizard
 ```
 
-To update or repair the toolkit command from GitHub:
+To update or repair the toolkit command from a verified release tag:
 
 ```bash
-tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" install-cli && sudo erpnext-dev version
+VERSION="v1.1.70"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+chmod +x erpnext-dev.sh
+sudo ./erpnext-dev.sh install-cli
+sudo erpnext-dev version
 ```
 
 To check where the toolkit is installed:

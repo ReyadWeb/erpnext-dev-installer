@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.69"
+SCRIPT_VERSION="1.1.70"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -6790,11 +6790,11 @@ show_setup_effort_guide() {
   printf '  %-28s %-12s %-18s %s\n' "Public VM, Cloudflare" "1" "9-11" "Includes cert/key paste"
   printf '  %-28s %-12s %-18s %s\n' "Existing install" "1" "1-3" "Use production-ops-wizard/status"
   ui_box_end
-  echo "One-command public VM entry point:"
-  echo "  tmp=\"\$(mktemp /tmp/erpnext-dev.XXXXXX.sh)\" && curl -fsSL \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=\$(date +%s)\" -o \"\$tmp\" && chmod +x \"\$tmp\" && sudo \"\$tmp\" public-vm-quickstart"
+  echo "Verified release public VM entry point:"
+  echo "  VERSION=\"v${SCRIPT_VERSION}\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/erpnext-dev.sh\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/SHA256SUMS\"; sha256sum -c SHA256SUMS; chmod +x erpnext-dev.sh; sudo ./erpnext-dev.sh public-vm-quickstart"
   echo
-  echo "One-command local VM entry point:"
-  echo "  tmp=\"\$(mktemp /tmp/erpnext-dev.XXXXXX.sh)\" && curl -fsSL \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=\$(date +%s)\" -o \"\$tmp\" && chmod +x \"\$tmp\" && sudo \"\$tmp\" local-dev-quickstart"
+  echo "Verified release local VM entry point:"
+  echo "  VERSION=\"v${SCRIPT_VERSION}\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/erpnext-dev.sh\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/SHA256SUMS\"; sha256sum -c SHA256SUMS; chmod +x erpnext-dev.sh; sudo ./erpnext-dev.sh local-dev-quickstart"
   echo
   echo "Interpretation: commands are shell commands typed by the user. Inputs are menu choices, confirmations, domain/email, and certificate paste steps."
 }
@@ -13157,7 +13157,8 @@ generate_off_vm_backup_key() {
   echo "  sudo erpnext-dev backup-server-setup"
   echo
   echo "Or bootstrap it directly from GitHub on the backup server:"
-  echo "  sudo apt-get update && sudo apt-get install -y curl ca-certificates && tmp=\"\$(mktemp /tmp/erpnext-dev.XXXXXX.sh)\" && curl -fsSL \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=\$(date +%s)\" -o \"\$tmp\" && chmod +x \"\$tmp\" && sudo \"\$tmp\" backup-server-setup"
+  echo "  sudo apt-get update && sudo apt-get install -y curl ca-certificates"
+  echo "  VERSION=\"v${SCRIPT_VERSION}\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/erpnext-dev.sh\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/SHA256SUMS\"; sha256sum -c SHA256SUMS; chmod +x erpnext-dev.sh; sudo ./erpnext-dev.sh backup-server-setup"
   ui_next "$(toolkit_cmd backup-server-setup) on the backup server" "$(toolkit_cmd off-vm-backup-guided-setup) on this ERPNext VM"
   ui_box_end
 }
@@ -13722,7 +13723,8 @@ off_vm_backup_guided_setup() {
 
   echo
   echo "Prepare the backup server next. On the backup server, run:"
-  echo "  sudo apt-get update && sudo apt-get install -y curl ca-certificates && tmp=\"\$(mktemp /tmp/erpnext-dev.XXXXXX.sh)\" && curl -fsSL \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=\$(date +%s)\" -o \"\$tmp\" && chmod +x \"\$tmp\" && sudo \"\$tmp\" backup-server-setup"
+  echo "  sudo apt-get update && sudo apt-get install -y curl ca-certificates"
+  echo "  VERSION=\"v${SCRIPT_VERSION}\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/erpnext-dev.sh\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/SHA256SUMS\"; sha256sum -c SHA256SUMS; chmod +x erpnext-dev.sh; sudo ./erpnext-dev.sh backup-server-setup"
   echo
   if [[ -t 0 && "$ASSUME_YES" -ne 1 ]]; then
     echo "Paste the Target URI printed by backup-server-setup."
@@ -15990,11 +15992,11 @@ Examples:
 Options:
   -y, --yes  Assume yes for supported confirmations
 
-One-command GitHub entry points:
+Verified release entry points:
   Public VM:
-    tmp="\$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=\$(date +%s)" -o "\$tmp" && chmod +x "\$tmp" && sudo "\$tmp" public-vm-guided-setup
+    VERSION="v${SCRIPT_VERSION}"; curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/erpnext-dev.sh"; curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/SHA256SUMS"; sha256sum -c SHA256SUMS; chmod +x erpnext-dev.sh; sudo ./erpnext-dev.sh public-vm-guided-setup
   Local VM:
-    tmp="\$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=\$(date +%s)" -o "\$tmp" && chmod +x "\$tmp" && sudo "\$tmp" local-dev-quickstart
+    VERSION="v${SCRIPT_VERSION}"; curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/erpnext-dev.sh"; curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/SHA256SUMS"; sha256sum -c SHA256SUMS; chmod +x erpnext-dev.sh; sudo ./erpnext-dev.sh local-dev-quickstart
 
 Common environment overrides:
   SITE_NAME=erp.test

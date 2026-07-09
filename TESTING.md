@@ -1,3 +1,38 @@
+## v1.1.70 SHA256 checksums and tag-pinned bootstrap documentation
+
+Purpose: add checksum verification for the release script artifact and update bootstrap documentation to prefer pinned release tags rather than the mutable `main` branch. This patch does not change production runtime behavior.
+
+Package checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+sha256sum -c SHA256SUMS
+ls -1 SECURITY.md RELIABILITY-PLAN.md SHA256SUMS
+grep -n "v1.1.70" CHANGELOG.md TESTING.md ROADMAP.md PRODUCTION-VALIDATION.md
+grep -n "sha256sum -c SHA256SUMS" README.md SECURITY.md TESTING.md
+grep -n 'VERSION="v1.1.70"' README.md SECURITY.md
+unzip -l erpnext-dev-installer-v1.1.70.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.70`.
+- `bash -n erpnext-dev.sh` passes.
+- `sha256sum -c SHA256SUMS` reports `erpnext-dev.sh: OK`.
+- README bootstrap examples use tag-pinned `VERSION="v1.1.70"` commands and run checksum verification before `sudo`.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
+Validation focus:
+
+```text
+Release integrity documentation improved.
+Production operations behavior unchanged.
+Runtime/install/backup/restore/SSL/firewall/monitoring/go-live logic unchanged.
+```
+
+---
+
 ## v1.1.69 security and reliability planning documentation
 
 Purpose: add repository-level security and reliability planning documents after the v1.1.67/v1.1.68 production dashboard validation sequence. This patch is documentation/planning only apart from the version bump; it does not change install, backup, restore, SSL, firewall, monitoring, go-live, or dashboard behavior.
@@ -1281,10 +1316,12 @@ erpnext-dev.sh
 Run on a VM or disposable test machine:
 
 ```bash
-tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)"
-curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp"
-chmod +x "$tmp"
-sudo "$tmp" install-cli
+VERSION="v1.1.70"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+chmod +x erpnext-dev.sh
+sudo ./erpnext-dev.sh install-cli
 erpnext-dev version
 erpnext-dev --help
 erpnext-dev where-installed
@@ -1310,7 +1347,13 @@ erpnext-dev where-installed
 Run inside a fresh Ubuntu/Debian-family VM:
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" install-preflight
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+VERSION="v1.1.70"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+chmod +x erpnext-dev.sh
+sudo ./erpnext-dev.sh install-preflight
 ```
 
 Expected:
@@ -1325,7 +1368,13 @@ The toolkit installs /opt/erpnext-dev/erpnext-dev.sh and /usr/local/bin/erpnext-
 Run inside a fresh local VM:
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates && tmp="$(mktemp /tmp/erpnext-dev.XXXXXX.sh)" && curl -fsSL "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/main/erpnext-dev.sh?cache_bust=$(date +%s)" -o "$tmp" && chmod +x "$tmp" && sudo "$tmp" local-dev-quickstart
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+VERSION="v1.1.70"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+sha256sum -c SHA256SUMS
+chmod +x erpnext-dev.sh
+sudo ./erpnext-dev.sh local-dev-quickstart
 ```
 
 After install, validate with the short command:

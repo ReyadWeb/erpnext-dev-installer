@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.1.70 - SHA256 checksums and tag-pinned bootstrap docs
+
+### Added
+
+- Added `SHA256SUMS` release artifact for `erpnext-dev.sh`.
+- Added verified, tag-pinned bootstrap examples to README install paths.
+- Added testing instructions for checksum verification with `sha256sum -c SHA256SUMS`.
+
+### Changed
+
+- Updated the toolkit version to v1.1.70.
+- Updated SECURITY.md to mark the checksum/tag-pinned bootstrap workflow as implemented for the script artifact.
+- Updated RELIABILITY-PLAN.md and ROADMAP to move the next active milestone to `verify-toolkit`.
+- Updated PRODUCTION-VALIDATION to record that v1.1.70 is a release-trust documentation/checksum patch with no production runtime behavior changes.
+
+### Security impact
+
+- New production bootstrap examples avoid downloading from the mutable `main` branch.
+- Operators can verify the downloaded `erpnext-dev.sh` file before running it with `sudo`.
+- This is SHA256 integrity verification, not maintainer identity verification. GPG signing remains a later optional milestone.
+
+### Validation scope
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` prints v1.1.70.
+- `sha256sum -c SHA256SUMS` passes.
+- Package includes `SHA256SUMS`, `SECURITY.md`, and `RELIABILITY-PLAN.md`.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
 ## v1.1.69 - Security and reliability planning docs
 
 ### Added

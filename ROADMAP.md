@@ -1,3 +1,29 @@
+# v1.1.70 roadmap update - SHA256 checksums and tag-pinned bootstrap docs
+
+Status: **implemented as the first release-trust hardening patch after v1.1.69**.
+
+v1.1.70 adds a `SHA256SUMS` release artifact for `erpnext-dev.sh` and updates the README to prefer tag-pinned downloads with checksum verification before `sudo` execution. This directly addresses the P0 bootstrap-trust gap identified in the security review.
+
+Completed in v1.1.70:
+
+- Added `SHA256SUMS` for the release script artifact.
+- Updated install examples to use `VERSION="v1.1.70"` and release-tag raw URLs.
+- Added `sha256sum -c SHA256SUMS` before script execution in bootstrap examples.
+- Updated SECURITY.md, RELIABILITY-PLAN.md, TESTING.md, CHANGELOG.md, and PRODUCTION-VALIDATION.md.
+- Kept runtime behavior unchanged.
+
+Next active milestones:
+
+1. **v1.1.71 — `verify-toolkit` command** for installed-file hash verification.
+2. **v1.1.72 — minimal GitHub Actions CI and `scripts/validate-release.sh`**.
+3. Later: begin careful modularization only after release integrity and CI are in place.
+
+Important limitation:
+
+- SHA256 checksums provide file integrity, not maintainer identity. GPG-signed releases can be added later for stronger supply-chain assurance.
+
+---
+
 # v1.1.69 roadmap update - security and reliability planning docs
 
 Status: **implemented as a planning/documentation patch after v1.1.67/v1.1.68 production dashboard validation**.
@@ -13,10 +39,9 @@ Completed in v1.1.69:
 
 Next active milestones:
 
-1. **v1.1.70 — SHA256 checksums and tag-pinned bootstrap documentation**.
-2. **v1.1.71 — `verify-toolkit` command** for installed-file hash verification.
-3. **v1.1.72 — minimal GitHub Actions CI and `scripts/validate-release.sh`**.
-4. Later: begin careful modularization only after release integrity and CI are in place.
+1. **v1.1.71 — `verify-toolkit` command** for installed-file hash verification.
+2. **v1.1.72 — minimal GitHub Actions CI and `scripts/validate-release.sh`**.
+3. Later: begin careful modularization only after release integrity and CI are in place.
 
 Rationale:
 

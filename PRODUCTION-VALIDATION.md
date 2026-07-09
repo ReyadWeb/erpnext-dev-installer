@@ -1,3 +1,51 @@
+# v1.1.70 SHA256 checksums and tag-pinned bootstrap documentation
+
+v1.1.70 is a release-trust documentation/checksum patch. It adds `SHA256SUMS` for `erpnext-dev.sh` and updates the README to prefer pinned release-tag downloads with checksum verification before running the toolkit with `sudo`.
+
+## Production behavior impact
+
+```text
+Install behavior: unchanged
+Backup behavior: unchanged
+Restore behavior: unchanged
+SSL behavior: unchanged
+Firewall/security behavior: unchanged
+Health monitoring behavior: unchanged
+Go-live validation behavior: unchanged
+Dashboard behavior: unchanged
+```
+
+## Why this patch exists
+
+The production path is already validated. The remaining P0 security gap is release trust during bootstrap. v1.1.70 starts closing that gap by making the recommended production bootstrap workflow tag-pinned and checksum-verified.
+
+## Validation commands
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+sha256sum -c SHA256SUMS
+grep -n "sha256sum -c SHA256SUMS" README.md SECURITY.md TESTING.md
+```
+
+Expected version:
+
+```text
+ERPNext Developer Toolkit v1.1.70
+```
+
+Expected checksum result:
+
+```text
+erpnext-dev.sh: OK
+```
+
+## Result
+
+v1.1.70 should be treated as a release-trust hardening patch, not a production operations feature patch. Production alignment requires only a version check and Final QA option 1.
+
+---
+
 # v1.1.69 Security and reliability planning documentation
 
 v1.1.69 is a documentation/planning patch created after v1.1.67 and v1.1.68 completed the Production Operations dashboard validation record. It adds `SECURITY.md` and `RELIABILITY-PLAN.md` and does not change production runtime behavior.

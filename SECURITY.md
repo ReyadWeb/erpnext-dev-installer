@@ -55,7 +55,7 @@ Operators remain responsible for:
 
 The highest-priority security gap is release trust. Convenience bootstrap commands that download from GitHub and run with `sudo` are powerful but high trust. A compromised repository, account, branch, network path, or operator copy/paste mistake could result in root execution on the target VM.
 
-The preferred direction is:
+The preferred direction is now partially implemented:
 
 1. install from pinned release tags instead of `main`;
 2. publish SHA256 checksums per release;
@@ -63,7 +63,9 @@ The preferred direction is:
 4. add a `verify-toolkit` command that reports installed path, installed version, installed SHA256, and match/mismatch against a known checksum when available;
 5. optionally add GPG-signed releases after the checksum workflow is stable.
 
-Until the checksum workflow is implemented, operators should treat the current bootstrap command as a convenience path for trusted development and validated internal use, not as a complete supply-chain security model.
+v1.1.70 implements items 1-3 for the `erpnext-dev.sh` script artifact by adding `SHA256SUMS` and tag-pinned README examples. Operators should prefer the verified tag workflow for production systems. The mutable `main` branch raw URL remains a development convenience path only.
+
+This is integrity verification, not maintainer identity verification. A malicious actor who can change both the script and checksum in the release can still defeat SHA256-only verification. GPG-signed releases remain a later optional hardening milestone.
 
 ### P1: Plaintext credentials on disk
 
@@ -127,16 +129,17 @@ Add this `SECURITY.md` and the companion `RELIABILITY-PLAN.md`. Document the thr
 
 ### v1.1.70
 
-Add release checksum artifacts and tag-pinned install instructions.
+Implemented: release checksum artifacts and tag-pinned install instructions for `erpnext-dev.sh`.
 
-Example target workflow:
+Current workflow:
 
 ```bash
 VERSION="v1.1.70"
 curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
 curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
 sha256sum -c SHA256SUMS
-sudo install -m 0755 erpnext-dev.sh /usr/local/bin/erpnext-dev
+chmod +x erpnext-dev.sh
+sudo ./erpnext-dev.sh start-here
 ```
 
 ### v1.1.71
