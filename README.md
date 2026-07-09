@@ -24,6 +24,8 @@ Interactive menus use a shared navigation reader: `q`/`Q` quits, `b`/`B` goes ba
 When running an interactive menu command such as `sudo erpnext-dev final-qa`, run it by itself. Do not paste additional commands after it in the same shell block unless you want those commands to run after you quit the menu.
 
 > Version history is maintained in [`CHANGELOG.md`](CHANGELOG.md). This README intentionally focuses on current installation, operations, and usage.
+>
+> Security posture, threat model, and release-trust work are tracked in [`SECURITY.md`](SECURITY.md). Release reliability, CI, checksum, and modularization planning are tracked in [`RELIABILITY-PLAN.md`](RELIABILITY-PLAN.md).
 
 ---
 
@@ -319,6 +321,7 @@ The temporary file under `/tmp` is only used for the first bootstrap or update. 
 - [Optional Frappe apps](#optional-frappe-apps)
 - [SSL mode guide](#ssl-mode-guide)
 - [Security hardening](#security-hardening)
+- [Release security and reliability plans](#release-security-and-reliability-plans)
 - [Diagnostics and support](#diagnostics-and-support)
 - [Documentation files](#documentation-files)
 - [Production caution](#production-caution)
@@ -768,7 +771,7 @@ Health checks cover ERPNext runtime, Nginx, MariaDB, Redis, HTTPS, disk usage, l
 
 ## Production operations dashboard
 
-The v1.1.67 dashboard is designed for day-to-day production administration after the VM is installed and validated. v1.1.67 adds navigation polish on top of the v1.1.66 dashboard: the direct top-level dashboard shows only `q) Quit`, while nested operator sections keep `b) Back` and `q) Quit`.
+The v1.1.67 dashboard is designed for day-to-day production administration after the VM is installed and validated. v1.1.67 adds navigation polish on top of the v1.1.66 dashboard: the direct top-level dashboard shows only `q) Quit`, while nested operator sections keep `b) Back` and `q) Quit`. v1.1.68 records the completed production validation evidence for that dashboard polish.
 
 It starts with a status overview similar to:
 
@@ -916,7 +919,7 @@ sudo erpnext-dev support-bundle
 
 ## Validated production state
 
-The current validated production path is documented from the real `erp.flowmaya.com` VPS and its separate off-VM backup server. v1.1.65 records the final field evidence from the v1.1.64 go-live validation workflow. v1.1.66 adds the unified Production Operations dashboard as the operator entry point over that validated foundation.
+The current validated production path is documented from the real `erp.flowmaya.com` VPS and its separate off-VM backup server. v1.1.65 records the final field evidence from the v1.1.64 go-live validation workflow. v1.1.66 adds the unified Production Operations dashboard as the operator entry point over that validated foundation. v1.1.67 polishes dashboard navigation, and v1.1.68 records the completed v1.1.67 production validation.
 
 Validated environment:
 
@@ -951,6 +954,10 @@ Cloudflare proxied DNS: confirmed
 Cloudflare Full (strict): confirmed
 Cloudflare Origin CA on Nginx: confirmed
 Enhanced support bundle: passed with production evidence files
+Production Operations dashboard: passed
+Top-level dashboard footer: q) Quit only
+Health Monitoring breadcrumb: passed
+Support and Diagnostics breadcrumb: passed
 ```
 
 Recommended final validation commands on production:
@@ -984,13 +991,22 @@ Final evidence bundle: /tmp/erpnext-dev-support-bundle-20260709-062951.tar.gz
 
 The validated support bundle includes redacted operational evidence such as `production-checklist.txt`, `backup-status.txt`, `backup-verify.txt`, `off-vm-backup-status.txt`, `restore-rehearsal-status.txt`, `health-check-status.txt`, and `go-live-status.txt`.
 
-Remaining go-live decisions are outside the ERPNext guest VM:
+Final v1.1.67 dashboard validation recorded by the v1.1.68 documentation patch:
 
 ```text
-- Create or confirm a named cloud/provider snapshot.
-- Confirm provider firewall policy: 22 restricted to admin IP if possible, 80/443 allowed, 8000/9000 blocked.
-- Confirm Cloudflare DNS proxy state and SSL/TLS mode Full (strict).
-- Record those confirmations with `sudo erpnext-dev go-live-record`.
+Installed toolkit during validation: v1.1.67
+Final QA: Release state OK, ready for production use
+Final validation support bundle: /tmp/erpnext-dev-support-bundle-20260709-071549.tar.gz
+Top-level dashboard footer: q) Quit only
+Health Monitoring breadcrumb: ERPNext Production Operations > Health Monitoring
+Support and Diagnostics breadcrumb: ERPNext Production Operations > Support and Diagnostics
+```
+Current go-live posture:
+
+```text
+No open go-live blockers are recorded for the validated production path.
+Repeat go-live validation after snapshot, provider firewall, Cloudflare DNS, SSL/TLS, or origin certificate changes.
+Repeat restore rehearsal after major ERPNext upgrades, migrations, or backup-policy changes.
 ```
 
 ## Backups and restore safety
@@ -1512,6 +1528,30 @@ UFW keeps SSH open by default to reduce lockout risk. Restrict SSH at the cloud 
 
 ---
 
+## Release security and reliability plans
+
+v1.1.69 adds two repository-level planning documents:
+
+```text
+SECURITY.md
+RELIABILITY-PLAN.md
+```
+
+Use these documents to track the next hardening phase. The production VM workflow is already field-tested, but release trust and automated regression prevention still need dedicated work.
+
+Primary next milestones:
+
+```text
+v1.1.70  SHA256 checksums and tag-pinned bootstrap documentation
+v1.1.71  verify-toolkit command
+v1.1.72  minimal GitHub Actions CI and release validation script
+Later    careful modularization after CI exists
+```
+
+Important security note: current convenience bootstrap commands are intended for trusted use and development velocity. The planned tagged-release plus checksum workflow should become the preferred production installation/update path once implemented.
+
+---
+
 ## Diagnostics and support
 
 ```bash
@@ -1538,6 +1578,8 @@ Support bundles are redacted. They intentionally exclude credential files, priva
 | `CHANGELOG.md` | Version history and release notes |
 | `TESTING.md` | Validation scenarios and QA commands |
 | `ROADMAP.md` | Planned future improvements |
+| `SECURITY.md` | Threat model, bootstrap trust caveat, credential handling, and security roadmap |
+| `RELIABILITY-PLAN.md` | Release reliability, CI, checksum, and modularization plan |
 | `docs/assets/` | README diagrams and visual documentation |
 
 ---

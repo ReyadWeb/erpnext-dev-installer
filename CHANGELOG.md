@@ -1,5 +1,58 @@
 # Changelog
 
+## v1.1.69 - Security and reliability planning docs
+
+### Added
+
+- Added `SECURITY.md` with the toolkit threat model, bootstrap trust caveat, credential-handling expectations, support-bundle sharing guidance, and release-integrity roadmap.
+- Added `RELIABILITY-PLAN.md` with the release automation, checksum, `verify-toolkit`, CI, package-audit, and modularization plan.
+
+### Changed
+
+- Updated the toolkit version to v1.1.69.
+- Updated README documentation to point operators to the new security and reliability planning docs.
+- Updated ROADMAP to pivot the next active milestones toward release trust and automation rather than more isolated VM features.
+- Updated TESTING with package validation checks for the new documentation files.
+- Updated PRODUCTION-VALIDATION to record that v1.1.69 is a planning/documentation patch with no production behavior changes.
+
+### Rationale
+
+- The production operations path is now strong and field-tested through v1.1.67/v1.1.68.
+- The next major risk is release trust and automated regression prevention: tag-pinned installs, SHA256 checksums, `verify-toolkit`, and CI.
+- Modularization remains important, but should happen after checksum and CI foundations are in place.
+
+### Validation scope
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` prints v1.1.69.
+- Package includes `SECURITY.md` and `RELIABILITY-PLAN.md`.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
+## v1.1.68 - Final v1.1.67 production dashboard validation record
+
+### Changed
+
+- Updated the toolkit version to v1.1.68.
+- Recorded the completed v1.1.67 production validation from `erp.flowmaya.com`.
+- Documented that the top-level Production Operations dashboard footer now correctly shows only `q) Quit`.
+- Documented that nested dashboard sections use breadcrumbs and keep `b) Back` plus `q) Quit`.
+- Recorded successful Final QA option `1) Release readiness summary` on v1.1.67 with `Release state OK`.
+- Recorded successful redacted support-bundle creation after v1.1.67 validation.
+- Recorded successful breadcrumb validation for `ERPNext Production Operations > Health Monitoring`.
+- Recorded successful breadcrumb validation for `ERPNext Production Operations > Support and Diagnostics` using the clean non-interactive routing test.
+- Kept this as a documentation/validation patch only apart from the version bump; no install, backup, restore, SSL, security, monitoring, go-live, or dashboard behavior was changed.
+
+### Validated production evidence
+
+- Production site: `erp.flowmaya.com`.
+- Installed toolkit during validation: v1.1.67.
+- Final QA: `Release state OK, ready for production use`.
+- Latest validation support bundle: `/tmp/erpnext-dev-support-bundle-20260709-071549.tar.gz`.
+- Health Monitoring breadcrumb: `ERPNext Production Operations > Health Monitoring`.
+- Support and Diagnostics breadcrumb: `ERPNext Production Operations > Support and Diagnostics`.
+- Go-live record remained valid: snapshot `erp-flowmaya-v1.1.64-final-validated-20260709`, cloud firewall confirmed, Cloudflare proxied, Full strict confirmed, origin cert confirmed.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
 ## v1.1.67 - Production dashboard navigation polish
 
 ### Changed

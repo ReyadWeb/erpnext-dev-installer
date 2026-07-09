@@ -1,3 +1,81 @@
+## v1.1.69 security and reliability planning documentation
+
+Purpose: add repository-level security and reliability planning documents after the v1.1.67/v1.1.68 production dashboard validation sequence. This patch is documentation/planning only apart from the version bump; it does not change install, backup, restore, SSL, firewall, monitoring, go-live, or dashboard behavior.
+
+Package checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+
+ls -1 SECURITY.md RELIABILITY-PLAN.md
+
+grep -n "v1.1.69" CHANGELOG.md TESTING.md ROADMAP.md PRODUCTION-VALIDATION.md
+grep -n "Bootstrap trust" SECURITY.md
+grep -n "Reliability roadmap" RELIABILITY-PLAN.md
+grep -n "SECURITY.md" README.md CHANGELOG.md
+grep -n "RELIABILITY-PLAN.md" README.md CHANGELOG.md
+
+unzip -l erpnext-dev-installer-v1.1.69.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.69`.
+- `bash -n erpnext-dev.sh` passes.
+- `SECURITY.md` is present.
+- `RELIABILITY-PLAN.md` is present.
+- README, ROADMAP, CHANGELOG, TESTING, and PRODUCTION-VALIDATION mention the v1.1.69 planning patch.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
+Validation focus:
+
+```text
+No runtime behavior changed.
+No install behavior changed.
+No backup/restore behavior changed.
+No firewall/SSL/monitoring behavior changed.
+The patch records the next release-hardening priorities: checksum artifacts, tag-pinned bootstrap, verify-toolkit, minimal CI, and later modularization.
+```
+
+---
+
+## v1.1.68 final v1.1.67 production validation documentation
+
+Purpose: record the completed production validation of v1.1.67 dashboard navigation polish. This patch is documentation/validation only apart from the version bump; it does not change install, backup, restore, SSL, security, monitoring, go-live, or dashboard behavior.
+
+Package checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+grep -n "v1.1.68" CHANGELOG.md TESTING.md ROADMAP.md PRODUCTION-VALIDATION.md
+grep -n "20260709-071549" README.md PRODUCTION-VALIDATION.md CHANGELOG.md
+grep -n "ERPNext Production Operations > Support and Diagnostics" README.md TESTING.md PRODUCTION-VALIDATION.md CHANGELOG.md
+unzip -l erpnext-dev-installer-v1.1.68.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.68`.
+- `bash -n erpnext-dev.sh` passes.
+- Documentation records the final v1.1.67 production validation evidence.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
+Recorded production evidence:
+
+```text
+Production site: erp.flowmaya.com
+Installed toolkit during validation: v1.1.67
+Final QA: Release state OK, ready for production use
+Final validation support bundle: /tmp/erpnext-dev-support-bundle-20260709-071549.tar.gz
+Top-level dashboard footer: q) Quit only
+Health Monitoring breadcrumb: ERPNext Production Operations > Health Monitoring
+Support and Diagnostics breadcrumb: ERPNext Production Operations > Support and Diagnostics
+```
+
+---
+
 ## v1.1.67 production dashboard navigation polish validation
 
 Purpose: validate the dashboard UX polish discovered during v1.1.66 production smoke testing. This patch changes navigation labels and submenu breadcrumbs only; it does not change install, backup, restore, SSL, security, monitoring, or go-live logic.

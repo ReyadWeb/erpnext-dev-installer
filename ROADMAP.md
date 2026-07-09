@@ -1,3 +1,58 @@
+# v1.1.69 roadmap update - security and reliability planning docs
+
+Status: **implemented as a planning/documentation patch after v1.1.67/v1.1.68 production dashboard validation**.
+
+The production VM operations path is now strong and field-tested. The next priority is release trust and automated regression prevention. v1.1.69 adds `SECURITY.md` and `RELIABILITY-PLAN.md` so the project has a clear, tracked plan for the next security and reliability milestones.
+
+Completed in v1.1.69:
+
+- Added `SECURITY.md` covering threat model, bootstrap trust, credential handling, support-bundle safety, root-script risk, and responsible reporting guidance.
+- Added `RELIABILITY-PLAN.md` covering release validation automation, package checks, CI, support-bundle audit direction, and modularization sequencing.
+- Updated README, TESTING, CHANGELOG, and PRODUCTION-VALIDATION to reference the new planning docs.
+- Kept runtime behavior unchanged.
+
+Next active milestones:
+
+1. **v1.1.70 — SHA256 checksums and tag-pinned bootstrap documentation**.
+2. **v1.1.71 — `verify-toolkit` command** for installed-file hash verification.
+3. **v1.1.72 — minimal GitHub Actions CI and `scripts/validate-release.sh`**.
+4. Later: begin careful modularization only after release integrity and CI are in place.
+
+Rationale:
+
+- The highest-priority risk is not the current ERPNext VM workflow; it is release trust when running downloaded code with `sudo`.
+- CI should exist before major script modularization, otherwise refactoring risk is too high.
+- Docker installation remains a separate later track after VM operations and release engineering remain stable.
+
+---
+
+# v1.1.68 roadmap update - final v1.1.67 dashboard validation record
+
+Status: **documentation/validation patch completed after v1.1.67 production validation passed**.
+
+The v1.1.67 Production Operations dashboard navigation polish is now validated on `erp.flowmaya.com`. The top-level dashboard shows only `q) Quit`, nested operator sections show `b) Back` and `q) Quit`, and breadcrumb titles make submenu context clear.
+
+Completed and recorded in v1.1.68:
+
+- v1.1.67 installed on the production VPS and reported by `erpnext-dev version`.
+- Final QA option `1) Release readiness summary` passed with `Release state OK`.
+- Redacted support bundle created after v1.1.67 validation: `/tmp/erpnext-dev-support-bundle-20260709-071549.tar.gz`.
+- Health Monitoring breadcrumb validated: `ERPNext Production Operations > Health Monitoring`.
+- Support and Diagnostics breadcrumb validated: `ERPNext Production Operations > Support and Diagnostics`.
+- The validated production state remains unchanged: runtime, HTTPS, UFW, Fail2Ban, local backup, off-VM backup, restore rehearsal, health monitoring, and go-live validation remain OK.
+
+Next active milestone: **safe status exports and optional notification design after production dashboard validation**.
+
+Planned next items:
+
+1. Keep the production dashboard read-only/status-first by default.
+2. Consider a simple redacted status export command for sharing operational state without a full support bundle.
+3. Consider health-check notification targets such as email or webhook only after defining safe defaults and avoiding noisy alerts.
+4. Keep provider-side validation records explicit and repeatable after snapshot, firewall, DNS, or SSL changes.
+5. Keep Docker installation as a separate later track after VM operations remain stable.
+
+---
+
 # v1.1.67 roadmap update - production dashboard navigation polish
 
 Status: **implemented as a UX polish patch after v1.1.66 field validation**.

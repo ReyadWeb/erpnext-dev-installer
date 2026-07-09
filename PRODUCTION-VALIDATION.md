@@ -1,3 +1,123 @@
+# v1.1.69 Security and reliability planning documentation
+
+v1.1.69 is a documentation/planning patch created after v1.1.67 and v1.1.68 completed the Production Operations dashboard validation record. It adds `SECURITY.md` and `RELIABILITY-PLAN.md` and does not change production runtime behavior.
+
+## Production behavior impact
+
+```text
+Install behavior: unchanged
+Backup behavior: unchanged
+Restore behavior: unchanged
+SSL behavior: unchanged
+Firewall/security behavior: unchanged
+Health monitoring behavior: unchanged
+Go-live validation behavior: unchanged
+Dashboard behavior: unchanged
+```
+
+## Why this patch exists
+
+The production path is now validated with runtime, HTTPS, UFW, Fail2Ban, local backups, off-VM backups, restore rehearsal, health monitoring, go-live validation, and the Production Operations dashboard. The remaining major gap is release trust and automated regression prevention.
+
+v1.1.69 records the next hardening direction:
+
+```text
+v1.1.70: SHA256 checksums and tag-pinned bootstrap docs
+v1.1.71: verify-toolkit command
+v1.1.72: minimal CI and release validation script
+Later: modularization after CI exists
+```
+
+## Validation commands
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+ls -1 SECURITY.md RELIABILITY-PLAN.md
+grep -n "v1.1.69" CHANGELOG.md TESTING.md ROADMAP.md PRODUCTION-VALIDATION.md
+```
+
+Expected version:
+
+```text
+ERPNext Developer Toolkit v1.1.69
+```
+
+## Result
+
+v1.1.69 should be treated as a repository governance and release-hardening planning patch, not as a production operations feature patch.
+
+---
+
+# v1.1.68 Final v1.1.67 production dashboard validation record
+
+v1.1.68 records the completed field validation of the v1.1.67 Production Operations dashboard navigation polish on the real `erp.flowmaya.com` production VPS. This is a documentation/validation patch apart from the version bump.
+
+## Validated production evidence
+
+```text
+Toolkit validated on production: v1.1.67
+Production site: erp.flowmaya.com
+Final QA: Release state OK, ready for production use
+Support bundle: /tmp/erpnext-dev-support-bundle-20260709-071549.tar.gz
+Top-level dashboard footer: q) Quit only
+Health Monitoring breadcrumb: ERPNext Production Operations > Health Monitoring
+Support and Diagnostics breadcrumb: ERPNext Production Operations > Support and Diagnostics
+```
+
+## Production state during validation
+
+The Final QA summary on v1.1.67 reported the production release state as OK. The following areas remained healthy during validation:
+
+```text
+Install: OK
+Runtime: OK, running via service
+HTTPS: OK, Cloudflare Origin CA/Nginx HTTPS responding HTTP/2 200
+UFW: OK, active
+Fail2Ban: OK, sshd jail enabled
+Latest backup: OK, complete
+Restore rehearsal: OK, completed and login validated
+Health monitoring: OK, timer active and last check OK
+Go-live validation: OK, snapshot/firewall/Cloudflare/origin cert confirmations recorded
+```
+
+## Support bundle evidence
+
+The v1.1.67 validation bundle was created at:
+
+```text
+/tmp/erpnext-dev-support-bundle-20260709-071549.tar.gz
+```
+
+It includes redacted operational evidence files such as:
+
+```text
+go-live-status.txt
+health-check-status.txt
+restore-rehearsal-status.txt
+off-vm-backup-status.txt
+backup-verify.txt
+backup-status.txt
+production-checklist.txt
+recent-errors.txt
+bench-status.txt
+ssl-status.txt
+storage-status.txt
+port-status.txt
+service-status.txt
+system-summary.txt
+doctor-json-validation.txt
+doctor.json
+doctor-plain.txt
+manifest.txt
+```
+
+## Result
+
+The v1.1.67 dashboard navigation polish is fully production-validated. The remaining future work is not a go-live blocker: safe status exports, optional health notifications, and later Docker-track work should be handled as separate milestones.
+
+---
+
 # v1.1.67 Production dashboard navigation polish validation plan
 
 v1.1.67 is a UX/navigation patch on top of the already validated v1.1.66 Production Operations dashboard. The validated production state remains unchanged: runtime, HTTPS, security baseline, local backup, off-VM backup, restore rehearsal, health monitoring, go-live validation, and support bundle evidence were already passing.
