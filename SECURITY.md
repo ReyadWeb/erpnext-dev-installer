@@ -1,3 +1,7 @@
+## v1.1.86 config module extraction
+
+v1.1.86 extracts site and domain configuration into `lib/config.sh`.
+
 ## v1.1.85 install module complete (Tiers A–C)
 
 v1.1.85 completes `lib/install.sh` with guided setup, local/public quickstarts, and first-run wizard workflows.

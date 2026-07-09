@@ -1,3 +1,16 @@
+# v1.1.86 roadmap update - lib/config.sh extraction
+
+Status: **implemented as the eleventh careful modularization patch**.
+
+v1.1.86 extracts site-name validation, saved config loading, domain wizards, and production domain planning into `lib/config.sh`.
+
+Next active milestones:
+
+1. **v1.1.87+ — extract access/credentials helpers or thin dispatcher (Phase B5)**.
+2. Later: optional GPG-signed release artifacts.
+
+---
+
 # v1.1.85 roadmap update - lib/install.sh Tier C completes install module
 
 Status: **implemented — install module extraction complete (Tiers A–C)**.

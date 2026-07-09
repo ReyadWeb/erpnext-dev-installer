@@ -11,6 +11,7 @@ fi
 
 targets=(
   lib/common.sh
+  lib/config.sh
   lib/support.sh
   lib/backup.sh
   lib/ssl.sh

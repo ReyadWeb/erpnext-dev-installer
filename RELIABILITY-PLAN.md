@@ -1,3 +1,7 @@
+## v1.1.86 reliability update
+
+v1.1.86 extracts site and domain configuration into `lib/config.sh`. Next reliability milestone: access/credentials extraction or dispatcher thinning (Phase B5).
+
 ## v1.1.85 reliability update
 
 v1.1.85 completes `lib/install.sh` with guided setup and quickstart workflows. Install modularization (Tiers A–C) is done.

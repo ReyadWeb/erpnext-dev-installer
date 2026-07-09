@@ -1,3 +1,22 @@
+## v1.1.86 - Extract lib/config.sh for site and domain configuration
+
+### Added
+
+- Added `lib/config.sh` with site-name validation, saved config loading, domain wizards, config file I/O, and production domain planning helpers.
+
+### Changed
+
+- Updated the toolkit version to v1.1.86.
+- `erpnext-dev.sh` now sources `lib/config.sh` after `lib/common.sh`.
+- `update-toolkit` now downloads `config.sh` into `/opt/erpnext-dev/lib/`.
+- Expanded `SHA256SUMS`, `RELEASE-MANIFEST.txt`, and shellcheck targets for `lib/config.sh`.
+
+### Validation scope
+
+- `bash -n` passes for `erpnext-dev.sh` and `lib/config.sh`.
+- `erpnext-dev version` prints v1.1.86.
+- `scripts/validate-release.sh` passes locally.
+
 ## v1.1.85 - lib/install.sh Tier C guided setup and quickstart workflows
 
 ### Changed

@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 checksum_files=(
   erpnext-dev.sh
   lib/common.sh
+  lib/config.sh
   lib/support.sh
   lib/backup.sh
   lib/ssl.sh

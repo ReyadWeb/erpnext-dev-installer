@@ -1,3 +1,10 @@
+## v1.1.86 lib/config.sh extraction
+
+```bash
+bash -n lib/config.sh
+scripts/validate-release.sh
+```
+
 ## v1.1.85 lib/install.sh Tier C extraction
 
 ```bash

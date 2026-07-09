@@ -1,9 +1,9 @@
-# v1.1.85 production validation notes
+# v1.1.86 production validation notes
 
-v1.1.85 completes `lib/install.sh` with guided setup and quickstart workflows.
+v1.1.86 extracts site and domain configuration into `lib/config.sh`.
 
 ```bash
-VERSION="v1.1.85"
+VERSION="v1.1.86"
 sudo erpnext-dev version
 scripts/validate-release.sh
 sudo erpnext-dev first-run
