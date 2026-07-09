@@ -1,3 +1,64 @@
+## v1.1.62 final production QA documentation record
+
+This patch records the final validated state after v1.1.61 restore rehearsal tracking was installed, the completed restore drill was recorded on the production VPS, and Final QA was rerun.
+
+Validated production environment:
+
+```text
+Toolkit version during field validation: 1.1.61
+Documentation/package version recording validation: 1.1.62
+Site: erp.flowmaya.com
+Production VPS: 65.109.221.4
+Backup server: 65.109.220.250
+Off-VM target: erpbackup@65.109.220.250:/mnt/HC_Volume_106276869/erpnext-backups/erp.flowmaya.com/
+Restored backup set: 20260709_055928-erp_flowmaya_com
+Restore target: local-vm/local-kvm-restore-vm
+Restore target IP/address: evidence only; recorded value may change with network changes
+Support bundle: /tmp/erpnext-dev-support-bundle-20260709-050725.tar.gz
+```
+
+Final QA evidence:
+
+```text
+Script version               INFO    1.1.61
+Syntax                       OK      bash syntax valid
+Site                         INFO    erp.flowmaya.com (saved config)
+Deployment mode              INFO    public-vm
+Install                      OK      Installed
+Runtime                      OK      Running via service
+HTTPS                        OK      Cloudflare Origin CA/Nginx HTTPS responding: HTTP/2 200
+UFW                          OK      active
+Fail2Ban                     OK      sshd jail enabled
+Latest backup                OK      complete
+Restore rehearsal            OK      completed 2026-07-09T05:05:19+00:00; backup set 20260709_055928-erp_flowmaya_com; target local-vm/local-kvm-restore-vm; login validated
+Release state                OK      ready for production use
+```
+
+Backup verification evidence after rehearsal record:
+
+```text
+Latest set state             OK      complete
+Database                     OK      gzip readable
+Public files                 OK      tar readable
+Private files                OK      tar readable
+Site config                  OK      json readable
+Verification                 OK      backup files are readable; restore rehearsal is recorded
+```
+
+Production checklist no longer treats restore rehearsal as pending. It correctly reports the rehearsal as recorded and moves the remaining items to operational decisions only.
+
+Remaining operational go-live decisions:
+
+```text
+- Confirm scheduled local backups and retention policy.
+- Configure health timer if ongoing monitoring is required.
+- Confirm cloud firewall: 22 admin IP, 80/443 allowed, 8000/9000 blocked.
+- Confirm Cloudflare SSL mode and DNS proxy state.
+- Create named cloud snapshot after final validation.
+```
+
+Readiness after this validation: 9.5/10. The remaining gap is provider-level snapshot/firewall confirmation and optional monitoring policy, not backup/restore capability.
+
 ## v1.1.61 restore rehearsal record/status validation
 
 The restore rehearsal was technically completed in v1.1.60, but production status commands still showed stale warnings because the production VPS had no local record of the external restore drill. v1.1.61 adds explicit recording and status tracking.

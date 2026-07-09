@@ -1,3 +1,38 @@
+## v1.1.62 final production QA documentation record
+
+Status: documentation/validation patch after final v1.1.61 production QA passed.
+
+Completed production-readiness items now recorded:
+
+- Production VPS install and runtime validation.
+- Cloudflare Origin CA / Nginx HTTPS validation.
+- UFW and Fail2Ban validation.
+- Local backup and scheduled backup validation.
+- Separate off-VM backup server validation.
+- Real off-VM rsync dry run and real run validation.
+- Disposable local restore VM rehearsal validation.
+- Restore rehearsal record/status tracking validation.
+- Final QA release readiness: `Release state OK ready for production use`.
+- Redacted support bundle creation validation.
+
+Updated readiness after final QA:
+
+| Case | Rating | Interpretation |
+| --- | ---: | --- |
+| Local VM / developer workflow | 9.5/10 | Passed and stable |
+| Public VPS guided production workflow | 9.5/10 | Real production path validated with HTTPS, security checks, backups, and final QA |
+| Off-VM backup workflow | 9.4/10 | Separate backup server, real rsync run, cleanup, and dry-run revalidation passed |
+| Restore rehearsal workflow | 9.4/10 | Disposable restore, login validation, cleanup, and production-side status tracking passed |
+| Full production readiness | 9.5/10 | Remaining work is operational: cloud snapshot, provider firewall confirmation, Cloudflare setting confirmation, optional health timer |
+
+Next active milestones:
+
+1. Create/confirm named cloud provider snapshot after final validation.
+2. Confirm provider-level firewall policy outside the VM.
+3. Confirm Cloudflare DNS proxy state and SSL/TLS mode Full (strict).
+4. Decide whether to enable the optional health timer.
+5. Plan periodic restore drills after major upgrades, migrations, or backup-policy changes.
+
 ## v1.1.61 restore rehearsal status tracking
 
 Status: focused production-readiness polish.

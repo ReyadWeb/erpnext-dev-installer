@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.1.62 - Final production QA documentation record
+
+### Changed
+
+- Updated the toolkit version to v1.1.62.
+- Documented the final v1.1.61 production QA evidence after restore rehearsal status tracking was recorded on the production VPS.
+- Updated README with a dedicated validated production state section and menu anchor.
+- Updated TESTING, ROADMAP, and PRODUCTION-VALIDATION so the repository reflects the completed backup, off-VM backup, restore rehearsal, restore-key cleanup, and final QA state.
+- Kept this as a documentation/validation patch only; no backup, restore, SSH, firewall, or install behavior was changed.
+
+### Validated
+
+- Production VPS `erp.flowmaya.com` reports `Release state OK ready for production use` in Final QA.
+- Restore rehearsal record is saved and recognized by `restore-rehearsal-status`, `production-checklist`, `backup-status`, `backup-verify`, and Final QA.
+- Recorded restored backup set: `20260709_055928-erp_flowmaya_com`.
+- Recorded restore target: `local-vm/local-kvm-restore-vm`; IP/address is evidence only and may change.
+- Browser/login validation was recorded as complete.
+- Support bundle creation completed: `/tmp/erpnext-dev-support-bundle-20260709-050725.tar.gz`.
+- Remaining go-live decisions are operational: named cloud snapshot, provider firewall confirmation, Cloudflare SSL mode/proxy confirmation, and optional health timer.
+
 ## v1.1.61 - Restore rehearsal record/status tracking
 
 ### Changed

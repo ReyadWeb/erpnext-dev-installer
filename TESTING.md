@@ -1,3 +1,49 @@
+## v1.1.62 final production QA documentation validation
+
+Purpose: record the final field evidence after v1.1.61 successfully tracked the completed restore rehearsal and Final QA reported production readiness. This is a documentation/validation patch with no behavior changes.
+
+Package checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh --help | grep -n "restore-rehearsal-status"
+./erpnext-dev.sh --help | grep -n "restore-rehearsal-record"
+./erpnext-dev.sh --help | grep -n "restore-rehearsal-report"
+grep -n "Validated production state" README.md
+grep -n "v1.1.62" CHANGELOG.md TESTING.md ROADMAP.md PRODUCTION-VALIDATION.md
+unzip -l erpnext-dev-installer-v1.1.62.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.62`.
+- README contains the validated production state section and menu anchor.
+- Changelog, testing notes, roadmap, and production validation include v1.1.62.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
+Recorded production field evidence:
+
+```text
+Production site: erp.flowmaya.com
+Production VPS: 65.109.221.4
+Backup server: 65.109.220.250
+Restore rehearsal record: PASS
+Final QA release summary: PASS
+Production checklist: PASS
+Backup verification: PASS
+Support bundle creation: PASS
+Support bundle path: /tmp/erpnext-dev-support-bundle-20260709-050725.tar.gz
+```
+
+Critical expected output from production Final QA:
+
+```text
+Restore rehearsal            OK      completed 2026-07-09T05:05:19+00:00; backup set 20260709_055928-erp_flowmaya_com; target local-vm/local-kvm-restore-vm; login validated
+Release state                OK      ready for production use
+Verification                 OK      backup files are readable; restore rehearsal is recorded
+```
+
 ## v1.1.61 restore rehearsal record/status validation
 
 Purpose: remove stale restore warnings after a successful disposable-VM restore rehearsal by recording the rehearsal result on the production VM.

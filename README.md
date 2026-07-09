@@ -309,6 +309,7 @@ The temporary file under `/tmp` is only used for the first bootstrap or update. 
 - [Reusable toolkit command](#reusable-toolkit-command)
 - [Accessing ERPNext credentials](#accessing-erpnext-credentials)
 - [Production operations](#production-operations)
+- [Validated production state](#validated-production-state)
 - [Backups and restore safety](#backups-and-restore-safety)
 - [Restore rehearsal from off-VM backup](#restore-rehearsal-from-off-vm-backup)
 - [Pre-app checkpoint workflow](#pre-app-checkpoint-workflow)
@@ -749,6 +750,64 @@ sudo erpnext-dev service-recovery-plan
 Health checks cover ERPNext runtime, Nginx, MariaDB, Redis, HTTPS, disk usage, latest backup state, UFW, Fail2Ban, scheduled backup timer, and off-VM backup state.
 
 ---
+
+## Validated production state
+
+The current validated production path is documented from the real `erp.flowmaya.com` VPS and its separate off-VM backup server. This is the reference state for v1.1.62 documentation.
+
+Validated environment:
+
+```text
+Production site: erp.flowmaya.com
+Production VPS: 65.109.221.4
+Backup server: 65.109.220.250
+Backup target: /mnt/HC_Volume_106276869/erpnext-backups/erp.flowmaya.com/
+Restore rehearsal target: local-vm/local-kvm-restore-vm
+Restored backup set: 20260709_055928-erp_flowmaya_com
+Restore VM IP/address: evidence only; it may change when the restore VM uses another network
+```
+
+Final validated status:
+
+```text
+Production install: passed
+Cloudflare Origin CA / Nginx HTTPS: passed
+UFW and Fail2Ban: passed
+Local scheduled backups: passed
+Off-VM rsync backup: passed
+Disposable-VM restore rehearsal: passed
+Browser/login validation after restore: passed
+Restore rehearsal tracking: passed
+Final QA: Release state OK, ready for production use
+Support bundle creation: passed
+```
+
+Recommended final validation commands on production:
+
+```bash
+sudo erpnext-dev restore-rehearsal-status
+sudo erpnext-dev production-checklist
+sudo erpnext-dev backup-status
+sudo erpnext-dev final-qa
+sudo erpnext-dev support-bundle
+```
+
+Expected high-level result:
+
+```text
+Restore rehearsal            OK      completed ... backup set 20260709_055928-erp_flowmaya_com ... login validated
+Release state                OK      ready for production use
+Verification                 OK      backup files are readable; restore rehearsal is recorded
+```
+
+Remaining go-live decisions are outside the ERPNext guest VM:
+
+```text
+- Create or confirm a named cloud/provider snapshot.
+- Confirm provider firewall policy: 22 restricted to admin IP if possible, 80/443 allowed, 8000/9000 blocked.
+- Confirm Cloudflare DNS proxy state and SSL/TLS mode Full (strict).
+- Decide whether to enable the optional toolkit health timer for ongoing monitoring.
+```
 
 ## Backups and restore safety
 
