@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.60"
+SCRIPT_VERSION="1.1.61"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -110,6 +110,7 @@ OFF_VM_BACKUP_SSH_IDENTITY="${OFF_VM_BACKUP_SSH_IDENTITY:-}"
 OFF_VM_BACKUP_DEFAULT_IDENTITY="${OFF_VM_BACKUP_DEFAULT_IDENTITY:-/root/.ssh/erpnext_offvm_backup}"
 RESTORE_BACKUP_SSH_IDENTITY="${RESTORE_BACKUP_SSH_IDENTITY:-/root/.ssh/erpnext_restore_backup}"
 RESTORE_PULL_CONFIG_FILE="${RESTORE_PULL_CONFIG_FILE:-/etc/erpnext-dev/restore-pull.env}"
+RESTORE_REHEARSAL_RECORD_FILE="${RESTORE_REHEARSAL_RECORD_FILE:-/etc/erpnext-dev/restore-rehearsal.env}"
 RESTORE_AUTHORIZED_KEYS_USER="${RESTORE_AUTHORIZED_KEYS_USER:-erpbackup}"
 OFF_VM_BACKUP_RSYNC_DELETE="${OFF_VM_BACKUP_RSYNC_DELETE:-false}"
 HEALTH_CHECK_SERVICE="${HEALTH_CHECK_SERVICE:-erpnext-dev-health-check.service}"
@@ -241,7 +242,7 @@ acquire_toolkit_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|security-mode-status|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|local-access-doctor|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|host-dns-guide|print-hosts-command|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|firewall-rollback-snapshots|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|repair-site-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|security-mode-status|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|local-access-doctor|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|host-dns-guide|print-hosts-command|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|firewall-rollback-snapshots|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|repair-site-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
       return 0
       ;;
     *)
@@ -12203,8 +12204,18 @@ show_backup_status() {
   off_detail="${off_pair#*|}"
   status_line "Off-VM copy" "$off_state" "$off_detail"
   if [[ "$off_state" == "OK" ]]; then
-    echo "Off-VM copy is configured and the last copy completed. Restore rehearsal is still required before relying on production backups."
-    ui_next "$(toolkit_cmd backup-verify)" "$(toolkit_cmd off-vm-backup-status)" "$(toolkit_cmd restore-rehearsal-guide)"
+    local rehearsal_pair rehearsal_state rehearsal_detail
+    rehearsal_pair="$(restore_rehearsal_summary_pair)"
+    rehearsal_state="${rehearsal_pair%%|*}"
+    rehearsal_detail="${rehearsal_pair#*|}"
+    status_line "Restore rehearsal" "$rehearsal_state" "$rehearsal_detail"
+    if [[ "$rehearsal_state" == "OK" ]]; then
+      echo "Off-VM copy is configured, the last copy completed, and a restore rehearsal is recorded."
+      ui_next "$(toolkit_cmd backup-verify)" "$(toolkit_cmd restore-rehearsal-status)" "$(toolkit_cmd production-checklist)"
+    else
+      echo "Off-VM copy is configured and the last copy completed. Record a successful disposable-VM restore rehearsal before relying on production backups."
+      ui_next "$(toolkit_cmd backup-verify)" "$(toolkit_cmd restore-rehearsal-record)" "$(toolkit_cmd restore-rehearsal-guide)"
+    fi
   else
     echo "Off-VM copy is not fully proven yet. Configure it, run dry-run, then run a real off-VM backup."
     ui_next "$(toolkit_cmd backup-verify)" "$(toolkit_cmd off-vm-backup-guided-setup)" "$(toolkit_cmd off-vm-backup-status)"
@@ -12290,14 +12301,23 @@ verify_latest_backup_set() {
   if verify_backup_file "Site config" "$config_file" json; then ok_count=$((ok_count+1)); else true; fi
 
   if [[ "$fail_count" -eq 0 ]]; then
-    status_line "Verification" "OK" "backup files are readable; restore still must be tested separately"
+    if restore_rehearsal_recorded_ok; then
+      status_line "Verification" "OK" "backup files are readable; restore rehearsal is recorded"
+    else
+      status_line "Verification" "OK" "backup files are readable; restore still must be recorded separately"
+    fi
   else
     status_line "Verification" "WARN" "${fail_count} required component(s) missing or unreadable"
   fi
 
   echo
-  echo "This is not a restore test. For production, rehearse restore on a disposable VM."
-  ui_next "$(toolkit_cmd restore-rehearsal-guide)" "$(toolkit_cmd off-vm-backup-guide)"
+  if restore_rehearsal_recorded_ok; then
+    echo "This is not a restore test, but a successful restore rehearsal is recorded on this production VM."
+    ui_next "$(toolkit_cmd restore-rehearsal-status)" "$(toolkit_cmd production-checklist)"
+  else
+    echo "This is not a restore test. For production, rehearse restore on a disposable VM and record it."
+    ui_next "$(toolkit_cmd restore-rehearsal-guide)" "$(toolkit_cmd restore-rehearsal-record)"
+  fi
   ui_box_end
 }
 
@@ -12333,23 +12353,255 @@ show_restore_rehearsal_guide() {
   ui_box_start "Restore Rehearsal Guide"
   status_line "Mode" "INFO" "planning only; no restore is performed"
   status_line "Site" "INFO" "$SITE_NAME"
+  restore_rehearsal_status_line || true
   echo
   echo "Safe restore test workflow:"
   echo "  1) Take a cloud snapshot of the current VM."
-  echo "  2) Create a disposable test VM with similar OS/resources."
-  echo "  3) Install the same script version and ERPNext stack."
-  echo "  4) Copy the database, public files, and private files backups to the test VM."
-  echo "  5) Run restore on the test VM only."
-  echo "  6) Run migrate/build/clear-cache and verify login."
-  echo "  7) Destroy the disposable VM after validation."
+  echo "  2) Create a disposable local/cloud restore VM with similar OS/resources."
+  echo "  3) Install the same script version and ERPNext stack using the same site name."
+  echo "  4) Generate a temporary restore key on the restore VM."
+  echo "  5) Add that key on the backup server, restricted to the restore VM's current outbound public IP."
+  echo "  6) Pull the database, public files, private files, and site_config backup to the restore VM."
+  echo "  7) Run restore on the restore VM only, then verify service, HTTP access, and login."
+  echo "  8) Remove the temporary restore key from the backup server."
+  echo "  9) Record the rehearsal on the production ERPNext VM."
   echo
-  echo "Restore commands on the test VM:"
-  echo "  $(toolkit_cmd list-backups)"
-  echo "  $(toolkit_cmd restore-full)"
-  echo "  $(toolkit_cmd production-readiness)"
+  echo "Recommended command flow:"
+  echo "  On restore VM:      $(toolkit_cmd restore-rehearsal-wizard)"
+  echo "  On restore VM:      $(toolkit_cmd restore-rehearsal-report)"
+  echo "  On production VM:   $(toolkit_cmd restore-rehearsal-record)"
+  echo "  On production VM:   $(toolkit_cmd restore-rehearsal-status)"
   echo
-  echo "Never use the first restore rehearsal on the live VM."
-  ui_next "$(toolkit_cmd backup-status)" "$(toolkit_cmd off-vm-backup-guide)"
+  echo "The restore VM IP is evidence only. It may change when the restore VM moves networks."
+  echo "Do not use the first restore rehearsal on the live production VM."
+  ui_next "$(toolkit_cmd restore-rehearsal-status)" "$(toolkit_cmd restore-rehearsal-record)" "$(toolkit_cmd backup-status)"
+  ui_box_end
+}
+
+restore_rehearsal_value() {
+  local key="$1" value=""
+  if value="$(read_config_key_from_file "$RESTORE_REHEARSAL_RECORD_FILE" "$key" 2>/dev/null)" && [[ -n "$value" ]]; then
+    printf '%s
+' "$value"
+    return 0
+  fi
+  return 1
+}
+
+restore_rehearsal_recorded_ok() {
+  local status site
+  status="$(restore_rehearsal_value RESTORE_REHEARSAL_STATUS 2>/dev/null || true)"
+  site="$(restore_rehearsal_value RESTORE_REHEARSAL_SITE 2>/dev/null || true)"
+  [[ "$status" == "OK" ]] || return 1
+  [[ -z "$site" || "$site" == "$SITE_NAME" ]] || return 1
+  return 0
+}
+
+restore_rehearsal_summary_pair() {
+  local status site recorded_at backup_set target_label target_kind target_ip login_validated
+  if [[ ! -r "$RESTORE_REHEARSAL_RECORD_FILE" ]]; then
+    printf 'WARN|not recorded; run restore-rehearsal-record after a successful disposable-VM restore
+'
+    return 0
+  fi
+  status="$(restore_rehearsal_value RESTORE_REHEARSAL_STATUS 2>/dev/null || true)"
+  site="$(restore_rehearsal_value RESTORE_REHEARSAL_SITE 2>/dev/null || true)"
+  recorded_at="$(restore_rehearsal_value RESTORE_REHEARSAL_RECORDED_AT 2>/dev/null || true)"
+  backup_set="$(restore_rehearsal_value RESTORE_REHEARSAL_BACKUP_SET 2>/dev/null || true)"
+  target_kind="$(restore_rehearsal_value RESTORE_REHEARSAL_TARGET_KIND 2>/dev/null || true)"
+  target_label="$(restore_rehearsal_value RESTORE_REHEARSAL_TARGET_LABEL 2>/dev/null || true)"
+  target_ip="$(restore_rehearsal_value RESTORE_REHEARSAL_TARGET_IP 2>/dev/null || true)"
+  login_validated="$(restore_rehearsal_value RESTORE_REHEARSAL_LOGIN_VALIDATED 2>/dev/null || true)"
+  if [[ "$status" != "OK" ]]; then
+    printf 'WARN|record exists but status is %s
+' "${status:-unknown}"
+    return 0
+  fi
+  if [[ -n "$site" && "$site" != "$SITE_NAME" ]]; then
+    printf 'WARN|recorded for %s, current site is %s
+' "$site" "$SITE_NAME"
+    return 0
+  fi
+  local detail="completed"
+  [[ -n "$recorded_at" ]] && detail="${detail} ${recorded_at}"
+  [[ -n "$backup_set" ]] && detail="${detail}; backup set ${backup_set}"
+  [[ -n "$target_kind" || -n "$target_label" ]] && detail="${detail}; target ${target_kind:-restore-vm}${target_label:+/${target_label}}"
+  [[ -n "$target_ip" ]] && detail="${detail}; IP noted ${target_ip}"
+  case "$login_validated" in
+    true|yes|YES|1) detail="${detail}; login validated" ;;
+    false|no|NO|0) detail="${detail}; login not recorded" ;;
+  esac
+  printf 'OK|%s
+' "$detail"
+}
+
+restore_rehearsal_status_line() {
+  local pair state detail
+  pair="$(restore_rehearsal_summary_pair)"
+  state="${pair%%|*}"
+  detail="${pair#*|}"
+  status_line "Restore rehearsal" "$state" "$detail"
+}
+
+sanitize_restore_rehearsal_value() {
+  local value="$1"
+  printf '%s' "$value" | tr '
+	' '   ' | sed -E 's/[[:space:]]+/-/g; s/[^A-Za-z0-9._:@\/+=,-]/-/g; s/^-+//; s/-+$//' | cut -c1-240
+}
+
+restore_rehearsal_latest_backup_set_hint() {
+  local latest_lines prefix
+  latest_lines="$(backup_latest_set_paths 2>/dev/null || true)"
+  prefix="$(printf '%s
+' "$latest_lines" | sed -n '1p')"
+  printf '%s
+' "$prefix"
+}
+
+show_restore_rehearsal_status() {
+  require_sudo
+  ui_box_start "Restore Rehearsal Status"
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "Record file" "$($SUDO test -f "$RESTORE_REHEARSAL_RECORD_FILE" && echo OK || echo WARN)" "$RESTORE_REHEARSAL_RECORD_FILE"
+  restore_rehearsal_status_line || true
+  if $SUDO test -f "$RESTORE_REHEARSAL_RECORD_FILE"; then
+    echo
+    echo "Recorded metadata:"
+    $SUDO sed -E 's/(PASSWORD|TOKEN|SECRET|KEY)=.*/=[REDACTED]/' "$RESTORE_REHEARSAL_RECORD_FILE" | sed 's/^/  /'
+  else
+    echo
+    echo "No restore rehearsal record exists yet on this VM."
+    echo "After a successful disposable-VM restore, run:"
+    echo "  sudo erpnext-dev restore-rehearsal-record"
+  fi
+  echo
+  echo "Note: restore VM IP is recorded only as evidence. It may change when the VM uses another network."
+  ui_next "$(toolkit_cmd restore-rehearsal-record)" "$(toolkit_cmd production-checklist)" "$(toolkit_cmd backup-status)"
+  ui_box_end
+}
+
+record_restore_rehearsal() {
+  require_sudo
+  local latest_hint backup_set target_kind target_label target_ip result notes login_validated recorded_at config_dir
+  local answer_backup answer_kind answer_label answer_ip answer_result answer_notes answer_login
+  latest_hint="$(restore_rehearsal_latest_backup_set_hint 2>/dev/null || true)"
+  backup_set="${RESTORE_REHEARSAL_BACKUP_SET:-$latest_hint}"
+  target_kind="${RESTORE_REHEARSAL_TARGET_KIND:-local-vm}"
+  target_label="${RESTORE_REHEARSAL_TARGET_LABEL:-restore-vm}"
+  target_ip="${RESTORE_REHEARSAL_TARGET_IP:-}"
+  result="${RESTORE_REHEARSAL_RESULT:-full_restore_completed}"
+  notes="${RESTORE_REHEARSAL_NOTES:-off-vm-backup-restored-on-disposable-vm}"
+  login_validated="${RESTORE_REHEARSAL_LOGIN_VALIDATED:-}"
+
+  ui_box_start "Record Restore Rehearsal"
+  echo "Run this on the production ERPNext VM after a successful restore rehearsal on a disposable VM."
+  echo "This records the completed rehearsal so production-checklist, backup-status, and final QA stop showing stale restore warnings."
+  echo
+  status_line "Record file" "INFO" "$RESTORE_REHEARSAL_RECORD_FILE"
+  status_line "Current site" "INFO" "$SITE_NAME"
+  status_line "Latest local backup set" "$([[ -n "$latest_hint" ]] && echo INFO || echo WARN)" "${latest_hint:-not detected}"
+  echo
+  echo "The restore VM IP is evidence only. If the restore VM moved to another network, enter the current/known IP or leave it blank."
+
+  if [[ -t 0 && "$ASSUME_YES" -ne 1 ]]; then
+    read -r -p "Backup set restored [${backup_set}]: " answer_backup
+    backup_set="${answer_backup:-$backup_set}"
+    read -r -p "Restore target kind [${target_kind}]: " answer_kind
+    target_kind="${answer_kind:-$target_kind}"
+    read -r -p "Restore target label [${target_label}]: " answer_label
+    target_label="${answer_label:-$target_label}"
+    read -r -p "Restore VM IP/address evidence, optional [${target_ip}]: " answer_ip
+    target_ip="${answer_ip:-$target_ip}"
+    read -r -p "Result [${result}]: " answer_result
+    result="${answer_result:-$result}"
+    read -r -p "Was browser/login validation completed? [y/N]: " answer_login
+    case "$answer_login" in
+      y|Y|yes|YES) login_validated="true" ;;
+      n|N|no|NO|"") login_validated="false" ;;
+      *) login_validated="$(sanitize_restore_rehearsal_value "$answer_login")" ;;
+    esac
+    read -r -p "Notes [${notes}]: " answer_notes
+    notes="${answer_notes:-$notes}"
+  fi
+
+  [[ -n "$backup_set" ]] || fail "Backup set is required."
+  backup_set="$(sanitize_restore_rehearsal_value "$backup_set")"
+  target_kind="$(sanitize_restore_rehearsal_value "$target_kind")"
+  target_label="$(sanitize_restore_rehearsal_value "$target_label")"
+  target_ip="$(sanitize_restore_rehearsal_value "$target_ip")"
+  result="$(sanitize_restore_rehearsal_value "$result")"
+  notes="$(sanitize_restore_rehearsal_value "$notes")"
+  login_validated="$(sanitize_restore_rehearsal_value "${login_validated:-false}")"
+  recorded_at="$(date -Is 2>/dev/null || date)"
+
+  config_dir="$(dirname "$RESTORE_REHEARSAL_RECORD_FILE")"
+  $SUDO mkdir -p "$config_dir"
+  $SUDO tee "$RESTORE_REHEARSAL_RECORD_FILE" >/dev/null <<EOF_RESTORE_REHEARSAL
+RESTORE_REHEARSAL_STATUS=OK
+RESTORE_REHEARSAL_RECORDED_AT=${recorded_at}
+RESTORE_REHEARSAL_SITE=${SITE_NAME}
+RESTORE_REHEARSAL_BACKUP_SET=${backup_set}
+RESTORE_REHEARSAL_TARGET_KIND=${target_kind}
+RESTORE_REHEARSAL_TARGET_LABEL=${target_label}
+RESTORE_REHEARSAL_TARGET_IP=${target_ip}
+RESTORE_REHEARSAL_RESULT=${result}
+RESTORE_REHEARSAL_LOGIN_VALIDATED=${login_validated}
+RESTORE_REHEARSAL_NOTES=${notes}
+RESTORE_REHEARSAL_RECORDED_BY_TOOLKIT_VERSION=${SCRIPT_VERSION}
+EOF_RESTORE_REHEARSAL
+  $SUDO chown root:root "$RESTORE_REHEARSAL_RECORD_FILE" || true
+  $SUDO chmod 600 "$RESTORE_REHEARSAL_RECORD_FILE" || true
+  status_line "Restore rehearsal record" "OK" "saved"
+  restore_rehearsal_status_line || true
+  ui_next "$(toolkit_cmd restore-rehearsal-status)" "$(toolkit_cmd production-checklist)" "$(toolkit_cmd backup-status)"
+  ui_box_end
+}
+
+show_restore_rehearsal_report() {
+  require_sudo
+  local latest_lines prefix completeness vm_ip public_ip installed runtime http_local http_ip
+  latest_lines="$(backup_latest_set_paths 2>/dev/null || true)"
+  prefix="$(printf '%s
+' "$latest_lines" | sed -n '1p')"
+  completeness="$(printf '%s
+' "$latest_lines" | sed -n '6p')"
+  vm_ip="$(get_vm_ip 2>/dev/null || true)"
+  public_ip="$(detect_outbound_public_ipv4 2>/dev/null || true)"
+  installed="$(install_state 2>/dev/null || echo unknown)"
+  runtime="$(runtime_state 2>/dev/null || echo unknown)"
+  http_local="$(curl -I -s --max-time 5 http://127.0.0.1:8000 2>/dev/null | awk 'NR==1 {print $0}' | tr -d '
+' || true)"
+  if [[ -n "$vm_ip" ]]; then
+    http_ip="$(curl -I -s --max-time 5 "http://${vm_ip}:8000" 2>/dev/null | awk 'NR==1 {print $0}' | tr -d '
+' || true)"
+  fi
+
+  ui_box_start "Restore Rehearsal Report"
+  echo "Run this on the disposable restore VM after restore-full and service validation."
+  echo
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "Toolkit version" "INFO" "$SCRIPT_VERSION"
+  status_line "Install" "$([[ "$installed" == "Installed" ]] && echo OK || echo WARN)" "$installed"
+  status_line "Runtime" "$([[ "$runtime" == Running* ]] && echo OK || echo WARN)" "$runtime"
+  status_line "Backup set" "$([[ -n "$prefix" ]] && echo OK || echo WARN)" "${prefix:-not detected}"
+  status_line "Backup set state" "$([[ "$completeness" == complete ]] && echo OK || echo WARN)" "${completeness:-unknown}"
+  status_line "Restore VM private IP" "INFO" "${vm_ip:-unknown}"
+  status_line "Restore VM outbound IP" "INFO" "${public_ip:-unknown; may change by network}"
+  status_line "HTTP localhost" "$([[ "$http_local" == HTTP/* ]] && echo OK || echo WARN)" "${http_local:-not responding}"
+  status_line "HTTP VM IP" "$([[ "$http_ip" == HTTP/* ]] && echo OK || echo WARN)" "${http_ip:-not tested}"
+  echo
+  echo "After cleanup of the temporary restore key, run this on the production ERPNext VM to record the rehearsal:"
+  echo "  sudo RESTORE_REHEARSAL_BACKUP_SET='${prefix:-BACKUP_SET}' \
+    RESTORE_REHEARSAL_TARGET_KIND='local-vm' \
+    RESTORE_REHEARSAL_TARGET_LABEL='restore-vm' \
+    RESTORE_REHEARSAL_TARGET_IP='${vm_ip:-}' \
+    RESTORE_REHEARSAL_RESULT='full_restore_completed' \
+    RESTORE_REHEARSAL_LOGIN_VALIDATED='false' \
+    erpnext-dev restore-rehearsal-record"
+  echo
+  echo "If browser/login was validated, change RESTORE_REHEARSAL_LOGIN_VALIDATED to true."
+  echo "If the VM IP changed, update or omit RESTORE_REHEARSAL_TARGET_IP; it is evidence only."
+  ui_next "$(toolkit_cmd doctor)" "$(toolkit_cmd status)" "$(toolkit_cmd restore-rehearsal-record) on production VM"
   ui_box_end
 }
 
@@ -14162,6 +14414,11 @@ show_production_checklist() {
   off_state="${off_pair%%|*}"
   off_detail="${off_pair#*|}"
   status_line "Off-VM backup" "$off_state" "$off_detail"
+  local rehearsal_pair rehearsal_state rehearsal_detail
+  rehearsal_pair="$(restore_rehearsal_summary_pair)"
+  rehearsal_state="${rehearsal_pair%%|*}"
+  rehearsal_detail="${rehearsal_pair#*|}"
+  status_line "Restore rehearsal" "$rehearsal_state" "$rehearsal_detail"
   if health_check_timer_active; then
     status_line "Health timer" "OK" "active"
   else
@@ -14170,10 +14427,12 @@ show_production_checklist() {
   status_line "Snapshot" "INFO" "take/verify cloud snapshot before go-live"
   echo
   echo "Remaining production decisions:"
-  if [[ "$off_state" == "OK" ]]; then
-    echo "  - Rehearse restore from the off-VM backup on a disposable VM."
-  else
+  if [[ "$off_state" != "OK" ]]; then
     echo "  - Configure and run off-VM backup, then rehearse restore on a disposable VM."
+  elif [[ "$rehearsal_state" != "OK" ]]; then
+    echo "  - Rehearse restore from the off-VM backup on a disposable VM and record it."
+  else
+    echo "  - Restore rehearsal recorded; repeat after major upgrade, migration, or backup-policy change."
   fi
   echo "  - Confirm scheduled local backups and retention policy."
   echo "  - Configure health timer if ongoing monitoring is required."
@@ -14189,7 +14448,7 @@ show_release_readiness() {
   require_sudo
 
   local syntax_status syntax_detail installed runtime ssl_pair ssl_status ssl_detail
-  local ufw_status fail2ban_status latest_lines completeness release_state
+  local ufw_status fail2ban_status latest_lines completeness release_state rehearsal_pair rehearsal_state rehearsal_detail
 
   if bash -n "$0" >/dev/null 2>&1; then
     syntax_status="OK"; syntax_detail="bash syntax valid"
@@ -14242,6 +14501,13 @@ show_release_readiness() {
   status_line "UFW" "${ufw_status%%|*}" "${ufw_status#*|}"
   status_line "Fail2Ban" "${fail2ban_status%%|*}" "${fail2ban_status#*|}"
   status_line "Latest backup" "$([[ "$completeness" == "complete" ]] && echo OK || echo WARN)" "${completeness:-none}"
+  rehearsal_pair="$(restore_rehearsal_summary_pair)"
+  rehearsal_state="${rehearsal_pair%%|*}"
+  rehearsal_detail="${rehearsal_pair#*|}"
+  status_line "Restore rehearsal" "$rehearsal_state" "$rehearsal_detail"
+  if [[ "${DEPLOYMENT_MODE:-development}" != "development" && "$rehearsal_state" != "OK" ]]; then
+    release_state="WARN"
+  fi
   status_line "Release state" "$release_state" "$([[ "$release_state" == OK ]] && echo "ready for production use" || echo "review WARN rows before production use")"
   ui_box_end
 
@@ -14265,7 +14531,7 @@ show_command_audit() {
   status_line "Backup retention" "OK" "backup-retention-plan, backup-retention-status, cleanup-old-backups"
   status_line "Off-VM backup" "OK" "off-vm-backup-plan, configure-rsync-backup-target, run-off-vm-backup"
   status_line "Health monitoring" "OK" "health-check, configure-health-check-timer, health-check-status"
-  status_line "Restore safety" "OK" "restore-rehearsal-guide, restore-preflight, restore-db, restore-full"
+  status_line "Restore safety" "OK" "restore-rehearsal-guide, restore-rehearsal-status, restore-rehearsal-record, restore-preflight, restore-db, restore-full"
   status_line "Optional apps" "OK" "app-install-wizard, app-status, app-compatibility, install-payments, install-webshop, install-builder, install-lms, install-education, install-wiki, install-print-designer, install-drive, install-raven, advanced-app-tools"
   ui_box_end
   ui_next "$(toolkit_cmd release-readiness)" "$(toolkit_cmd help)"
@@ -14273,14 +14539,13 @@ show_command_audit() {
 
 show_release_notes_guide() {
   ui_box_start "v${SCRIPT_VERSION} Release Notes Draft"
-  echo "Release focus: production VPS guided setup UX fix."
+  echo "Release focus: restore rehearsal record/status tracking."
   echo
   echo "Changed in this release:"
-  echo "  - Added public-vm-guided-setup as the production README bootstrap target."
-  echo "  - Kept public-vm-quickstart as the manual Public VM menu."
-  echo "  - Routed the First Run wizard's Public VM choice to the guided production setup path."
-  echo "  - Added ordered production checkpoints: domain, DNS, cloud firewall/snapshot confirmation, install, backup, HTTPS, security, scheduled backups, off-VM backup review, optional apps, Final QA, support bundle, and post-validation snapshot reminder."
-  echo "  - Updated production validation docs to support Ubuntu 24.04 LTS or Ubuntu 26.04 LTS."
+  echo "  - Added restore-rehearsal-status, restore-rehearsal-record, and restore-rehearsal-report."
+  echo "  - Updated backup-status, backup-verify, production-checklist, and final QA to recognize recorded restore rehearsals."
+  echo "  - Treat restore VM IP as evidence only so local VM network changes do not invalidate the rehearsal record."
+  echo "  - Documented the completed local restore rehearsal and cleanup workflow."
   echo
   echo "Validation focus:"
   echo "  - Run the new README production command on a fresh disposable VPS with a real subdomain."
@@ -14312,6 +14577,7 @@ final_qa_wizard() {
     echo "4) Backup verify"
     echo "5) Release notes draft"
     echo "6) Create support bundle"
+    echo "7) Restore rehearsal status"
     menu_footer
     menu_read_choice choice
 
@@ -14322,6 +14588,7 @@ final_qa_wizard() {
       4) verify_latest_backup_set; pause_after_screen "Press Enter to return to Final QA..." ;;
       5) show_release_notes_guide; pause_after_screen "Press Enter to return to Final QA..." ;;
       6) create_support_bundle; pause_after_screen "Press Enter to return to Final QA..." ;;
+      7) show_restore_rehearsal_status; pause_after_screen "Press Enter to return to Final QA..." ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *)
@@ -15028,6 +15295,9 @@ Backup / Restore:
   service-recovery-plan Manual service recovery checklist
   restore-preflight   Safe restore readiness check
   restore-rehearsal-guide Safe restore test plan
+  restore-rehearsal-status Show recorded restore rehearsal status
+  restore-rehearsal-record Record completed restore rehearsal evidence on production VM
+  restore-rehearsal-report Print restore evidence from a disposable restore VM
   restore-rehearsal-wizard Guided off-VM restore rehearsal workflow
   restore-key-setup   Generate a temporary restore SSH key and exact backup-server command
   pull-off-vm-backup  Pull off-VM backups to this restore VM with rsync
@@ -15166,7 +15436,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -15267,6 +15537,9 @@ main() {
     backup-verify|verify-backups) verify_latest_backup_set ;;
     off-vm-backup-guide) show_off_vm_backup_guide ;;
     restore-rehearsal-guide) show_restore_rehearsal_guide ;;
+    restore-rehearsal-status) show_restore_rehearsal_status ;;
+    restore-rehearsal-record) record_restore_rehearsal ;;
+    restore-rehearsal-report) show_restore_rehearsal_report ;;
     production-checklist) show_production_checklist ;;
     release-readiness) show_release_readiness ;;
     command-audit) show_command_audit ;;

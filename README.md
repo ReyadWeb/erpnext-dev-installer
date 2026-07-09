@@ -840,7 +840,7 @@ Ubuntu 24.04 or 26.04
 Same ERPNext site name as production, for example erp.example.com
 ```
 
-The smooth v1.1.60 workflow is:
+The smooth v1.1.61 workflow is:
 
 ```text
 Production ERPNext VM: creates and pushes backups to the backup server.
@@ -925,7 +925,7 @@ sudo erpnext-dev restore-preflight
 sudo erpnext-dev restore-full
 ```
 
-In v1.1.60, `restore-full` detects the latest complete backup set and lets you press Enter/answer yes instead of manually pasting the database, public-files, and private-files filenames. When the local toolkit credentials file exists, the restore uses the local VM's `frappe_db_admin` credential automatically.
+In v1.1.60 and later, `restore-full` detects the latest complete backup set and lets you press Enter/answer yes instead of manually pasting the database, public-files, and private-files filenames. When the local toolkit credentials file exists, the restore uses the local VM's `frappe_db_admin` credential automatically.
 
 After restore completes, validate:
 
@@ -960,6 +960,30 @@ sudo erpnext-dev backup-server-remove-restore-key
 ```
 
 Temporary restore keys should not stay on the backup server after the rehearsal is complete.
+
+### 7. Record the completed restore rehearsal on production
+
+After the restore succeeds and the temporary restore key is removed, record the result on the production ERPNext VM:
+
+```bash
+sudo erpnext-dev restore-rehearsal-record
+sudo erpnext-dev restore-rehearsal-status
+sudo erpnext-dev production-checklist
+```
+
+The record is saved at:
+
+```text
+/etc/erpnext-dev/restore-rehearsal.env
+```
+
+The restore VM IP/address is stored only as evidence. It may change if the local VM uses another internet connection or network. A changed restore VM IP does not invalidate the rehearsal record; the important evidence is the restored site, backup set, restore result, and cleanup of the temporary backup-server key.
+
+On the restore VM, this helper prints evidence and a ready-to-copy production-side record command:
+
+```bash
+sudo erpnext-dev restore-rehearsal-report
+```
 
 
 ---

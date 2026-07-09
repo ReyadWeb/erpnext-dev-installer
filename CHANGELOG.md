@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.1.61 - Restore rehearsal record/status tracking
+
+### Changed
+
+- Updated the toolkit version to v1.1.61.
+- Added `restore-rehearsal-status` to show whether a successful disposable-VM restore rehearsal has been recorded on the production VM.
+- Added `restore-rehearsal-record` to save restore rehearsal metadata in `/etc/erpnext-dev/restore-rehearsal.env`.
+- Added `restore-rehearsal-report` to print restore evidence from the disposable restore VM and produce the production-side record command.
+- Updated `backup-status`, `backup-verify`, `production-checklist`, and `release-readiness` so they no longer show stale restore warnings after a rehearsal is recorded.
+- Treated restore VM IP/address as evidence only, because local restore VM IPs can change when using a different network.
+- Updated README, TESTING, ROADMAP, and PRODUCTION-VALIDATION with the restore rehearsal record/status workflow.
+
+### Validated
+
+- Temporary local restore key was removed from the backup server after the manual restore rehearsal.
+- Local restore VM authentication to the backup server failed after cleanup, as expected.
+- Production ERPNext VPS still retained off-VM backup access after cleanup.
+- `off-vm-backup-status` and `off-vm-backup-dry-run` passed on the production VPS after temporary-key cleanup.
+- The remaining improvement is to record the completed rehearsal on the production VPS using `restore-rehearsal-record`.
+
 ## v1.1.60 - Guided restore rehearsal automation
 
 ### Changed

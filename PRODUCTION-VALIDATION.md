@@ -1,3 +1,32 @@
+## v1.1.61 restore rehearsal record/status validation
+
+The restore rehearsal was technically completed in v1.1.60, but production status commands still showed stale warnings because the production VPS had no local record of the external restore drill. v1.1.61 adds explicit recording and status tracking.
+
+New production-side record file:
+
+```text
+/etc/erpnext-dev/restore-rehearsal.env
+```
+
+New commands:
+
+```bash
+sudo erpnext-dev restore-rehearsal-report   # run on disposable restore VM
+sudo erpnext-dev restore-rehearsal-record   # run on production ERPNext VM
+sudo erpnext-dev restore-rehearsal-status   # run on production ERPNext VM
+```
+
+Important operational note: the restore VM IP/address is evidence only. It may change when the local restore VM uses a different network or internet connection. The rehearsal record should rely on site name, backup set, restore result, and validation status rather than treating the restore VM IP as a permanent trust anchor.
+
+Cleanup validation after the local restore drill:
+
+```text
+Backup server authorized_keys after cleanup: only production VPS key remains
+Local restore VM backup-server SSH after cleanup: Permission denied, expected
+Production VPS off-vm-backup-status: OK
+Production VPS off-vm-backup-dry-run: OK
+```
+
 ## v1.1.60 local restore rehearsal validation record
 
 A disposable local KVM restore VM was used to rehearse restoring from the off-VM backup server. This validates backup usability without touching production DNS or restoring onto the live ERPNext VPS.

@@ -1,3 +1,36 @@
+## v1.1.61 restore rehearsal record/status validation
+
+Purpose: remove stale restore warnings after a successful disposable-VM restore rehearsal by recording the rehearsal result on the production VM.
+
+Package checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh --help | grep -n "restore-rehearsal-status"
+./erpnext-dev.sh --help | grep -n "restore-rehearsal-record"
+./erpnext-dev.sh --help | grep -n "restore-rehearsal-report"
+printf 'q
+' | sudo ./erpnext-dev.sh final-qa
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.61`.
+- Help lists `restore-rehearsal-status`, `restore-rehearsal-record`, and `restore-rehearsal-report`.
+- Final QA includes restore rehearsal status.
+- `backup-status`, `backup-verify`, `production-checklist`, and `release-readiness` show recorded restore rehearsal status after `/etc/erpnext-dev/restore-rehearsal.env` exists.
+
+Validated field result after manual restore rehearsal:
+
+```text
+Temporary local restore key removed from backup server: PASS
+Local restore VM SSH access to backup server after cleanup: denied as expected
+Production ERPNext VPS off-VM backup status after cleanup: PASS
+Production ERPNext VPS off-VM backup dry run after cleanup: PASS
+Restore VM IP/address changed by network: treated as evidence only, not a trust dependency
+```
+
 ## v1.1.60 restore rehearsal automation validation
 
 Purpose: smooth and automate the off-VM restore rehearsal flow after proving that the manual local restore path works.

@@ -1,3 +1,23 @@
+## v1.1.61 restore rehearsal status tracking
+
+Status: focused production-readiness polish.
+
+- Add restore rehearsal record/status/report commands.
+- Update production checklist and final QA so completed restore rehearsals are recognized instead of repeatedly showing stale warnings.
+- Store restore rehearsal metadata on the production VM in `/etc/erpnext-dev/restore-rehearsal.env`.
+- Treat restore VM IP as optional evidence only, because local VM networking can change.
+- Keep the next production hardening items focused on health timer monitoring, cloud snapshot policy, and periodic restore-drill repetition after major upgrades.
+
+Updated readiness after v1.1.61:
+
+| Case | Rating | Interpretation |
+| --- | ---: | --- |
+| Local VM / developer workflow | 9.5/10 | Passed and stable |
+| Public VPS guided production workflow | 9.4/10 | Real production path validated |
+| Off-VM backup workflow | 9.3/10 | Separate backup server and rsync dry/run validated |
+| Restore rehearsal workflow | 9.1/10 | Restore works and now has record/status tracking |
+| Full production readiness | 9.3/10 | Remaining items are operational: health timer, firewall policy confirmation, named snapshot policy |
+
 ## v1.1.60 completed restore rehearsal automation
 
 Status: implementation package ready after successful local restore rehearsal.
