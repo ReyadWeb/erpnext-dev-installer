@@ -10,6 +10,7 @@ if ! command -v shellcheck >/dev/null 2>&1; then
 fi
 
 targets=(
+  erpnext-dev.sh
   lib/common.sh
   lib/config.sh
   lib/access.sh

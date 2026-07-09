@@ -1,3 +1,48 @@
+# v1.2.1 roadmap update - professional evaluation and maintenance patch
+
+Status: **implemented**.
+
+## Where the project stands (July 2026)
+
+A full professional evaluation was performed against the live tree at v1.2.0. Summary of evidence:
+
+- **Structure:** `erpnext-dev.sh` is now a ~1,010-line bootstrap/dispatcher sourcing 16 `lib/*.sh` modules (~16,900 lines total). Phase B modularization is complete; the former monolith risk is retired.
+- **Static checks:** `bash -n` passes for all 20 shell files. No duplicate function definitions across modules. No `eval`, no `TODO`/`FIXME`, no trailing whitespace. Zero SC2155-style `local x=$(...)` patterns across 257 `local` assignments — declaration and command-substitution are consistently separated.
+- **Release integrity:** `scripts/validate-release.sh` passes end to end, including `SHA256SUMS` verification of every listed artifact, version-consistency checks, help-command coverage, and the support-bundle audit fixture.
+- **Secrets:** no private keys or credential files are git-tracked; `.gitignore` covers `*.key`, `*.crt`, and credential files.
+
+## Findings addressed in v1.2.1
+
+1. **shellcheck coverage gap (fixed).** `scripts/run-shellcheck.sh` linted all 16 `lib/*.sh` modules and the 3 scripts but omitted the main `erpnext-dev.sh` entry point — even though that file already carries `# shellcheck source=...` directives. The largest dispatched surface was unlinted in CI. `erpnext-dev.sh` is now a shellcheck target.
+2. **Duplicate `.gitignore` block (fixed).** The `# Local release handoff notes` / `GITHUB-UPDATE-v*.md` pair was listed twice; de-duplicated.
+3. **Stale quality assessment (fixed).** `QUALITY-ASSESSMENT.md` still listed the "16,500-line monolith" as a live High/P1 risk after modularization was complete. The document now reflects the modular architecture and records the new hygiene backlog.
+
+## Findings tracked as backlog (deferred, not bugs)
+
+These are confirmed but intentionally deferred to avoid unverifiable churn in a single patch:
+
+- **F3 — ~16 unreferenced helper functions.** Confirmed dead (each has exactly one mention — its definition): `start_erpnext`, `ui_note`, `show_host_dns_guide`, `show_access_when_ready`, `read_multiline_secret_to_file`, `production_certificate_subject`, `production_ssl_is_configured`, `backup_find_latest`, `backup_schedule_unit_paths`, `off_vm_backup_rsync_command`, `firewall_latest_snapshot`, and five `storage_*` helpers. No runtime impact; removal changes checksums across 7 modules and should land as its own reviewed patch.
+- **F4/F6 — module-list drift.** The module list is hand-maintained in four places (the `source` block in `erpnext-dev.sh`, `generate-release-checksums.sh`, `run-shellcheck.sh`, and `toolkit_release_lib_files()` in `lib/security.sh`) plus `RELEASE-MANIFEST.txt`. They are currently consistent, but a single source of truth plus a CI consistency check would prevent future drift.
+- **F5 — shellcheck severity.** CI gates at `-S error` only, which passes over warning-level findings (unquoted expansions, etc.). Raising to `-S warning` after triage would tighten the net.
+
+## Next active milestone
+
+1. **v1.2.x — Phase D integration testing** (disposable VM CI, Ubuntu 24.04 + 26.04, post-install smoke). This is the enterprise-confidence inflection point: it converts "field-validated by the maintainer" into "continuously verified on every tag."
+
+Suggested Phase D increments:
+
+| Step | Deliverable |
+|---|---|
+| D-prep | Split `validate-release.sh` smoke into a reusable job; document required VM secrets |
+| D1 | Disposable VM integration job (on tag, optionally weekly) |
+| D2 | Ubuntu 24.04 + 26.04 matrix |
+| D3 | Post-install smoke (`doctor --json`, site reachable, service active) in CI |
+| D4 | Optional restore-rehearsal job (P2) |
+
+After Phase D, the highest-ROI items are the Phase F hygiene tasks (dead-code removal, module-list single-source), GPG-signed releases (A5), and operator-experience items (E1–E5).
+
+---
+
 # v1.2.0 roadmap update - Phase C security hardening
 
 Status: **implemented**.

@@ -1,6 +1,6 @@
 # ERPNext Developer Toolkit — Quality Assessment
 
-**Version assessed:** v1.2.0  
+**Version assessed:** v1.2.1  
 **Assessment date:** July 9, 2026  
 **Scope:** `erpnext-dev.sh` and the release/operations package around it
 
@@ -21,15 +21,15 @@ Related planning documents:
 
 The ERPNext Developer Toolkit is **above average for community ERPNext installers** and **unusually strong for post-install operations**. It goes well beyond “get bench running” and covers SSL, firewall hardening, backups, off-VM replication, restore rehearsal, health checks, production QA, and operator dashboards.
 
-Its main weaknesses are **structural** (monolithic ~16,500-line script, limited automated integration testing) and **supply-chain** (root execution of downloaded code with SHA256-only integrity). Field validation on a real production stack is a major differentiator that most comparable tools lack.
+As of v1.2.0 the original ~16,500-line monolith has been fully modularized: `erpnext-dev.sh` is now a ~1,010-line bootstrap/dispatcher that sources 16 focused `lib/*.sh` modules. The remaining weaknesses are **release-regression coverage** (CI is smoke-only; no real ERPNext install in CI yet) and **supply-chain** (root execution of downloaded code with SHA256-only integrity, no GPG signing). Field validation on a real production stack is a major differentiator that most comparable tools lack.
 
 | Dimension | Score | Tier |
 |---|---:|---|
 | **Reliability (operations)** | **8.8 / 10** | Strong |
-| **Reliability (release engineering)** | **7.0 / 10** | Improving (v1.1.74+) |
-| **Security** | **7.0 / 10** | Good with known gaps |
+| **Reliability (release engineering)** | **7.5 / 10** | Improving (modular + CI-linted) |
+| **Security** | **7.3 / 10** | Good with known supply-chain gaps |
 | **Ease of use** | **8.5 / 10** | Strong for guided flows |
-| **Overall vs peers** | **8.3 / 10** | Top tier for VM ops |
+| **Overall vs peers** | **8.4 / 10** | Top tier for VM ops |
 
 ---
 
@@ -72,10 +72,13 @@ Its main weaknesses are **structural** (monolithic ~16,500-line script, limited 
 
 | Gap | Risk | Impact |
 |---|---|---|
-| **16,500-line monolith** | High | Shared-helper changes can break unrelated commands |
 | **CI is smoke-only** | Medium | No real ERPNext install in CI yet |
 | **Manual release gate still primary** | Medium | Field QA remains the safety net for behavior changes |
 | **No integration test VM** | Medium | Upstream package changes can break installs silently |
+| **Module list duplicated across 4 files** | Low–Medium | Source block, checksum list, shellcheck list, and `toolkit_release_lib_files()` must be hand-synced |
+| **~16 unreferenced helper functions** | Low | Dead code adds audit surface; no runtime impact |
+
+*Resolved in v1.1.75–v1.2.0:* the previous **~16,500-line monolith** (formerly the top structural risk) is now split into `erpnext-dev.sh` (~1,010 lines) plus 16 `lib/*.sh` modules, each guarded against double-sourcing and linted in CI (main entry added to shellcheck in v1.2.1).
 
 ### Reliability vs Peers
 
@@ -110,9 +113,10 @@ Its main weaknesses are **structural** (monolithic ~16,500-line script, limited 
 |---|---|---|---|
 | **P0** | Bootstrap trust (`curl` + `sudo`) | SHA256 + tag pinning + `verify-toolkit` | Compromised release can defeat SHA256-only checks |
 | **P1** | Plaintext credentials on disk | `credentials-secure`, `credentials-delete` | Operator may leave secrets on VM |
-| **P1** | Heuristic support-bundle redaction | `support-bundle-audit` | Custom secret formats may leak |
-| **P1** | Monolithic root script | Planned modularization | Large audit surface |
+| **P1** | Heuristic support-bundle redaction | `support-bundle-audit` (expanded v1.2.0) | Custom secret formats may leak |
 | **P2** | No GPG-signed releases | Planned | No maintainer identity verification |
+
+*Resolved (v1.2.0):* the monolithic root script has been modularized into 16 `lib/*.sh` modules plus a thin dispatcher, materially reducing the per-change audit surface.
 
 ### Security vs Peers
 
@@ -179,7 +183,7 @@ Its main weaknesses are **structural** (monolithic ~16,500-line script, limited 
 
 ## 5. Improvement Plan
 
-Prioritized by impact and dependency order. Status as of v1.1.74.
+Prioritized by impact and dependency order. Status as of v1.2.1 (Phases A–C complete; Phase D next).
 
 ### Phase A — Release Trust & Regression Prevention
 
@@ -240,6 +244,17 @@ Prioritized by impact and dependency order. Status as of v1.1.74.
 | E4 | Health alert hooks (email/webhook) | P2 | Planned |
 | E5 | `update-preflight` + `safe-update-wizard` | P2 | Planned |
 
+### Phase F — Code Hygiene & Maintainability (from v1.2.1 evaluation)
+
+| # | Task | Priority | Status |
+|---|---|---|---|
+| F1 | Add `erpnext-dev.sh` to shellcheck targets | P1 | **Done (v1.2.1)** |
+| F2 | Fix duplicated `.gitignore` entries | P2 | **Done (v1.2.1)** |
+| F3 | Remove ~16 unreferenced helper functions (dead code) | P2 | Planned |
+| F4 | Single source of truth for the module list (source block, `SHA256SUMS`, shellcheck, `toolkit_release_lib_files()`) | P2 | Planned |
+| F5 | Raise shellcheck gate from `-S error` to `-S warning` (fix or annotate findings) | P2 | Planned |
+| F6 | CI check that all four module lists agree | P2 | Planned |
+
 ---
 
 ## 6. Recommended Implementation Order
@@ -279,3 +294,4 @@ Its competitive advantage is **operational completeness and guided UX**, not min
 | Date | Version | Change |
 |---|---|---|
 | 2026-07-09 | v1.1.74 | Initial assessment; Phase A tasks implemented |
+| 2026-07-09 | v1.2.1 | Re-evaluation after Phases B–C: modularization complete, monolith risk retired, CI shellcheck extended to main entry; logged dead-code and module-list-drift cleanup tasks |

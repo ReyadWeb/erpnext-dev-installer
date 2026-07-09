@@ -1,3 +1,25 @@
+## v1.2.1 - Maintenance: shellcheck coverage and repo hygiene
+
+### Fixed
+
+- `scripts/run-shellcheck.sh` now lints the main `erpnext-dev.sh` entry point. It was previously omitted from the shellcheck target list even though the file already carries `# shellcheck source=...` directives, leaving the toolkit's largest dispatched surface unlinted in CI.
+- Removed duplicated `# Local release handoff notes` / `GITHUB-UPDATE-v*.md` block from `.gitignore`.
+
+### Changed
+
+- Updated the toolkit version to v1.2.1.
+- Regenerated `SHA256SUMS` for the updated `erpnext-dev.sh` and `scripts/run-shellcheck.sh`.
+
+### Notes
+
+- No runtime behavior changes; this is a release-engineering and hygiene patch. A full professional evaluation (v1.2.1) recorded 16 unreferenced helper functions and module-list duplication across four files as tracked cleanup tasks in `ROADMAP.md`; these are deferred to avoid unverifiable churn in a single patch.
+
+### Validation scope
+
+- `bash -n` passes for all shell files.
+- `erpnext-dev version` prints v1.2.1.
+- `scripts/validate-release.sh` passes locally.
+
 ## v1.2.0 - Phase C security hardening
 
 ### Added
