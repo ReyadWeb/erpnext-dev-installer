@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.1.62"
+SCRIPT_VERSION="1.1.63"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -115,6 +115,7 @@ RESTORE_AUTHORIZED_KEYS_USER="${RESTORE_AUTHORIZED_KEYS_USER:-erpbackup}"
 OFF_VM_BACKUP_RSYNC_DELETE="${OFF_VM_BACKUP_RSYNC_DELETE:-false}"
 HEALTH_CHECK_SERVICE="${HEALTH_CHECK_SERVICE:-erpnext-dev-health-check.service}"
 HEALTH_CHECK_TIMER="${HEALTH_CHECK_TIMER:-erpnext-dev-health-check.timer}"
+HEALTH_CHECK_STATE_FILE="${HEALTH_CHECK_STATE_FILE:-/etc/erpnext-dev/health-check.state}"
 HEALTH_CHECK_ON_CALENDAR="${HEALTH_CHECK_ON_CALENDAR:-hourly}"
 HEALTH_CHECK_RANDOM_DELAY="${HEALTH_CHECK_RANDOM_DELAY:-10m}"
 HEALTH_CHECK_DISK_WARN_PERCENT="${HEALTH_CHECK_DISK_WARN_PERCENT:-80}"
@@ -242,7 +243,7 @@ acquire_toolkit_lock() {
 action_requires_lock() {
   local action="${1:-menu}"
   case "$action" in
-    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|security-mode-status|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|local-access-doctor|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|host-dns-guide|print-hosts-command|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|firewall-rollback-snapshots|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|repair-site-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
+    ""|menu|first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|guided-setup|setup|install|repair|start|stop|uninstall|advanced|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|health-check-run-now|configure-health-check-timer|health-check-status|health-check-journal|disable-health-check-timer|health-monitoring-wizard|production-monitoring-wizard|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|operations-wizard|ops-wizard|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|disable-production-ssl|configure-vm-firewall|vm-firewall-wizard|security-hardening-wizard|security-mode-status|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|local-access-doctor|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|host-dns-guide|print-hosts-command|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|firewall-rollback-snapshots|configure-fail2ban|ufw-ssh-admin-only|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|repair-site-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|expand-root-storage|app-library|apps|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|repair-app-registry|install-cli|repair-cli|update-toolkit)
       return 0
       ;;
     *)
@@ -14052,6 +14053,48 @@ health_backup_age_hours() {
   fi
 }
 
+
+health_state_value() {
+  local key="$1"
+  [[ -f "$HEALTH_CHECK_STATE_FILE" ]] || return 0
+  grep -E "^${key}=" "$HEALTH_CHECK_STATE_FILE" 2>/dev/null | tail -n 1 | cut -d= -f2-
+}
+
+health_check_write_state() {
+  local overall="$1" installed="$2" runtime="$3" ssl_status="$4" disk_percent="$5" backup_state="$6" backup_age="$7" off_status="$8"
+  mkdir -p "$(dirname "$HEALTH_CHECK_STATE_FILE")"
+  cat > "$HEALTH_CHECK_STATE_FILE" <<EOF_HEALTH_STATE
+HEALTH_CHECK_STATUS=${overall}
+HEALTH_CHECK_RECORDED_AT=$(date -Iseconds)
+HEALTH_CHECK_SITE=${SITE_NAME}
+HEALTH_CHECK_DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-unknown}
+HEALTH_CHECK_INSTALL=${installed}
+HEALTH_CHECK_RUNTIME=${runtime}
+HEALTH_CHECK_HTTPS_STATUS=${ssl_status}
+HEALTH_CHECK_DISK_PERCENT=${disk_percent}
+HEALTH_CHECK_BACKUP_STATUS=${backup_state}
+HEALTH_CHECK_BACKUP_AGE_HOURS=${backup_age}
+HEALTH_CHECK_OFF_VM_STATUS=${off_status}
+HEALTH_CHECK_TOOLKIT_VERSION=${SCRIPT_VERSION}
+EOF_HEALTH_STATE
+  chmod 600 "$HEALTH_CHECK_STATE_FILE" 2>/dev/null || true
+}
+
+health_check_summary_pair() {
+  local status recorded site age
+  status="$(health_state_value HEALTH_CHECK_STATUS)"
+  recorded="$(health_state_value HEALTH_CHECK_RECORDED_AT)"
+  site="$(health_state_value HEALTH_CHECK_SITE)"
+  age="$(health_state_value HEALTH_CHECK_BACKUP_AGE_HOURS)"
+  if [[ -z "$status" ]]; then
+    echo "INFO|no recorded health check yet"
+  elif [[ "$status" == "OK" ]]; then
+    echo "OK|last check OK at ${recorded:-unknown}; site ${site:-unknown}; backup age ${age:-unknown}h"
+  else
+    echo "WARN|last check ${status} at ${recorded:-unknown}; review health-check output"
+  fi
+}
+
 run_health_check() {
   require_sudo
 
@@ -14170,12 +14213,15 @@ run_health_check() {
     off_last_run="$(off_vm_backup_last_state LAST_RUN_AT 2>/dev/null || echo never)"
     status_line "Off-VM backup" "$([[ "$off_last_status" == OK ]] && echo OK || echo INFO)" "configured; last run ${off_last_status} at ${off_last_run}"
   else
+    off_last_status="not_configured"
     status_line "Off-VM backup" "INFO" "not configured"
   fi
 
+  health_check_write_state "$overall" "$installed" "$runtime" "$ssl_status" "$disk_percent" "$backup_state" "$backup_age" "$off_last_status"
+  status_line "State file" "OK" "$HEALTH_CHECK_STATE_FILE"
   status_line "Overall" "$overall" "$([[ "$overall" == OK ]] && echo "healthy" || echo "review WARN rows")"
   ui_box_end
-  ui_next "$(toolkit_cmd health-check-status)" "$(toolkit_cmd production-checklist)"
+  ui_next "$(toolkit_cmd health-check-status)" "$(toolkit_cmd health-monitoring-wizard)" "$(toolkit_cmd production-checklist)"
 }
 
 configure_health_check_timer() {
@@ -14193,6 +14239,14 @@ configure_health_check_timer() {
   status_line "Command" "INFO" "${INSTALLER_CANONICAL_PATH} health-check"
   echo
   echo "This creates a local systemd timer that periodically runs a read-only health check."
+  echo "Press Enter to accept the suggested schedule. Examples: hourly, daily, *-*-* 03:00:00"
+  local schedule_reply delay_reply run_now_reply
+  read -r -p "Health check schedule [${HEALTH_CHECK_ON_CALENDAR}]: " schedule_reply || schedule_reply=""
+  [[ -n "$schedule_reply" ]] && HEALTH_CHECK_ON_CALENDAR="$schedule_reply"
+  read -r -p "Randomized delay [${HEALTH_CHECK_RANDOM_DELAY}]: " delay_reply || delay_reply=""
+  [[ -n "$delay_reply" ]] && HEALTH_CHECK_RANDOM_DELAY="$delay_reply"
+  echo
+  status_line "Selected schedule" "INFO" "OnCalendar=${HEALTH_CHECK_ON_CALENDAR}; RandomizedDelaySec=${HEALTH_CHECK_RANDOM_DELAY}"
   if ! confirm "Configure health check timer now?" "n"; then
     ui_box_end
     return 0
@@ -14232,12 +14286,16 @@ EOF_HEALTH_TIMER
   status_line "Timer" "INFO" "${HEALTH_CHECK_TIMER}"
   status_line "Schedule" "INFO" "${HEALTH_CHECK_ON_CALENDAR}"
   ui_box_end
+  read -r -p "Run a health check now? [Y/n]: " run_now_reply || run_now_reply=""
+  if [[ -z "$run_now_reply" || "$run_now_reply" =~ ^[Yy]$|^[Yy][Ee][Ss]$ ]]; then
+    run_health_check
+  fi
   ui_next "$(toolkit_cmd health-check-status)" "systemctl list-timers ${HEALTH_CHECK_TIMER} --all"
 }
 
 show_health_check_status() {
   require_sudo
-  local service_file timer_file enabled active next_line last_status
+  local service_file timer_file enabled active next_line last_status state_pair state_status state_detail
   service_file="$(health_check_unit_paths | sed -n '1p')"
   timer_file="$(health_check_unit_paths | sed -n '2p')"
   enabled="disabled"
@@ -14246,6 +14304,9 @@ show_health_check_status() {
   health_check_timer_active && active="active"
   next_line="$(systemctl list-timers "${HEALTH_CHECK_TIMER}" --all --no-pager 2>/dev/null | awk 'NR==2 {print $1" "$2" "$3" "$4}' || true)"
   last_status="$(systemctl show "${HEALTH_CHECK_SERVICE}" -p Result --value 2>/dev/null || echo unknown)"
+  state_pair="$(health_check_summary_pair)"
+  state_status="${state_pair%%|*}"
+  state_detail="${state_pair#*|}"
 
   ui_box_start "Health Check Timer Status"
   status_line "Service file" "$([[ -f "$service_file" ]] && echo OK || echo WARN)" "$service_file"
@@ -14255,12 +14316,58 @@ show_health_check_status() {
   status_line "Schedule" "INFO" "${HEALTH_CHECK_ON_CALENDAR}"
   status_line "Last service result" "INFO" "${last_status:-unknown}"
   status_line "Next run" "INFO" "${next_line:-not scheduled}"
+  status_line "Last health check" "$state_status" "$state_detail"
+  status_line "State file" "$([[ -f "$HEALTH_CHECK_STATE_FILE" ]] && echo OK || echo INFO)" "$HEALTH_CHECK_STATE_FILE"
   echo
   echo "Useful commands:"
   echo "  systemctl list-timers ${HEALTH_CHECK_TIMER} --all"
   echo "  journalctl -u ${HEALTH_CHECK_SERVICE} --no-pager -n 80"
-  ui_next "$(toolkit_cmd health-check)" "$(toolkit_cmd service-recovery-plan)"
+  echo "  sudo $(active_toolkit_path) health-check"
+  echo "  sudo $(active_toolkit_path) health-check-journal"
+  ui_next "$(toolkit_cmd health-check)" "$(toolkit_cmd health-monitoring-wizard)" "$(toolkit_cmd service-recovery-plan)"
   ui_box_end
+}
+
+show_health_check_journal() {
+  require_sudo
+  ui_box_start "Health Check Journal"
+  status_line "Service" "INFO" "${HEALTH_CHECK_SERVICE}"
+  echo
+  if command -v journalctl >/dev/null 2>&1; then
+    journalctl -u "${HEALTH_CHECK_SERVICE}" --no-pager -n 120 || true
+  else
+    status_line "journalctl" "WARN" "not available"
+  fi
+  ui_box_end
+  ui_next "$(toolkit_cmd health-check-status)" "$(toolkit_cmd health-monitoring-wizard)"
+}
+
+health_monitoring_wizard() {
+  require_sudo
+  while true; do
+    ui_box_start "Health Monitoring"
+    echo "1) Run health check now"
+    echo "2) Configure health timer"
+    echo "3) Health timer/status"
+    echo "4) Health check journal"
+    echo "5) Disable health timer"
+    echo "6) Service recovery plan"
+    echo "7) Production checklist"
+    menu_footer
+    menu_read_choice health_choice
+    case "$health_choice" in
+      1) run_health_check; pause_after_screen "Press Enter to return to Health Monitoring..." ;;
+      2) configure_health_check_timer; pause_after_screen "Press Enter to return to Health Monitoring..." ;;
+      3) show_health_check_status; pause_after_screen "Press Enter to return to Health Monitoring..." ;;
+      4) show_health_check_journal; pause_after_screen "Press Enter to return to Health Monitoring..." ;;
+      5) disable_health_check_timer; pause_after_screen "Press Enter to return to Health Monitoring..." ;;
+      6) show_service_recovery_plan; pause_after_screen "Press Enter to return to Health Monitoring..." ;;
+      7) show_production_checklist; pause_after_screen "Press Enter to return to Health Monitoring..." ;;
+      b|B|"") return 0 ;;
+      q|Q) exit 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
 }
 
 disable_health_check_timer() {
@@ -14325,6 +14432,7 @@ production_ops_wizard() {
     echo "18) Backup verify"
     echo "19) Restore preflight"
     echo "20) Support bundle"
+    echo "21) Health monitoring wizard"
     menu_footer
     menu_read_choice ops_choice
     case "$ops_choice" in
@@ -14348,6 +14456,7 @@ production_ops_wizard() {
       18) verify_latest_backup_set; pause_after_screen "Press Enter to return to Production Operations..." ;;
       19) show_restore_preflight; pause_after_screen "Press Enter to return to Production Operations..." ;;
       20) create_support_bundle; pause_after_screen "Press Enter to return to Production Operations..." ;;
+      21) health_monitoring_wizard; pause_after_screen "Press Enter to return to Production Operations..." ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *) warn "Invalid option" ;;
@@ -14420,7 +14529,12 @@ show_production_checklist() {
   rehearsal_detail="${rehearsal_pair#*|}"
   status_line "Restore rehearsal" "$rehearsal_state" "$rehearsal_detail"
   if health_check_timer_active; then
+    local health_pair health_state health_detail
+    health_pair="$(health_check_summary_pair)"
+    health_state="${health_pair%%|*}"
+    health_detail="${health_pair#*|}"
     status_line "Health timer" "OK" "active"
+    status_line "Health check" "$health_state" "$health_detail"
   else
     status_line "Health timer" "INFO" "not configured; optional"
   fi
@@ -14435,7 +14549,11 @@ show_production_checklist() {
     echo "  - Restore rehearsal recorded; repeat after major upgrade, migration, or backup-policy change."
   fi
   echo "  - Confirm scheduled local backups and retention policy."
-  echo "  - Configure health timer if ongoing monitoring is required."
+  if health_check_timer_active; then
+    echo "  - Health timer active; review health-check-status after major changes."
+  else
+    echo "  - Configure health timer if ongoing monitoring is required."
+  fi
   echo "  - Confirm cloud firewall: 22 admin IP, 80/443 allowed, 8000/9000 blocked."
   echo "  - Confirm Cloudflare SSL mode and DNS proxy state."
   echo "  - Create named cloud snapshot after final validation."
@@ -14508,6 +14626,15 @@ show_release_readiness() {
   if [[ "${DEPLOYMENT_MODE:-development}" != "development" && "$rehearsal_state" != "OK" ]]; then
     release_state="WARN"
   fi
+  if health_check_timer_active; then
+    local health_pair health_state health_detail
+    health_pair="$(health_check_summary_pair)"
+    health_state="${health_pair%%|*}"
+    health_detail="${health_pair#*|}"
+    status_line "Health monitoring" "OK" "timer active; ${health_detail}"
+  else
+    status_line "Health monitoring" "INFO" "timer not configured; optional"
+  fi
   status_line "Release state" "$release_state" "$([[ "$release_state" == OK ]] && echo "ready for production use" || echo "review WARN rows before production use")"
   ui_box_end
 
@@ -14530,7 +14657,7 @@ show_command_audit() {
   status_line "Scheduled backups" "OK" "backup-schedule-plan, configure-backup-schedule, backup-schedule-status, scheduled-backup-status"
   status_line "Backup retention" "OK" "backup-retention-plan, backup-retention-status, cleanup-old-backups"
   status_line "Off-VM backup" "OK" "off-vm-backup-plan, configure-rsync-backup-target, run-off-vm-backup"
-  status_line "Health monitoring" "OK" "health-check, configure-health-check-timer, health-check-status"
+  status_line "Health monitoring" "OK" "health-monitoring-wizard, health-check, configure-health-check-timer, health-check-status, health-check-journal"
   status_line "Restore safety" "OK" "restore-rehearsal-guide, restore-rehearsal-status, restore-rehearsal-record, restore-preflight, restore-db, restore-full"
   status_line "Optional apps" "OK" "app-install-wizard, app-status, app-compatibility, install-payments, install-webshop, install-builder, install-lms, install-education, install-wiki, install-print-designer, install-drive, install-raven, advanced-app-tools"
   ui_box_end
@@ -14539,13 +14666,13 @@ show_command_audit() {
 
 show_release_notes_guide() {
   ui_box_start "v${SCRIPT_VERSION} Release Notes Draft"
-  echo "Release focus: restore rehearsal record/status tracking."
+  echo "Release focus: health timer and production monitoring workflow."
   echo
   echo "Changed in this release:"
-  echo "  - Added restore-rehearsal-status, restore-rehearsal-record, and restore-rehearsal-report."
-  echo "  - Updated backup-status, backup-verify, production-checklist, and final QA to recognize recorded restore rehearsals."
-  echo "  - Treat restore VM IP as evidence only so local VM network changes do not invalidate the rehearsal record."
-  echo "  - Documented the completed local restore rehearsal and cleanup workflow."
+  echo "  - Added health-monitoring-wizard and health-check-journal."
+  echo "  - Health checks now write /etc/erpnext-dev/health-check.state for status tracking."
+  echo "  - Health timer setup now prompts for schedule/randomized delay and can run a check immediately."
+  echo "  - Production checklist and final QA now surface health monitoring status."
   echo
   echo "Validation focus:"
   echo "  - Run the new README production command on a fresh disposable VPS with a real subdomain."
@@ -14578,6 +14705,7 @@ final_qa_wizard() {
     echo "5) Release notes draft"
     echo "6) Create support bundle"
     echo "7) Restore rehearsal status"
+    echo "8) Health monitoring status"
     menu_footer
     menu_read_choice choice
 
@@ -14589,6 +14717,7 @@ final_qa_wizard() {
       5) show_release_notes_guide; pause_after_screen "Press Enter to return to Final QA..." ;;
       6) create_support_bundle; pause_after_screen "Press Enter to return to Final QA..." ;;
       7) show_restore_rehearsal_status; pause_after_screen "Press Enter to return to Final QA..." ;;
+      8) show_health_check_status; pause_after_screen "Press Enter to return to Final QA..." ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *)
@@ -15110,6 +15239,7 @@ menu_navigation_self_test() {
     backup-hardening-wizard
     off-vm-backup-wizard
     production-ops-wizard
+    health-monitoring-wizard
     security-hardening-wizard
     final-qa-wizard
     uninstall
@@ -15142,6 +15272,7 @@ menu_navigation_self_test() {
     backup-hardening-wizard
     off-vm-backup-wizard
     production-ops-wizard
+    health-monitoring-wizard
     security-hardening-wizard
     final-qa-wizard
   )
@@ -15168,6 +15299,7 @@ menu_navigation_self_test() {
     "menu|9|q"
     "menu|12|q"
     "menu|13|q"
+    "health-monitoring-wizard|3|q"
   )
   local row root select quit
   for row in "${nested_tests[@]}"; do
@@ -15289,9 +15421,12 @@ Backup / Restore:
   run-off-vm-backup   Copy backups to configured off-VM target
   off-vm-backup-status Show off-VM backup configuration/status
   off-vm-backup-guide Commands to copy backups off this VM
+  health-monitoring-wizard Guided health timer and monitoring workflow
   health-check       Compact production health check
+  health-check-run-now Alias for health-check
   configure-health-check-timer Enable periodic health checks with systemd
-  health-check-status Show health check timer status
+  health-check-status Show health check timer and last health status
+  health-check-journal Show recent health-check systemd journal output
   service-recovery-plan Manual service recovery checklist
   restore-preflight   Safe restore readiness check
   restore-rehearsal-guide Safe restore test plan
@@ -15436,7 +15571,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|configure-health-check-timer|health-check-status|disable-health-check-timer|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|access-info|education-access-info|portal-access-info|desk-url|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|health-check|health-check-run-now|configure-health-check-timer|health-check-status|health-check-journal|disable-health-check-timer|health-monitoring-wizard|production-monitoring-wizard|service-recovery-plan|restore-preflight|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-ops-wizard|operations-wizard|ops-wizard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|wait-ready|menu|help|-h|--help|version|--version|where-installed|install-cli|repair-cli|update-toolkit|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -15564,10 +15699,12 @@ main() {
     off-vm-backup-status) show_off_vm_backup_status ;;
     disable-off-vm-backup) disable_off_vm_backup ;;
     off-vm-backup-wizard) off_vm_backup_wizard ;;
-    health-check) run_health_check ;;
+    health-check|health-check-run-now) run_health_check ;;
     configure-health-check-timer) configure_health_check_timer ;;
     health-check-status) show_health_check_status ;;
+    health-check-journal) show_health_check_journal ;;
     disable-health-check-timer) disable_health_check_timer ;;
+    health-monitoring-wizard|production-monitoring-wizard) health_monitoring_wizard ;;
     service-recovery-plan) show_service_recovery_plan ;;
     restore-preflight) show_restore_preflight ;;
     restore-rehearsal-wizard) restore_rehearsal_wizard ;;

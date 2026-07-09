@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.1.63 - Health timer and production monitoring workflow
+
+### Changed
+
+- Updated the toolkit version to v1.1.63.
+- Added `health-monitoring-wizard` as the guided entry point for production monitoring.
+- Added `health-check-run-now` as an alias for `health-check`.
+- Added `health-check-journal` to review the recent systemd journal output for the health-check service.
+- Health checks now write a local status record to `/etc/erpnext-dev/health-check.state`.
+- Improved `health-check-status` so it shows timer state, next run, last service result, and the last recorded health check summary.
+- Improved `configure-health-check-timer` so the user can accept or adjust schedule and randomized delay from the prompt.
+- Updated `production-checklist` and Final QA to surface health monitoring status when the timer is active.
+- Updated README, TESTING, ROADMAP, and PRODUCTION-VALIDATION with the monitoring workflow.
+
+### Validation scope
+
+- `bash -n erpnext-dev.sh` passes.
+- `erpnext-dev version` prints v1.1.63.
+- Help lists `health-monitoring-wizard`, `health-check-run-now`, and `health-check-journal`.
+- `health-monitoring-wizard` opens and supports safe `q` exit.
+- Final QA includes health monitoring status as option 8.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
 ## v1.1.62 - Final production QA documentation record
 
 ### Changed

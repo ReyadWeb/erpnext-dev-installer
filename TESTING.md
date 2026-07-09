@@ -1,3 +1,47 @@
+## v1.1.63 health monitoring workflow validation
+
+Purpose: add a smoother production monitoring workflow after backup, off-VM backup, and restore rehearsal validation are complete.
+
+Package checks:
+
+```bash
+bash -n erpnext-dev.sh
+./erpnext-dev.sh version
+./erpnext-dev.sh --help | grep -n "health-monitoring-wizard"
+./erpnext-dev.sh --help | grep -n "health-check-run-now"
+./erpnext-dev.sh --help | grep -n "health-check-journal"
+printf 'q
+' | sudo ./erpnext-dev.sh health-monitoring-wizard
+printf 'q
+' | sudo ./erpnext-dev.sh final-qa
+unzip -l erpnext-dev-installer-v1.1.63.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+```
+
+Expected:
+
+- Version prints `ERPNext Developer Toolkit v1.1.63`.
+- Help lists the new health monitoring commands.
+- Health monitoring wizard opens with options for running a check, configuring the timer, showing status, viewing journal output, disabling the timer, service recovery, and production checklist.
+- Final QA includes `8) Health monitoring status`.
+- Package contains no `GITHUB-UPDATE-v*.md` file.
+
+Production follow-up validation:
+
+```bash
+sudo erpnext-dev health-monitoring-wizard
+sudo erpnext-dev health-check
+sudo erpnext-dev health-check-status
+sudo erpnext-dev production-checklist
+sudo erpnext-dev final-qa
+```
+
+Expected production behavior:
+
+- `health-check` writes `/etc/erpnext-dev/health-check.state`.
+- `health-check-status` shows the timer state and last recorded health check summary.
+- `production-checklist` shows health timer as `OK active` after the timer is configured.
+- Final QA remains `Release state OK` after monitoring is enabled.
+
 ## v1.1.62 final production QA documentation validation
 
 Purpose: record the final field evidence after v1.1.61 successfully tracked the completed restore rehearsal and Final QA reported production readiness. This is a documentation/validation patch with no behavior changes.

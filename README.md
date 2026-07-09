@@ -309,6 +309,7 @@ The temporary file under `/tmp` is only used for the first bootstrap or update. 
 - [Reusable toolkit command](#reusable-toolkit-command)
 - [Accessing ERPNext credentials](#accessing-erpnext-credentials)
 - [Production operations](#production-operations)
+- [Health monitoring](#health-monitoring)
 - [Validated production state](#validated-production-state)
 - [Backups and restore safety](#backups-and-restore-safety)
 - [Restore rehearsal from off-VM backup](#restore-rehearsal-from-off-vm-backup)
@@ -741,9 +742,11 @@ Common operations commands:
 ```bash
 sudo erpnext-dev release-readiness
 sudo erpnext-dev production-checklist
+sudo erpnext-dev health-monitoring-wizard
 sudo erpnext-dev health-check
 sudo erpnext-dev configure-health-check-timer
 sudo erpnext-dev health-check-status
+sudo erpnext-dev health-check-journal
 sudo erpnext-dev service-recovery-plan
 ```
 
@@ -751,9 +754,53 @@ Health checks cover ERPNext runtime, Nginx, MariaDB, Redis, HTTPS, disk usage, l
 
 ---
 
+## Health monitoring
+
+The toolkit includes a lightweight local systemd health timer for production monitoring. It is intentionally read-only: the health check reports status and writes a local state file, but it does not restart services or change the site.
+
+Recommended guided command:
+
+```bash
+sudo erpnext-dev health-monitoring-wizard
+```
+
+Useful direct commands:
+
+```bash
+sudo erpnext-dev health-check
+sudo erpnext-dev configure-health-check-timer
+sudo erpnext-dev health-check-status
+sudo erpnext-dev health-check-journal
+sudo erpnext-dev disable-health-check-timer
+```
+
+What gets checked:
+
+```text
+ERPNext service/runtime
+Nginx, MariaDB, Redis
+Bench web/socket ports
+HTTPS status
+Disk usage threshold
+Latest backup completeness and age
+Scheduled backup timer
+UFW and Fail2Ban
+Off-VM backup state
+```
+
+After a health check runs, the latest result is recorded at:
+
+```text
+/etc/erpnext-dev/health-check.state
+```
+
+The health timer defaults to an hourly schedule with a randomized delay. During setup, press **Enter** to accept the suggested schedule or provide a different systemd `OnCalendar` value such as `daily` or `*-*-* 03:00:00`.
+
+---
+
 ## Validated production state
 
-The current validated production path is documented from the real `erp.flowmaya.com` VPS and its separate off-VM backup server. This is the reference state for v1.1.62 documentation.
+The current validated production path is documented from the real `erp.flowmaya.com` VPS and its separate off-VM backup server. This is the reference state for v1.1.63 documentation and monitoring workflow.
 
 Validated environment:
 

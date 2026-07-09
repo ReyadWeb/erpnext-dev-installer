@@ -1,3 +1,48 @@
+# v1.1.63 Health monitoring validation plan
+
+v1.1.63 adds the final optional monitoring workflow after the production path reached a validated backup/restore state in v1.1.62.
+
+New monitoring commands:
+
+```bash
+sudo erpnext-dev health-monitoring-wizard
+sudo erpnext-dev health-check
+sudo erpnext-dev configure-health-check-timer
+sudo erpnext-dev health-check-status
+sudo erpnext-dev health-check-journal
+sudo erpnext-dev disable-health-check-timer
+```
+
+Expected production validation sequence:
+
+```bash
+sudo erpnext-dev health-check
+sudo erpnext-dev health-check-status
+sudo erpnext-dev configure-health-check-timer
+sudo erpnext-dev production-checklist
+sudo erpnext-dev final-qa
+```
+
+The health check is read-only. It records its latest result in:
+
+```text
+/etc/erpnext-dev/health-check.state
+```
+
+The currently validated production baseline remains:
+
+```text
+Site: erp.flowmaya.com
+Production VPS: 65.109.221.4
+Backup server: 65.109.220.250
+Restore rehearsal: recorded and login validated
+Final QA: Release state OK
+```
+
+Remaining provider-side operational confirmations are still outside the VM: named cloud snapshot, provider firewall rules, and Cloudflare Full (strict) / orange-cloud state.
+
+---
+
 ## v1.1.62 final production QA documentation record
 
 This patch records the final validated state after v1.1.61 restore rehearsal tracking was installed, the completed restore drill was recorded on the production VPS, and Final QA was rerun.

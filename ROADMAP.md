@@ -1,3 +1,26 @@
+# v1.1.63 roadmap update - monitoring workflow
+
+Status: **implemented as the next production-hardening patch**.
+
+The restore and off-VM backup path is now validated. The current active focus is lightweight monitoring and operational visibility.
+
+Completed in v1.1.63:
+
+- Guided `health-monitoring-wizard`.
+- Health check state record at `/etc/erpnext-dev/health-check.state`.
+- Health timer schedule/delay prompts.
+- Journal helper for health-check runs.
+- Production checklist and Final QA awareness of monitoring state.
+
+Next roadmap items:
+
+1. Validate health timer on the production VPS.
+2. Confirm Hetzner snapshot and provider firewall state.
+3. Decide whether to add notification targets later, such as email/webhook, after local health timer behavior is stable.
+4. Keep Docker installation as a later separate track after VM operations remain stable.
+
+---
+
 ## v1.1.62 final production QA documentation record
 
 Status: documentation/validation patch after final v1.1.61 production QA passed.
