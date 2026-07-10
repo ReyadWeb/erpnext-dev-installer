@@ -36,6 +36,7 @@ lib/security.sh
 .github/workflows/ci.yml
 .github/workflows/integration.yml
 .github/workflows/release.yml
+docs/erpnext-dev-signing-key.asc
 docs/assets/erp_installer_readme_banner.png
 docs/assets/production_backup_architecture_diagram.png
 docs/assets/local_testing_vm_architecture_diagram.png

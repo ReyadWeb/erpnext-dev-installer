@@ -104,12 +104,11 @@ Use this when you want the toolkit to ask which path to follow. The wizard offer
 >
 > ```bash
 > gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS
-> # or, via the toolkit (throwaway keyring, optional fingerprint pin):
-> export TOOLKIT_SIGNING_PUBKEY="/path/to/maintainer-public-key.asc"
-> sudo -E erpnext-dev verify-signature
+> # or, via the toolkit (bundled key + pinned fingerprint, throwaway keyring):
+> sudo erpnext-dev verify-signature
 > ```
 >
-> See [`SECURITY.md`](SECURITY.md) → "Verifying release signatures" for the maintainer key fingerprint and setup.
+> The maintainer key ships at [`docs/erpnext-dev-signing-key.asc`](docs/erpnext-dev-signing-key.asc); pin its fingerprint from [`SECURITY.md`](SECURITY.md) → "Verifying release signatures".
 
 Site name guidance after the command:
 

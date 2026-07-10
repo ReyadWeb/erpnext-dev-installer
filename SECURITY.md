@@ -167,16 +167,24 @@ gpg --verify SHA256SUMS.asc SHA256SUMS
 sha256sum -c SHA256SUMS
 ```
 
-Or use the toolkit, which runs the same check in a throwaway keyring and can pin the fingerprint:
+Or use the toolkit, which runs the same check in a throwaway keyring and pins the fingerprint automatically. When run from a checkout (or the installed `/opt/erpnext-dev` tree) it uses the bundled public key at `docs/erpnext-dev-signing-key.asc` and the fingerprint baked into the script, so no configuration is needed:
 
 ```bash
-export TOOLKIT_SIGNING_PUBKEY="/path/to/maintainer-public-key.asc"   # path or https URL
-export TOOLKIT_SIGNING_KEY_FINGERPRINT="<full fingerprint>"          # optional identity pin
-sudo -E erpnext-dev verify-signature
-sudo erpnext-dev verify-toolkit
+sudo erpnext-dev verify-signature      # zero-config: bundled key + pinned fingerprint
+sudo erpnext-dev verify-toolkit        # then confirm files match the signed checksums
 ```
 
-`<PLACEHOLDER: publish the maintainer key fingerprint here once the signing key exists.>`
+To override (e.g. fetch the key from an independent channel), set `TOOLKIT_SIGNING_PUBKEY` (path or https URL) and/or `TOOLKIT_SIGNING_KEY_FINGERPRINT` before running.
+
+**Maintainer signing key (pin this):**
+
+```text
+Key type:    Ed25519 (sign)
+UID:         ERPNext Dev Installer Signing Key <235979268+ReyadWeb@users.noreply.github.com>
+Fingerprint: 49CE 4CAA 2E67 57C6 13D3  1DD1 06F9 A48F 9AD3 E369
+```
+
+The public key is published in this repository at [`docs/erpnext-dev-signing-key.asc`](docs/erpnext-dev-signing-key.asc). Because it ships alongside the script, the real trust anchor is the fingerprint above (also baked into `lib/security.sh`): verify the fingerprint out-of-band before trusting a fresh download.
 
 ### P1: Plaintext credentials on disk
 

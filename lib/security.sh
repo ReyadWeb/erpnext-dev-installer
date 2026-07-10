@@ -407,6 +407,29 @@ run_security_audit() {
   ui_box_end
 }
 
+# Fingerprint of the maintainer release-signing key. This is the trust anchor:
+# it travels inside the (checksum-verifiable) script, so verify-signature can
+# enforce the signer identity even when the public key is fetched separately.
+TOOLKIT_SIGNING_FINGERPRINT_DEFAULT="49CE4CAA2E6757C613D31DD106F9A48F9AD3E369"
+
+# Locate the maintainer public key bundled with the toolkit.
+find_toolkit_pubkey_file() {
+  local active_dir stable_dir candidate
+  active_dir="$(dirname "${ERPNEXT_DEV_ENTRY_SCRIPT:-${BASH_SOURCE[0]}}")"
+  stable_dir="$(dirname "${INSTALLER_CANONICAL_PATH:-/opt/erpnext-dev/erpnext-dev.sh}")"
+  for candidate in \
+    "./docs/erpnext-dev-signing-key.asc" \
+    "${active_dir}/docs/erpnext-dev-signing-key.asc" \
+    "${active_dir}/erpnext-dev-signing-key.asc" \
+    "${stable_dir}/docs/erpnext-dev-signing-key.asc" \
+    "/opt/erpnext-dev/docs/erpnext-dev-signing-key.asc"; do
+    [[ -n "$candidate" && -f "$candidate" ]] || continue
+    printf '%s\n' "$candidate"
+    return 0
+  done
+  return 1
+}
+
 # Locate the detached signature that accompanies SHA256SUMS. Release artifacts
 # publish SHA256SUMS.asc next to SHA256SUMS; operators download both.
 find_toolkit_signature_file() {
@@ -459,9 +482,12 @@ verify_toolkit_signature() {
 
   pubkey="${TOOLKIT_SIGNING_PUBKEY:-}"
   if [[ -z "$pubkey" ]]; then
-    warn "No signing public key configured."
-    echo "Set TOOLKIT_SIGNING_PUBKEY to the maintainer public key (path or https URL) and,"
-    echo "optionally, TOOLKIT_SIGNING_KEY_FINGERPRINT to pin the expected key. See SECURITY.md."
+    pubkey="$(find_toolkit_pubkey_file 2>/dev/null || true)"
+  fi
+  if [[ -z "$pubkey" ]]; then
+    warn "No signing public key found."
+    echo "Set TOOLKIT_SIGNING_PUBKEY to the maintainer public key (path or https URL),"
+    echo "or run from a checkout that ships docs/erpnext-dev-signing-key.asc. See SECURITY.md."
     return 1
   fi
 
@@ -502,12 +528,12 @@ verify_toolkit_signature() {
     return 1
   fi
 
-  if [[ -n "${TOOLKIT_SIGNING_KEY_FINGERPRINT:-}" ]]; then
-    local want got
-    want="$(printf '%s' "$TOOLKIT_SIGNING_KEY_FINGERPRINT" | tr -d ' ' | tr '[:lower:]' '[:upper:]')"
+  local want got
+  want="$(printf '%s' "${TOOLKIT_SIGNING_KEY_FINGERPRINT:-$TOOLKIT_SIGNING_FINGERPRINT_DEFAULT}" | tr -d ' ' | tr '[:lower:]' '[:upper:]')"
+  if [[ -n "$want" ]]; then
     got="$(printf '%s\n' "$verify_out" | awk '/^\[GNUPG:\] VALIDSIG/ { print $3; exit }')"
     if [[ -n "$got" && "$got" == *"$want" ]]; then
-      status_line "Key fingerprint" "OK" "matches pinned fingerprint"
+      status_line "Key fingerprint" "OK" "matches pinned fingerprint ${want}"
     else
       status_line "Key fingerprint" "FAIL" "signing key ${got:-unknown} does not match pinned ${want}"
       ui_box_end
