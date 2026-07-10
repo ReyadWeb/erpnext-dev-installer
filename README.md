@@ -52,7 +52,7 @@ First install and verify the toolkit ([details below](#install-and-verify)):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
-VERSION="v1.5.0"
+VERSION="v1.5.1"
 BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz"
@@ -147,6 +147,13 @@ Install with the local quickstart (press **Enter** to accept the default site
 ```bash
 sudo ./erpnext-dev.sh local-dev-quickstart
 ```
+
+Run interactively, `local-dev-quickstart` guides you end to end: it installs
+ERPNext, then walks through the optional follow-ups — **trusted local HTTPS**,
+the **local security profile / firewall**, and the **optional app installer** —
+before opening the main menu. Each optional step is opt-in (press Enter to skip)
+and can be run later from the commands below. (The non-interactive
+`sudo ./erpnext-dev.sh -y install` only installs; use it for automation.)
 
 After install, map the local domain and enable HTTPS:
 
