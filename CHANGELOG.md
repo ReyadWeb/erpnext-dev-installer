@@ -17,6 +17,22 @@
 
 - No `SCRIPT_VERSION` bump: these are internal, behavior-preserving changes. `SHA256SUMS` is regenerated to match the edited files.
 
+## v1.4.2 - Fix Node version selection for the bench service
+
+### Fixed
+
+- With the v1.4.1 install fix in place, the disposable-VM integration run got all the way to the site-readiness gate and surfaced the next latent bug: the `erpnext-dev.service` systemd unit (and any cold `bench start`) sources `nvm.sh` but never selected a Node version, so the service shell fell back to whatever Node was on `PATH` (Node 22 on the CI runner). Frappe's watcher refused to run (`The engine "node" is incompatible with this module. Expected version ">=24". Got "22.23.1"`), `bench start` exited, and nothing listened on `:8000`.
+- The installer now runs `nvm alias default "${NODE_VERSION}"` after installing Node, so non-interactive login shells that only source `nvm.sh` (the systemd unit, `frappe_login_bash`) activate the correct Node version. The `ExecStart` of the bench service also explicitly runs `nvm use --silent default` after sourcing nvm as a belt-and-suspenders guard.
+- This also hardens real deployments: a cold service restart on a fresh VM with no system Node (or an incompatible one) would have hit the same failure.
+
+### Changed
+
+- Bumped the toolkit version to v1.4.2 and regenerated `SHA256SUMS`.
+
+### Validation scope
+
+- `bash -n` passes for `lib/install.sh`, `lib/service.sh`, and `erpnext-dev.sh`; `scripts/validate-release.sh` passes locally. The end-to-end path (install -> service up -> site reachable on `:8000` -> backup/restore rehearsal) is exercised by the integration workflow on the next tag.
+
 ## v1.4.1 - Fix XDG environment leak in the installer
 
 ### Fixed

@@ -171,7 +171,7 @@ User=${FRAPPE_USER}
 Group=${FRAPPE_USER}
 WorkingDirectory=${bench_dir}
 Environment=HOME=${FRAPPE_HOME}
-ExecStart=/bin/bash -lc 'export NVM_DIR="\$HOME/.nvm"; [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"; export PATH="\$HOME/.local/bin:\$PATH"; cd "${bench_dir}" && bench start'
+ExecStart=/bin/bash -lc 'export NVM_DIR="\$HOME/.nvm"; [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"; nvm use --silent default >/dev/null 2>&1 || true; export PATH="\$HOME/.local/bin:\$PATH"; cd "${bench_dir}" && bench start'
 Restart=on-failure
 RestartSec=10
 KillMode=control-group
