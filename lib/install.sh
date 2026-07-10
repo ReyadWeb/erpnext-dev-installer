@@ -907,8 +907,50 @@ run_guided_setup() {
   show_next_step
   if ! is_public_vm_workflow; then
     show_local_host_mapping_checkpoint
+    local_guided_followups
   fi
   prompt_open_main_menu_after_install
+}
+
+# Guided local follow-up chain: after the core install, walk the user through
+# the optional steps that finish a local development environment. Each step is
+# opt-in (confirm defaults to "No"), mirroring the way the public-vm guided setup
+# chains HTTPS -> security -> apps. Only runs in a genuinely interactive session;
+# under -y (ASSUME_YES) or a non-tty we keep the plain install behavior so
+# automation/CI is unaffected.
+local_guided_followups() {
+  [[ -t 0 ]] || return 0
+  [[ "$ASSUME_YES" -eq 1 ]] && return 0
+
+  ui_box_start "Local setup: guided follow-up steps"
+  echo "ERPNext is installed and reachable over HTTP. These optional steps finish a"
+  echo "local development environment. Each one is opt-in - press Enter to skip."
+  ui_box_end
+
+  echo
+  if confirm "Set up trusted local HTTPS now (local-ssl-wizard)?"; then
+    run_local_ssl_wizard main || true
+  else
+    echo "Skipped. Run later with: $(toolkit_cmd local-ssl-wizard)"
+  fi
+
+  echo
+  if confirm "Apply the local security profile / firewall now (security-hardening-wizard)?"; then
+    security_hardening_wizard || true
+  else
+    echo "Skipped. Run later with: $(toolkit_cmd security-hardening-wizard)"
+  fi
+
+  echo
+  if confirm "Install optional Frappe apps now (app-install-wizard)?"; then
+    run_app_install_wizard || true
+  else
+    echo "Skipped. Run later with: $(toolkit_cmd app-install-wizard)"
+  fi
+
+  echo
+  ok "Local guided follow-up steps complete."
+  show_next_step || true
 }
 
 

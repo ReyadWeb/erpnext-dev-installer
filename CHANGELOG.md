@@ -1,3 +1,17 @@
+## v1.5.1 - Local guided setup now walks through HTTPS / hardening / apps
+
+### Changed
+
+- **`local-dev-quickstart` is now a true end-to-end guided experience.** After
+  the core install it actively prompts through the local follow-ups — trusted
+  local **HTTPS** (`local-ssl-wizard`), the local **security profile / firewall**
+  (`security-hardening-wizard`), and the **optional app installer**
+  (`app-install-wizard`) — mirroring how the public-vm guided setup chains its
+  steps. Previously the local flow only printed these as recommendations.
+- Each optional step is **opt-in** (the prompt defaults to "No"/skip). The chain
+  only runs in an interactive session; `-y`/non-interactive `install` keeps the
+  plain install-only behavior, so automation and CI are unaffected.
+
 ## v1.5.0 - Production runtime mode (no `bench start` in production)
 
 ### Added
