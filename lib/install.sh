@@ -359,6 +359,10 @@ source "\$NVM_DIR/nvm.sh"
 
 nvm install "${NODE_VERSION}"
 nvm use "${NODE_VERSION}"
+# Pin the default alias so non-interactive login shells that only source
+# nvm.sh (the systemd unit, frappe_login_bash) activate this Node version
+# instead of falling back to a system Node that may be too old for Frappe.
+nvm alias default "${NODE_VERSION}"
 npm install -g yarn
 
 echo
