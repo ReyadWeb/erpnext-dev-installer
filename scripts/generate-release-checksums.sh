@@ -26,6 +26,7 @@ checksum_files=(
   scripts/validate-release.sh
   scripts/run-shellcheck.sh
   scripts/check-module-consistency.sh
+  scripts/build-release-bundle.sh
   RELEASE-MANIFEST.txt
 )
 

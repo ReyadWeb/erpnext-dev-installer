@@ -78,17 +78,18 @@ Most users should start with the **general guided setup** because it lets them c
 
 v1.1.74 adds [`QUALITY-ASSESSMENT.md`](QUALITY-ASSESSMENT.md), [`RELEASE-MANIFEST.txt`](RELEASE-MANIFEST.txt), and expanded release validation. v1.1.75 extracts shared helpers into `lib/common.sh` and adds shellcheck to CI.
 
-The current `SHA256SUMS` file verifies the `erpnext-dev.sh` file for that release tag. Future releases may add a broader package checksum workflow and GPG-signed releases for stronger maintainer identity verification.
+Since the toolkit is modular (`erpnext-dev.sh` sources `lib/*.sh` at runtime), each release ships a single self-contained bundle — `erpnext-dev-<version>.tar.gz` — containing the complete verified tree. Extract it, then `sha256sum -c SHA256SUMS` verifies **every** packaged file against the release's checksum list (the same `SHA256SUMS` that is GPG-signed as `SHA256SUMS.asc`).
 
 ### General guided setup — choose local or production
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates tar
 VERSION="v1.4.3"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
+tar -xzf "erpnext-dev-${VERSION}.tar.gz"
+cd "erpnext-dev-${VERSION}"
 sha256sum -c SHA256SUMS
-chmod +x erpnext-dev.sh
 sudo ./erpnext-dev.sh start-here
 ```
 
@@ -100,12 +101,13 @@ Use this when you want the toolkit to ask which path to follow. The wizard offer
 3) Existing install / maintenance menu
 ```
 
-> **Stronger verification for production (v1.3.0+):** the quickstarts above verify SHA256 integrity, which protects against corruption and tampering *of the files relative to the checksum list*. For production, prefer tag-pinned **signed** releases: download the release assets (`erpnext-dev.sh`, `SHA256SUMS`, `SHA256SUMS.asc`), then verify the maintainer signature before running as root:
+> **Stronger verification for production (v1.3.0+):** the quickstarts above run `sha256sum -c SHA256SUMS`, which protects against corruption and tampering *of the files relative to the checksum list*. For production, also verify the maintainer **signature** before running as root. The signed bundle already contains `SHA256SUMS.asc`, so from the extracted `erpnext-dev-${VERSION}` directory:
 >
 > ```bash
+> # Via the toolkit (bundled key + pinned fingerprint, throwaway keyring):
+> sudo ./erpnext-dev.sh verify-signature
+> # or manually, after importing the maintainer key:
 > gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS
-> # or, via the toolkit (bundled key + pinned fingerprint, throwaway keyring):
-> sudo erpnext-dev verify-signature
 > ```
 >
 > The maintainer key ships at [`docs/erpnext-dev-signing-key.asc`](docs/erpnext-dev-signing-key.asc); pin its fingerprint from [`SECURITY.md`](SECURITY.md) → "Verifying release signatures".
@@ -122,12 +124,13 @@ For local VMs, the installer prints the correct host `/etc/hosts` command using 
 ### Local VM install
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates tar
 VERSION="v1.4.3"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
+tar -xzf "erpnext-dev-${VERSION}.tar.gz"
+cd "erpnext-dev-${VERSION}"
 sha256sum -c SHA256SUMS
-chmod +x erpnext-dev.sh
 sudo ./erpnext-dev.sh local-dev-quickstart
 ```
 
@@ -152,12 +155,13 @@ Run the printed `/etc/hosts` command on the **host machine**, not inside the VM.
 ### Production VPS / cloud VM install
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates tar
 VERSION="v1.4.3"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
+tar -xzf "erpnext-dev-${VERSION}.tar.gz"
+cd "erpnext-dev-${VERSION}"
 sha256sum -c SHA256SUMS
-chmod +x erpnext-dev.sh
 sudo ./erpnext-dev.sh public-vm-guided-setup
 ```
 
@@ -186,12 +190,13 @@ sudo erpnext-dev generate-off-vm-backup-key
 2. On the separate backup server, run the backup-server setup and paste that public key when prompted:
 
 ```bash
-sudo apt-get update && sudo apt-get install -y curl ca-certificates
+sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
 VERSION="v1.4.3"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
+tar -xzf "erpnext-dev-${VERSION}.tar.gz"
+cd "erpnext-dev-${VERSION}"
 sha256sum -c SHA256SUMS
-chmod +x erpnext-dev.sh
 sudo ./erpnext-dev.sh backup-server-setup
 ```
 
@@ -313,12 +318,13 @@ See [`PRODUCTION-VALIDATION.md`](PRODUCTION-VALIDATION.md) for the full VPS vali
 ### Check the VM before installing
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates tar
 VERSION="v1.4.3"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
+tar -xzf "erpnext-dev-${VERSION}.tar.gz"
+cd "erpnext-dev-${VERSION}"
 sha256sum -c SHA256SUMS
-chmod +x erpnext-dev.sh
 sudo ./erpnext-dev.sh install-preflight
 ```
 
@@ -330,10 +336,11 @@ If the VM is clearly unsafe for ERPNext, the installer blocks the install and pr
 
 ```bash
 VERSION="v1.4.3"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
+tar -xzf "erpnext-dev-${VERSION}.tar.gz"
+cd "erpnext-dev-${VERSION}"
 sha256sum -c SHA256SUMS
-chmod +x erpnext-dev.sh
 sudo ./erpnext-dev.sh install-cli
 erpnext-dev version
 ```
@@ -539,12 +546,13 @@ Some longer app menus use two columns when the terminal is wide enough, and fall
 Run this inside a fresh local Ubuntu/Debian-family VM:
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates tar
 VERSION="v1.4.3"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
+tar -xzf "erpnext-dev-${VERSION}.tar.gz"
+cd "erpnext-dev-${VERSION}"
 sha256sum -c SHA256SUMS
-chmod +x erpnext-dev.sh
 sudo ./erpnext-dev.sh local-dev-quickstart
 ```
 
@@ -661,12 +669,13 @@ Recommended local VM test order:
 Run this inside a fresh public Ubuntu/Debian-family VM:
 
 ```bash
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates tar
 VERSION="v1.4.3"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
+tar -xzf "erpnext-dev-${VERSION}.tar.gz"
+cd "erpnext-dev-${VERSION}"
 sha256sum -c SHA256SUMS
-chmod +x erpnext-dev.sh
 sudo ./erpnext-dev.sh public-vm-guided-setup
 ```
 
@@ -795,10 +804,11 @@ To update or repair the toolkit command from a verified release tag:
 
 ```bash
 VERSION="v1.4.3"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
+tar -xzf "erpnext-dev-${VERSION}.tar.gz"
+cd "erpnext-dev-${VERSION}"
 sha256sum -c SHA256SUMS
-chmod +x erpnext-dev.sh
 sudo ./erpnext-dev.sh install-cli
 sudo erpnext-dev version
 ```
