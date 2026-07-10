@@ -207,6 +207,8 @@ sudo erpnext-dev credentials-secure
 sudo erpnext-dev credentials-delete
 ```
 
+The toolkit tees its stdout to a log file. To avoid persisting secrets there, `credentials-show` writes the credential block directly to the controlling terminal (`/dev/tty`), never to the logged stream; in a non-interactive session with no terminal it refuses to print and points to the file instead. Generated passwords are otherwise only written to the mode-`600` credentials file and passed to `bench`/`mariadb` as arguments/stdin (no `set -x`), so they do not reach the install log.
+
 ### P1: Redacted support bundles are defensive, not perfect
 
 Support bundles intentionally exclude private keys, raw credential files, `site_config.json` secrets, tokens, and password-like values. Redaction is still heuristic. Operators should review archive contents before sharing externally.

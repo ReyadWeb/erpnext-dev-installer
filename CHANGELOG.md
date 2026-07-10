@@ -15,6 +15,7 @@
 ### Security
 
 - Rotated the release-signing key. The pinned maintainer fingerprint is now `BFC10C79427CF73496EA6F5A30BFD17DD559C8B6` (Ed25519); the previous key was retired. `SHA256SUMS.asc` on `v1.4.0`+ is produced by the new key, and `verify-signature` enforces the new fingerprint. Signatures made by the old key no longer validate by design.
+- `credentials-show` no longer prints secrets to the logged stdout stream. Because the toolkit tees stdout to a log file, the credential block now goes directly to the controlling terminal (`/dev/tty`); in a non-interactive session it refuses to print rather than persist plaintext secrets in the log.
 
 ### Notes
 

@@ -1137,9 +1137,22 @@ credentials_show() {
   fi
 
   echo
-  echo "----- BEGIN CREDENTIALS (${cred_file}) -----"
-  $SUDO cat "$cred_file"
-  echo "----- END CREDENTIALS -----"
+  # The toolkit tees all stdout to a log file, so printing the credentials to
+  # stdout would persist plaintext secrets on disk — exactly what the warning
+  # above tells operators not to do. Write the secret block straight to the
+  # controlling terminal instead, which bypasses the log. If there is no private
+  # terminal (non-interactive/CI), refuse rather than leak into a logged stream.
+  if [[ -w /dev/tty ]]; then
+    {
+      echo "----- BEGIN CREDENTIALS (${cred_file}) -----"
+      $SUDO cat "$cred_file"
+      echo "----- END CREDENTIALS -----"
+    } > /dev/tty
+  else
+    warn "No private terminal (/dev/tty) available; not writing secrets to the logged output stream."
+    echo "Read the file directly on a private console instead:"
+    echo "  sudo cat ${cred_file}"
+  fi
   echo
   echo "After saving these credentials in a password manager, production systems should run:"
   echo "  $(toolkit_cmd credentials-delete)"
