@@ -1,8 +1,23 @@
-## Unreleased - Lint hardening: raise the shellcheck gate to `-S warning`
+## v1.4.3 - Integrity/self-update chain fixes, working CLI commands, and drift guards
+
+### Fixed
+
+- **`install-cli` / `repair-cli` now work.** Both were advertised in `--help` and the dispatcher but routed to `install_toolkit_cli` / `repair_toolkit_cli`, which did not exist — running either exited `127` with `command not found`, while `command-audit` still reported them "OK" (a false positive). Both are now implemented and (re)create the `erpnext-dev` command idempotently via `install_toolkit_cli_entry`.
+- **`lib/update.sh` is now inside the integrity and self-update chain.** It was sourced at runtime (implementing the privileged `update-preflight` / `safe-update-wizard` / `update-rollback` paths) but was missing from `toolkit_release_lib_files()` and the checksum generator, so a tampered `update.sh` passed `sha256sum -c SHA256SUMS` and was never fetched by `update-toolkit`. It is now in `toolkit_release_lib_files()`, `SHA256SUMS`, the shellcheck targets, and the `validate-release.sh` syntax checks.
+
+### Added
+
+- **`scripts/check-module-consistency.sh`** — a CI guard that treats the runtime `source` chain in `erpnext-dev.sh` as the single source of truth and fails the build if `toolkit_release_lib_files()`, the checksum generator, the shellcheck targets, `SHA256SUMS`, or `RELEASE-MANIFEST.txt` describe a different set of `lib/*.sh` modules. It also verifies that every function invoked from the command dispatcher is actually defined (which would have caught the `install-cli`/`repair-cli` regression). Wired into `validate-release.sh` so it runs in both CI and the release workflow.
+- **Version-discipline guard.** With `RELEASE_STRICT=1` (set by the release workflow) `validate-release.sh` now refuses to publish a stable tag whose newest `CHANGELOG.md` entry is not the released version (e.g. an open `## Unreleased` section). Development branches may keep an `Unreleased` section.
 
 ### Changed
 
-- `scripts/run-shellcheck.sh` now fails the build on shellcheck **warnings** (`-S warning`), not just errors. The full toolkit (21 files) is clean at this level.
+- **Pinned bootstrap tool versions for reproducible installs.** Added `NVM_VERSION` (0.40.3) and `UV_VERSION` (0.11.28) config variables; the installer now fetches `uv` from the versioned `https://astral.sh/uv/${UV_VERSION}/install.sh` URL instead of the unversioned "latest" installer, and the pinned nvm version flows from `NVM_VERSION`. Override either via environment variable.
+- Bumped the toolkit version to v1.4.3 and regenerated `SHA256SUMS`.
+
+### Changed (lint hardening, behavior-preserving)
+
+- `scripts/run-shellcheck.sh` now fails the build on shellcheck **warnings** (`-S warning`), not just errors. The full toolkit is clean at this level.
 
 ### Fixed / cleaned (behavior-preserving)
 
@@ -12,10 +27,6 @@
 - Removed unused local declarations and dead assignments flagged by SC2034 (`lib/health.sh`, `lib/security.sh`, `lib/status.sh`, `lib/ssl.sh`, `lib/frappe.sh`, `lib/backup.sh`, `lib/support.sh`), dropped the unused `DIM` color, and removed the dead `LIB_APP_KEY` metadata column from `lib/apps.sh` (set for every app, read nowhere).
 - Declared the menu `*_choice` variables `local` at their call sites so shellcheck can see they are assigned via `menu_read_choice` (SC2154); this also stops them leaking into the global scope between menu invocations.
 - Annotated intentional patterns with scoped `# shellcheck disable` directives: cross-module globals `SUDO`/`PRODUCTION_SSL_MODE` (consumed by sourced modules), the optional-argument functions `wait_for_erpnext_ready`/`run_local_ssl_wizard` (SC2120), and the two `sudo ... > /tmp/...$$` redirects in `scripts/validate-release.sh` that intentionally write the invoking user's temp file (SC2024).
-
-### Notes
-
-- No `SCRIPT_VERSION` bump: these are internal, behavior-preserving changes. `SHA256SUMS` is regenerated to match the edited files.
 
 ## v1.4.2 - Fix Node version selection for the bench service
 

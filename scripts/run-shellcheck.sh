@@ -31,6 +31,7 @@ targets=(
   scripts/validate-release.sh
   scripts/generate-release-checksums.sh
   scripts/run-shellcheck.sh
+  scripts/check-module-consistency.sh
 )
 
 for target in "${targets[@]}"; do

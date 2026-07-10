@@ -32,6 +32,8 @@ jobs:
           persist-credentials: false
 
       - name: Validate release tree
+        env:
+          RELEASE_STRICT: "1"
         run: scripts/validate-release.sh
 
       - name: Confirm tag matches SCRIPT_VERSION
