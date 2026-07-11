@@ -52,7 +52,7 @@ First install and verify the toolkit ([details below](#install-and-verify)):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
-VERSION="v1.6.2"
+VERSION="v1.6.3"
 BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz"
@@ -613,6 +613,28 @@ is kept on disk, so `toolkit-rollback` restores it instantly.
 `verify-toolkit` looks for `SHA256SUMS` in the current directory, beside the
 active/stable script, or in `/opt/erpnext-dev`; override with
 `CHECKSUM_FILE=/path/to/SHA256SUMS`.
+
+### Stale lock: "Another toolkit task is already running"
+
+The toolkit uses a lock so two installs/menus cannot run at once. The lock file
+path is usually `/tmp/erpnext-dev-locks/toolkit.lock`. Seeing that error almost
+always means **another `erpnext-dev` session is still open** (second SSH window,
+background menu, stuck process) — not that the file itself is "stuck."
+
+```bash
+# See who holds the lock (also printed automatically on lock failure):
+sudo fuser -v /tmp/erpnext-dev-locks/toolkit.lock
+ps aux | grep -E '[e]rpnext-dev'
+
+# Prefer the safe clearer (refuses if a live process still holds the lock):
+sudo erpnext-dev clear-lock
+
+# Only if clear-lock refuses and you are certain the listed PIDs are wrong:
+sudo FORCE_CLEAR_LOCK=1 erpnext-dev clear-lock
+```
+
+Avoid `rm` on the lock file while a toolkit is still running — that can let two
+copies run at once. Use `clear-lock` instead.
 
 ---
 
