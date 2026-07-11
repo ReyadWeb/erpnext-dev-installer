@@ -387,7 +387,11 @@ fi
 export PATH="\$HOME/.local/bin:\$PATH"
 
 uv python install "${PYTHON_VERSION}" --default
-uv tool install frappe-bench --force
+if [[ -n "${BENCH_VERSION}" ]]; then
+  uv tool install "frappe-bench==${BENCH_VERSION}" --force
+else
+  uv tool install frappe-bench --force
+fi
 
 echo
 echo "==> Creating bench"

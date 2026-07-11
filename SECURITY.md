@@ -167,6 +167,10 @@ v1.1.70 implements items 1-3 for the `erpnext-dev.sh` script artifact by adding 
 
 With signing enabled, verification is no longer integrity-only: SHA256 proves the files match the checksum list, and the GPG signature proves the checksum list itself came from the maintainer. An attacker who changes both the script and its checksum can no longer defeat verification without also forging the maintainer signature.
 
+### Pinned bootstrap toolchain (reproducibility)
+
+The install path still runs external bootstrap installers (nvm, uv), but every moving version is pinned so installs are reproducible and auditable: `NODE_VERSION`, `NVM_VERSION`, `UV_VERSION`, `PYTHON_VERSION`, `FRAPPE_BRANCH`, `ERPNEXT_BRANCH`, and (as of v1.7.0) `BENCH_VERSION` for the `frappe-bench` CLI. These live as a single source of truth in `erpnext-dev.sh` and are surfaced by `erpnext-dev versions`, `where-installed`, and the support bundle. Each is override-able by env var; `BENCH_VERSION=` (empty) intentionally unpins `frappe-bench`.
+
 ### Verifying release signatures
 
 **Operator (maintainer) one-time setup** — required to activate signing:
@@ -258,19 +262,21 @@ The toolkit was a single large Bash script. As of the Phase B work it is a thin
 against `SHA256SUMS` by `verify-toolkit`. The former monolith audit/regression
 risk is retired.
 
-### Known open: shared `/tmp` lock-file hardening (multi-user hosts)
+### Resolved: lock-file hardening (multi-user hosts)
 
-The toolkit's single-instance lock still defaults to a predictable, world-shared
-path (`/tmp/erpnext-dev-locks/toolkit.lock`, dir mode `1777`, file mode `666`),
-and the lock is created with a plain truncate that follows symlinks. On a
-**single-admin dedicated VM** (the toolkit's target) the practical risk is low.
-On a **multi-user host**, an unprivileged user could pre-create the predictable
-path as a symlink and cause a later root run to follow/truncate it.
+Earlier releases put the single-instance lock in a predictable, world-shared
+path (`/tmp/erpnext-dev-locks/toolkit.lock`, dir mode `1777`, file mode `666`)
+and created it with a truncate that followed symlinks — so on a multi-user host
+an unprivileged user could pre-plant the path as a symlink and have a later root
+run follow/truncate it.
 
-Planned hardening: root → `/run/lock/erpnext-dev/` (root-owned, mode `0700`),
-non-root → `${XDG_RUNTIME_DIR}/erpnext-dev/`, refuse symlinked lock files, and
-drop the `chmod 666`. Until then, do not run the toolkit as root on a host that
-shares `/tmp` with untrusted local users.
+As of v1.7.0 the lock lives in a private directory chosen by identity: root uses
+`/run/lock/erpnext-dev/` (root-owned tmpfs), a normal user uses
+`${XDG_RUNTIME_DIR}/erpnext-dev/`, falling back to `/tmp/erpnext-dev-<uid>-locks/`.
+The directory is created mode `0700` and must be owned by us (or root); a
+symlinked lock directory or lock file is refused before any open/truncate, and
+the lock file itself is mode `0600` (no more `1777`/`666`). This closes the
+shared-`/tmp` symlink-redirect risk.
 
 ## Recommended release-security roadmap
 
