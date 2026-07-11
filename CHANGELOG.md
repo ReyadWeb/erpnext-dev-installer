@@ -1,3 +1,18 @@
+## v1.6.3 - Safer lock recovery + clearer busy-lock errors
+
+### Added
+
+- **`clear-lock`** (`unlock` / `force-unlock` aliases): clears a stale toolkit
+  lock only when no process still holds it. Override with
+  `FORCE_CLEAR_LOCK=1` if you are certain. Documented in the README.
+
+### Changed
+
+- Busy-lock errors now list **who holds the lock** (PID + command via `fuser` /
+  `lsof`), write `pid=` / `started=` / `cmd=` metadata into the lock file, and
+  tell users to prefer `sudo erpnext-dev clear-lock` over raw `rm` (which can
+  allow two toolkits to run at once).
+
 ## v1.6.2 - Menu path consistency for Local / Production SSL
 
 ### Changed

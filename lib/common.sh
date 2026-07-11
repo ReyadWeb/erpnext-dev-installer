@@ -76,7 +76,23 @@ prepare_lock_file() {
     mkdir -p "$(dirname "$LOCK_FILE")" 2>/dev/null || true
   fi
 
-  if ! (: >"$LOCK_FILE") 2>/dev/null; then
+  # Create the lock file if missing; do NOT truncate an existing one — another
+  # process may hold flock on that inode and we want its pid= metadata intact.
+  if [[ ! -e "$LOCK_FILE" ]]; then
+    : >"$LOCK_FILE" 2>/dev/null || {
+      fallback_dir="/tmp/erpnext-dev-${uid}-locks"
+      mkdir -p "$fallback_dir" 2>/dev/null || {
+        echo "ERROR: Cannot create fallback lock directory: $fallback_dir" >&2
+        exit 1
+      }
+      chmod 700 "$fallback_dir" 2>/dev/null || true
+      LOCK_FILE="${fallback_dir}/toolkit.lock"
+      : >"$LOCK_FILE" 2>/dev/null || {
+        echo "ERROR: Cannot write lock file: $LOCK_FILE" >&2
+        exit 1
+      }
+    }
+  elif [[ ! -w "$LOCK_FILE" ]]; then
     fallback_dir="/tmp/erpnext-dev-${uid}-locks"
     mkdir -p "$fallback_dir" 2>/dev/null || {
       echo "ERROR: Cannot create fallback lock directory: $fallback_dir" >&2
@@ -84,7 +100,7 @@ prepare_lock_file() {
     }
     chmod 700 "$fallback_dir" 2>/dev/null || true
     LOCK_FILE="${fallback_dir}/toolkit.lock"
-    : >"$LOCK_FILE" 2>/dev/null || {
+    [[ -e "$LOCK_FILE" ]] || : >"$LOCK_FILE" 2>/dev/null || {
       echo "ERROR: Cannot write lock file: $LOCK_FILE" >&2
       exit 1
     }
@@ -93,15 +109,104 @@ prepare_lock_file() {
   chmod 666 "$LOCK_FILE" 2>/dev/null || true
 }
 
+# List PIDs that currently hold an open handle on the lock file (best-effort).
+toolkit_lock_holder_pids() {
+  local lock="${1:-$LOCK_FILE}"
+  local pids=""
+  if command -v fuser >/dev/null 2>&1; then
+    pids="$(fuser "$lock" 2>/dev/null | tr -s '[:space:]' ' ' | sed 's/^ //;s/ $//')" || true
+  elif command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -t "$lock" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')" || true
+  fi
+  printf '%s' "$pids"
+}
+
+toolkit_describe_lock_holders() {
+  local lock="${1:-$LOCK_FILE}"
+  local pids pid cmd meta
+  pids="$(toolkit_lock_holder_pids "$lock")"
+  if [[ -z "$pids" ]]; then
+    echo "  (no process currently holds the lock file open)"
+    return 1
+  fi
+  for pid in $pids; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    cmd="$(ps -o args= -p "$pid" 2>/dev/null | sed 's/^[[:space:]]*//' || true)"
+    [[ -n "$cmd" ]] || cmd="(process exited while inspecting)"
+    echo "  PID ${pid}: ${cmd}"
+  done
+  if [[ -f "$lock" ]] && meta="$(head -n 3 "$lock" 2>/dev/null)" && [[ -n "$meta" ]]; then
+    echo "  Lock file metadata:"
+    printf '%s\n' "$meta" | sed 's/^/    /'
+  fi
+  return 0
+}
+
 acquire_toolkit_lock() {
   prepare_lock_file
-  exec 200>"$LOCK_FILE"
+  # Open read/write without truncating so a failed acquire still leaves holder metadata readable.
+  exec 200<>"$LOCK_FILE"
   if ! flock -n 200; then
-    err "Another toolkit task is already running."
+    err "Another toolkit task is already running (or a previous session is still holding the lock)."
     echo "Lock file: $LOCK_FILE" >&2
-    echo "Wait for it to finish, or remove the lock only if you are sure no toolkit is running." >&2
+    echo >&2
+    echo "Who holds it:" >&2
+    toolkit_describe_lock_holders "$LOCK_FILE" >&2 || true
+    echo >&2
+    echo "What to do:" >&2
+    echo "  1. Check other terminals/SSH sessions for a running 'erpnext-dev' / menu." >&2
+    echo "  2. If a PID is listed above and it is stuck, stop it:  sudo kill <PID>" >&2
+    echo "  3. If you are sure nothing is running, clear safely:" >&2
+    echo "       sudo erpnext-dev clear-lock" >&2
+    echo >&2
+    echo "Do NOT 'rm' the lock file while another toolkit is still running — that can" >&2
+    echo "allow two installs to run at once. Prefer clear-lock (it refuses if a holder is live)." >&2
     exit 1
   fi
+  # We own the lock: reset metadata for the next waiter.
+  : >"$LOCK_FILE"
+  {
+    echo "pid=$$"
+    echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date)"
+    echo "cmd=${APP_NAME:-erpnext-dev} ${ACTION:-menu}"
+  } >&200 || true
+}
+
+# Safe unlock helper: refuses if a live process still holds the flock.
+clear_toolkit_lock() {
+  require_sudo
+  local pids force="${FORCE_CLEAR_LOCK:-0}"
+
+  prepare_lock_file
+  ui_box_start "Clear toolkit lock"
+  status_line "Lock file" "INFO" "$LOCK_FILE"
+
+  pids="$(toolkit_lock_holder_pids "$LOCK_FILE")"
+  if [[ -n "$pids" && "$force" != "1" ]]; then
+    status_line "Lock holders" "FAIL" "still live"
+    toolkit_describe_lock_holders "$LOCK_FILE" || true
+    echo
+    err "Refusing to clear: a process still holds the lock."
+    echo "Stop that process first (sudo kill <PID>), or re-check other terminals."
+    echo "Only if you are certain those PIDs are wrong, override with:"
+    echo "  sudo FORCE_CLEAR_LOCK=1 erpnext-dev clear-lock"
+    ui_box_end
+    return 1
+  fi
+
+  if [[ -n "$pids" && "$force" == "1" ]]; then
+    warn "FORCE_CLEAR_LOCK=1: removing lock while holders may still be alive: ${pids}"
+    toolkit_describe_lock_holders "$LOCK_FILE" || true
+  elif [[ -z "$pids" ]]; then
+    status_line "Lock holders" "OK" "none (safe to clear)"
+  fi
+
+  rm -f "$LOCK_FILE" 2>/dev/null || fail "Could not remove ${LOCK_FILE}"
+  # Recreate an empty lock path so the next run has a predictable file.
+  : >"$LOCK_FILE" 2>/dev/null || true
+  chmod 666 "$LOCK_FILE" 2>/dev/null || true
+  ok "Lock cleared. You can run: sudo erpnext-dev"
+  ui_box_end
 }
 
 action_requires_lock() {
