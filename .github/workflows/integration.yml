@@ -112,7 +112,7 @@ jobs:
           [[ -f "$lib" ]] || { echo "::error::installed lib/common.sh not found"; exit 1; }
 
           sudo cp -a "$lib" /tmp/erpnext-dev-common.sh.bak
-          echo CORRUPT | sudo tee -a "$lib" >/dev/null
+          printf '\n# tamper-fixture\n' | sudo tee -a "$lib" >/dev/null
           if sudo -E ./erpnext-dev.sh verify-toolkit >/tmp/erpnext-dev-vt-tamper.out 2>&1; then
             echo "::error::verify-toolkit passed after tampering ${lib}"
             sudo mv /tmp/erpnext-dev-common.sh.bak "$lib"

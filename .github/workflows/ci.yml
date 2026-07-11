@@ -51,7 +51,7 @@ jobs:
           ./erpnext-dev.sh verify-toolkit | grep -qi "active match.*OK"
           # Negative: tampering any module must fail whole-tree verify-toolkit.
           cp -a lib/common.sh lib/common.sh.bak
-          echo CORRUPT >> lib/common.sh
+          printf '\n# tamper-fixture\n' >> lib/common.sh
           if ./erpnext-dev.sh verify-toolkit >/tmp/erpnext-dev-vt-tamper.$$ 2>&1; then
             mv lib/common.sh.bak lib/common.sh
             cat /tmp/erpnext-dev-vt-tamper.$$
