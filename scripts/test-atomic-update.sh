@@ -93,21 +93,15 @@ assert_version_at() {
 }
 
 run_toolkit() {
-  # shellcheck disable=SC2024
-  sudo -E env \
-    TOOLKIT_INSTALL_DIR="${TOOLKIT_INSTALL_DIR}" \
-    INSTALLER_CANONICAL_PATH="${INSTALLER_CANONICAL_PATH}" \
-    TOOLKIT_CLI_PATH="${TOOLKIT_CLI_PATH}" \
-    TOOLKIT_RELEASE_GITHUB="${TOOLKIT_RELEASE_GITHUB}" \
-    ASSUME_YES=1 \
-    "${ROOT_DIR}/erpnext-dev.sh" "$@"
+  export TOOLKIT_INSTALL_DIR INSTALLER_CANONICAL_PATH TOOLKIT_CLI_PATH
+  export TOOLKIT_RELEASE_GITHUB ASSUME_YES
+  "${ROOT_DIR}/erpnext-dev.sh" "$@"
 }
 
 verify_at_current() {
   local stable_root="$1"
-  local rel_script="${stable_root}/current/erpnext-dev.sh"
-  # Pin CHECKSUM_FILE so verify-toolkit does not pick up ./SHA256SUMS from the repo cwd.
-  CHECKSUM_FILE="${stable_root}/current/SHA256SUMS" "$rel_script" verify-toolkit "$@"
+  export CHECKSUM_FILE="${stable_root}/current/SHA256SUMS"
+  ( cd "${stable_root}/current" && ./erpnext-dev.sh verify-toolkit )
 }
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
