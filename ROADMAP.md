@@ -1,7 +1,7 @@
 # ERPNext Developer Toolkit — Roadmap
 
-**Current release:** v1.8.1 (July 2026)  
-**External review (July 2026):** enterprise-candidate for single-admin Ubuntu VM ops — **9.4 / 10**  
+**Current release:** v1.8.2 (July 2026)  
+**External review (July 2026):** enterprise-candidate for single-admin Ubuntu VM ops — **9.4 / 10** ( **9.5+** after v1.8.2 self-update hardening )  
 **Full history:** [`CHANGELOG.md`](CHANGELOG.md) · **Security:** [`SECURITY.md`](SECURITY.md) · **Testing:** [`TESTING.md`](TESTING.md)
 
 ---
@@ -12,7 +12,7 @@
 |----------|--------|--------|
 | Local dev VM (single admin) | **9.5 / 10** | Field-tested; guided HTTPS, apps, backups |
 | Public VPS production (single admin) | **9.4 / 10** | CI-proven install + restore + production runtime; **VPS validation in progress** |
-| Supply chain / release trust | **9.0 / 10** | Gated signed releases; **self-update signature gap → v1.8.2 (P0)** |
+| Supply chain / release trust | **9.3 / 10** | Self-update fingerprint gate (v1.8.2); signing env separation → v1.9.0 |
 | Reproducibility | **9.0 / 10** | Pinned toolchain (`versions`); Ubuntu 26.04 not yet in integration CI |
 | Enterprise / multi-user host | **8.5 / 10** | Lock hardened; not a shared-shell product |
 | Community / packaging polish | **8.0 / 10** | No CONTRIBUTING/templates yet |
@@ -46,23 +46,11 @@ Independent review (July 2026) confirms prior architectural objections are **res
 
 ## Open findings from external review
 
-### P0 — v1.8.2: Self-update authenticity hardening
+### P0 — v1.8.2: Self-update authenticity hardening — **implemented**
 
-**Issue:** `update-toolkit` checksum verification is strong, but `toolkit_verify_staged_signature()` is weaker than standalone `verify-signature`:
-
-| Check | `verify-signature` | `update-toolkit` (today) |
-|-------|-------------------|--------------------------|
-| Signature required | ✅ fail | ⚠️ warn, continue |
-| GPG required | ✅ fail | ⚠️ warn, continue |
-| Bundled pubkey required | ✅ fail | ⚠️ warn, continue |
-| Pinned maintainer fingerprint | ✅ enforced | ❌ not enforced on staged path |
-
-An attacker who controls a release asset could supply matching checksums + attacker GPG key + valid signature against that key. The pinned fingerprint (`BFC10C79427CF73496EA6F5A30BFD17DD559C8B6`) is meant to block exactly that — but the staged-update path does not yet enforce it.
-
-**v1.8.2 deliverables:**
-- Stable tag updates: missing `SHA256SUMS.asc`, missing `gpg`, missing bundled pubkey, bad signature, or wrong signer fingerprint → **FAIL**
-- Align `toolkit_verify_staged_signature()` with `verify-signature` fingerprint gate
-- CI negatives: missing signature, wrong key, tampered sums, valid sig/wrong fingerprint, missing pubkey
+Stable tag-channel `update-toolkit` now requires signature, gpg, bundled pubkey, valid
+detached signature, and pinned maintainer fingerprint (same bar as `verify-signature`).
+See [`SECURITY.md`](SECURITY.md) and `scripts/test-staged-signature.sh`.
 
 ### P1 — v1.9.0: Signing authority separation
 
@@ -105,16 +93,13 @@ CONTRIBUTING, CODE_OF_CONDUCT, issue/PR templates, docs consolidation.
 
 Target: **9.8+ overall** for single-admin production VPS within **4–6 weeks** of focused work.
 
-### Phase 0 — v1.8.2: Self-update authenticity hardening (~2–3 days) **P0**
+### Phase 0 — v1.8.2: Self-update authenticity hardening — **shipped**
 
 **Goal:** Close the gap between bootstrap `verify-signature` and `update-toolkit` staged verification. Supply chain **9.0 → 9.3**.
 
-**Deliverables:**
-- Harden [`toolkit_verify_staged_signature()`](lib/security.sh): require signature, GPG, bundled pubkey; enforce pinned `TOOLKIT_SIGNING_FINGERPRINT_DEFAULT`
-- CI negative matrix: missing sig, wrong key, tampered sums, valid sig/wrong fingerprint, missing pubkey
-- Update [`SECURITY.md`](SECURITY.md) threat model; extend atomic update smoke in [`scripts/test-atomic-update.sh`](scripts/test-atomic-update.sh)
+**Shipped:** `toolkit_gpg_verify_signature_files()`, hardened `toolkit_verify_staged_signature()`, `scripts/test-staged-signature.sh`, signed-bundle atomic update smoke.
 
-**Rating after v1.8.2 + VPS pass:** **9.5**
+**Rating after VPS pass + v1.8.2:** **9.5**
 
 ### Phase 1 — v1.9.0: Signing authority separation (~1 week) **P1**
 
@@ -167,11 +152,10 @@ Post-install `update-toolkit` smoke against real GitHub release assets; document
 ## Near-term priority order
 
 1. **VPS production validation** — confirms enterprise-candidate rating is real-world, not CI-only
-2. **v1.8.2** — self-update signature/fingerprint hardening **(P0)**
-3. **v1.9.0** — signing environment separation **(P1)**
-4. **v1.9.1** — Actions SHA pinning + Ubuntu 26.04 integration **(P1)**
-5. **v1.10.0** — object-storage backups **(P2)**
-6. **v1.11.0** — community + docs polish → **9.8+**
+2. **v1.9.0** — signing environment separation **(P1)**
+3. **v1.9.1** — Actions SHA pinning + Ubuntu 26.04 integration **(P1)**
+4. **v1.10.0** — object-storage backups **(P2)**
+5. **v1.11.0** — community + docs polish → **9.8+**
 
 ---
 

@@ -2,7 +2,8 @@
 # Hermetic smoke test for atomic self-update and rollback.
 #
 # Drives the real update-toolkit / toolkit-rollback code paths against a local
-# file:// release server in a temp stable-root. No network, no GPG secrets.
+# file:// release server in a temp stable-root. Uses an ephemeral GPG test key
+# so tag-channel updates exercise the v1.8.2 signature + fingerprint gate.
 #
 # Usage: sudo -E scripts/test-atomic-update.sh
 # (or run without sudo if passwordless sudo is unavailable — the script will
@@ -44,6 +45,13 @@ regenerate_checksums_in_tree() {
   mv "$tmp_file" "${tree}/SHA256SUMS"
 }
 
+sign_checksums_in_tree() {
+  local tree="$1"
+  [[ -n "${TEST_GNUPG_HOME:-}" ]] || fail "test signing key not initialized"
+  GNUPGHOME="$TEST_GNUPG_HOME" gpg --batch --yes --local-user "$TEST_SIGNER" \
+    --detach-sign --armor --output "${tree}/SHA256SUMS.asc" "${tree}/SHA256SUMS"
+}
+
 build_synthetic_bundle() {
   local tag="$1"          # v9.9.8
   local srv_root="$2"     # file server root
@@ -52,7 +60,7 @@ build_synthetic_bundle() {
 
   stage="$(mktemp -d "${TMPDIR:-/tmp}/erpnext-dev-bundle-stage.XXXXXX")"
   bundle_dir="${stage}/erpnext-dev-${tag}"
-  mkdir -p "$bundle_dir"
+  mkdir -p "$bundle_dir/docs"
 
   while IFS= read -r line || [[ -n "$line" ]]; do
     entry="${line%%#*}"
@@ -63,8 +71,11 @@ build_synthetic_bundle() {
     cp -a "${ROOT_DIR}/${entry}" "${bundle_dir}/${entry}"
   done < "${ROOT_DIR}/RELEASE-MANIFEST.txt"
 
+  cp -a "$TEST_PUBKEY" "${bundle_dir}/docs/erpnext-dev-signing-key.asc"
+
   sed -i "s/^SCRIPT_VERSION=\"[^\"]*\"/SCRIPT_VERSION=\"${ver_num}\"/" "${bundle_dir}/erpnext-dev.sh"
   regenerate_checksums_in_tree "$bundle_dir"
+  sign_checksums_in_tree "$bundle_dir"
 
   bundle_path="${srv_root}/releases/download/${tag}/erpnext-dev-${tag}.tar.gz"
   mkdir -p "$(dirname "$bundle_path")"
@@ -94,7 +105,7 @@ assert_version_at() {
 
 run_toolkit() {
   export TOOLKIT_INSTALL_DIR INSTALLER_CANONICAL_PATH TOOLKIT_CLI_PATH
-  export TOOLKIT_RELEASE_GITHUB ASSUME_YES
+  export TOOLKIT_RELEASE_GITHUB ASSUME_YES TOOLKIT_SIGNING_KEY_FINGERPRINT
   "${ROOT_DIR}/erpnext-dev.sh" "$@"
 }
 
@@ -102,6 +113,36 @@ verify_at_current() {
   local stable_root="$1"
   export CHECKSUM_FILE="${stable_root}/current/SHA256SUMS"
   ( cd "${stable_root}/current" && ./erpnext-dev.sh verify-toolkit )
+}
+
+setup_test_signing_key() {
+  command -v gpg >/dev/null 2>&1 || fail "gpg is required for atomic update smoke tests"
+
+  TEST_GNUPG_HOME="${work}/gnupg"
+  mkdir -p "$TEST_GNUPG_HOME"
+  chmod 700 "$TEST_GNUPG_HOME"
+
+  cat >"${TEST_GNUPG_HOME}/batch.genkey" <<'EOF'
+Key-Type: EDDSA
+Key-Curve: Ed25519
+Key-Usage: sign
+Name-Real: ERPNext Dev Toolkit Test Signer
+Name-Email: test-signer@erpnext-dev-installer.local
+Expire-Date: 0
+%no-protection
+%commit
+EOF
+
+  GNUPGHOME="$TEST_GNUPG_HOME" gpg --batch --generate-key "${TEST_GNUPG_HOME}/batch.genkey" >/dev/null 2>&1 \
+    || fail "could not generate ephemeral test signing key"
+
+  TEST_SIGNER="test-signer@erpnext-dev-installer.local"
+  TEST_PUBKEY="${work}/test-signing-key.asc"
+  GNUPGHOME="$TEST_GNUPG_HOME" gpg --armor --export "$TEST_SIGNER" >"$TEST_PUBKEY"
+  TEST_FINGERPRINT="$(GNUPGHOME="$TEST_GNUPG_HOME" gpg --with-colons --fingerprint "$TEST_SIGNER" \
+    | awk -F: '/^fpr:/ { print $10; exit }')"
+  [[ -n "$TEST_FINGERPRINT" ]] || fail "could not read test key fingerprint"
+  export TOOLKIT_SIGNING_KEY_FINGERPRINT="$TEST_FINGERPRINT"
 }
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
@@ -127,10 +168,12 @@ export ASSUME_YES=1
 mkdir -p "${stable}" "${work}/bin"
 chmod 755 "${work}/bin"
 
-echo "== Building synthetic release bundles (unsigned, checksum-only) =="
+setup_test_signing_key
+
+echo "== Building synthetic signed release bundles =="
 build_synthetic_bundle "v9.9.8" "$srv" >/dev/null
 build_synthetic_bundle "v9.9.9" "$srv" >/dev/null
-pass "built v9.9.8 and v9.9.9 bundles on file://${srv}"
+pass "built signed v9.9.8 and v9.9.9 bundles on file://${srv}"
 
 echo "== update-toolkit v9.9.8 =="
 TOOLKIT_UPDATE_VERSION=v9.9.8 run_toolkit update-toolkit >/tmp/erpnext-dev-atomic-u1.$$ 2>&1 || {
@@ -180,7 +223,9 @@ echo "== negative: corrupt v9.9.9 bundle must not half-apply =="
 bundle_v999="${srv}/releases/download/v9.9.9/erpnext-dev-v9.9.9.tar.gz"
 work_extract="$(mktemp -d "${TMPDIR:-/tmp}/erpnext-dev-corrupt.XXXXXX")"
 tar -C "$work_extract" -xzf "$bundle_v999"
-printf 'CORRUPT' >> "${work_extract}/erpnext-dev-v9.9.9/lib/common.sh"
+printf '\n# tamper-fixture\n' >> "${work_extract}/erpnext-dev-v9.9.9/lib/common.sh"
+regenerate_checksums_in_tree "${work_extract}/erpnext-dev-v9.9.9"
+sign_checksums_in_tree "${work_extract}/erpnext-dev-v9.9.9"
 tar -C "$work_extract" -czf "$bundle_v999" "erpnext-dev-v9.9.9"
 rm -rf "$work_extract"
 
@@ -191,6 +236,22 @@ fi
 rm -f /tmp/erpnext-dev-atomic-bad.$$
 assert_current_is "$stable" "v9.9.8"
 pass "corrupt update rejected; current still v9.9.8"
+
+echo "== negative: unsigned v9.9.9 bundle must not apply =="
+bundle_v999="${srv}/releases/download/v9.9.9/erpnext-dev-v9.9.9.tar.gz"
+work_extract="$(mktemp -d "${TMPDIR:-/tmp}/erpnext-dev-unsigned.XXXXXX")"
+tar -C "$work_extract" -xzf "$bundle_v999"
+rm -f "${work_extract}/erpnext-dev-v9.9.9/SHA256SUMS.asc"
+tar -C "$work_extract" -czf "$bundle_v999" "erpnext-dev-v9.9.9"
+rm -rf "$work_extract"
+
+if TOOLKIT_UPDATE_VERSION=v9.9.9 run_toolkit update-toolkit >/tmp/erpnext-dev-atomic-unsigned.$$ 2>&1; then
+  cat /tmp/erpnext-dev-atomic-unsigned.$$
+  fail "update-toolkit should have failed on unsigned v9.9.9 bundle"
+fi
+rm -f /tmp/erpnext-dev-atomic-unsigned.$$
+assert_current_is "$stable" "v9.9.8"
+pass "unsigned update rejected; current still v9.9.8"
 
 rm -rf "$work"
 pass "atomic update smoke test complete"

@@ -1,17 +1,17 @@
 # Testing guide
 
-**Current release:** v1.8.1 · See [`ROADMAP.md`](ROADMAP.md) for what is CI-proven vs what requires field validation.
+**Current release:** v1.8.2 · See [`ROADMAP.md`](ROADMAP.md) for what is CI-proven vs what requires field validation.
 
 ---
 
-## VPS production validation (v1.8.1)
+## VPS production validation (v1.8.2)
 
 Use this checklist on a **fresh Ubuntu 24.04 or 26.04 LTS VPS** with a real domain,
 mimicking production. Install from the signed bundle:
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
-VERSION="v1.8.1"
+VERSION="v1.8.2"
 BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz" && cd "erpnext-dev-${VERSION}"
@@ -43,6 +43,27 @@ Record failures with command output; open issues or patch v1.8.x before producti
 ---
 
 ## CI and developer validation (v1.8.x)
+
+### v1.8.2 staged signature verification (self-update authenticity)
+
+```bash
+scripts/test-staged-signature.sh    # unit matrix: sig/pubkey/fingerprint/gpg negatives
+scripts/validate-release.sh         # includes staged-signature matrix
+sudo -E scripts/test-atomic-update.sh   # signed bundles; unsigned update rejected
+```
+
+Expected:
+
+```text
+valid signed bundle: PASS
+missing SHA256SUMS.asc: FAIL
+missing bundled public key: FAIL
+tampered SHA256SUMS: FAIL
+valid signature, wrong pinned fingerprint: FAIL
+valid signature against mismatched bundled pubkey: FAIL
+missing gpg: FAIL
+atomic update smoke: signed v9.9.8 → v9.9.9 → rollback; corrupt/unsigned rejected
+```
 
 ### v1.8.0 reliability proof (atomic update + gate enforcement)
 

@@ -18,7 +18,7 @@ It supports two setup paths:
 > the path to **9.8+** are in [`ROADMAP.md`](ROADMAP.md). This README focuses on
 > installation, operations, and usage.
 
-**Current release:** v1.8.1 · **Readiness:** ~9.5/10 for single-admin local/public VM
+**Current release:** v1.8.2 · **Readiness:** ~9.5/10 for single-admin local/public VM
 (after VPS production validation). Next milestone: **v1.9.0** (signing authority separation).
 
 ---
@@ -57,7 +57,7 @@ First install and verify the toolkit ([details below](#install-and-verify)):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
-VERSION="v1.8.1"
+VERSION="v1.8.2"
 BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz"
@@ -738,7 +738,7 @@ manual review.
 
 ## Production caution
 
-This installer can prepare a production-candidate VM. After v1.8.1 the core path is
+This installer can prepare a production-candidate VM. After v1.8.2 the core path is
 CI-proven (install, backup/restore, production runtime, signed releases), but
 production readiness still requires **your** validation on a real VPS: domain/DNS,
 cloud firewall, off-VM backup target, restore rehearsal, snapshot policy,

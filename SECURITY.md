@@ -18,8 +18,9 @@ v1.6.0 turns release integrity from "available" into "enforced":
   release bundle, verifies whole-tree checksums (`sha256sum -c`), extracts to
   `/opt/erpnext-dev/releases/<ver>/`, then flips `/opt/erpnext-dev/current` with
   a single atomic `rename`. The previous release is retained for instant
-  `toolkit-rollback`. **Known gap (v1.8.1):** staged signature verification is
-  weaker than bootstrap `verify-signature` — see [Self-update authenticity gap](#self-update-authenticity-gap-v181--planned-v182) below; **v1.8.2** closes this.
+  `toolkit-rollback`. As of **v1.8.2**, staged signature verification on the tag
+  channel matches bootstrap `verify-signature`: signature, gpg, bundled pubkey, and
+  pinned maintainer fingerprint are all required (fail closed).
 - **Symlink resolution fix.** The entry script resolves its own real path
   (`readlink -f`) before locating `lib/`, so running through the CLI symlink or
   the `current` release symlink always sources modules from the real, verified
@@ -290,18 +291,20 @@ pinned toolchain. Full detail: [`ROADMAP.md`](ROADMAP.md#external-security-revie
 
 **One P0 gap remains on the consumer (self-update) path** — documented below.
 
-### Implemented (v1.6.0 – v1.8.1)
+### Implemented (v1.6.0 – v1.8.2)
 
 - **Gated publish:** validate → integration → sign → publish on every stable tag
 - **Mandatory signing** for stable tags (`vX.Y.Z`); pre-release tags may publish unsigned
 - **Full-tree integrity:** `verify-toolkit` checks entrypoint + all 17 modules
-- **Atomic self-update:** bundle verify + `releases/<ver>` + `current` symlink + rollback
-- **CI proof:** atomic update smoke, signing policy unit tests, tamper negatives
+- **Atomic self-update:** bundle verify + signature/fingerprint gate + `releases/<ver>` + rollback
+- **Self-update authenticity (v1.8.2):** tag-channel updates require the same signature
+  and pinned-fingerprint bar as bootstrap `verify-signature`
+- **CI proof:** staged signature matrix, atomic update smoke, signing policy tests, tamper negatives
 
 **Current bootstrap workflow:**
 
 ```bash
-VERSION="v1.8.1"
+VERSION="v1.8.2"
 BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz" && cd "erpnext-dev-${VERSION}"
@@ -310,44 +313,23 @@ sudo ./erpnext-dev.sh verify-signature
 sudo ./erpnext-dev.sh verify-toolkit
 ```
 
-### Self-update authenticity gap (v1.8.1 → planned v1.8.2) **P0**
+### Self-update authenticity (v1.8.2)
 
-Bootstrap install uses `verify-signature`, which **requires** a valid detached
-signature and enforces the pinned maintainer fingerprint:
+Tag-channel `update-toolkit` uses `toolkit_gpg_verify_signature_files()` — the same
+core as `verify-signature`. For stable release bundles:
 
-`BFC10C79427CF73496EA6F5A30BFD17DD559C8B6`
+| Condition | Policy |
+|-----------|--------|
+| Missing `SHA256SUMS.asc` | FAIL |
+| Missing `gpg` | FAIL |
+| Missing bundled pubkey | FAIL |
+| Bad signature | FAIL |
+| Signer fingerprint ≠ pinned maintainer key | FAIL |
 
-The `update-toolkit` tag-channel path verifies whole-tree SHA256 checksums (strong),
-then calls `toolkit_verify_staged_signature()`. That helper is **weaker**:
+Pinned fingerprint: `BFC10C79427CF73496EA6F5A30BFD17DD559C8B6`
 
-| Condition | `verify-signature` | `update-toolkit` (v1.8.1) |
-|-----------|-------------------|---------------------------|
-| Missing `SHA256SUMS.asc` | FAIL | WARN, continue |
-| Missing `gpg` | FAIL | WARN, continue |
-| Missing bundled pubkey | FAIL | WARN, continue |
-| Bad signature | FAIL | FAIL |
-| Wrong signer fingerprint | FAIL | **Not checked** |
-
-**Threat:** An attacker who controls a malicious release asset could supply
-consistent checksums, an attacker-generated GPG key, and a valid signature against
-that key. Checksum verification alone cannot detect this; the **pinned fingerprint**
-is the control that blocks it — but the staged-update path does not yet enforce it.
-
-**v1.8.2 policy (stable tag updates):**
-
-- Missing `SHA256SUMS.asc` → FAIL
-- Missing `gpg` → FAIL
-- Missing bundled pubkey → FAIL
-- Bad signature → FAIL
-- Signer fingerprint ≠ pinned default → FAIL
-
-**CI additions:** valid signed bundle PASS; missing signature FAIL; wrong key FAIL;
-tampered `SHA256SUMS` FAIL; valid signature + wrong fingerprint FAIL; missing pubkey FAIL.
-
-### Planned — v1.8.2 (self-update authenticity hardening)
-
-Align `toolkit_verify_staged_signature()` with `verify-signature`; extend atomic
-update smoke and release validator negatives. See [`ROADMAP.md`](ROADMAP.md) Phase 0.
+CI runs `scripts/test-staged-signature.sh` (unit matrix) and signed-bundle atomic
+update smoke (`scripts/test-atomic-update.sh`).
 
 ### Planned — v1.9.0 (signing authority separation)
 

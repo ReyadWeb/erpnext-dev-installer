@@ -1,3 +1,25 @@
+## v1.8.2 - Self-update authenticity hardening
+
+### Security
+
+- **`update-toolkit` tag-channel updates now match `verify-signature` strictness.**
+  Stable release self-updates require `SHA256SUMS.asc`, `gpg`, the bundled maintainer
+  public key, a valid detached signature, and a signer fingerprint matching the
+  pinned maintainer key (`TOOLKIT_SIGNING_FINGERPRINT_DEFAULT`). Missing material
+  or fingerprint mismatch fails closed instead of warn-and-continue.
+- **Shared verification core:** `toolkit_gpg_verify_signature_files()` is used by
+  both `verify-signature` and `toolkit_verify_staged_signature()` so bootstrap and
+  self-update enforce the same identity bar.
+
+### Added
+
+- **`scripts/test-staged-signature.sh`**: hermetic unit matrix for staged signature
+  verification (valid signed bundle, missing signature, missing pubkey, tampered
+  sums, wrong fingerprint, mismatched pubkey, missing gpg). Runs in
+  `validate-release.sh` without sudo.
+- **Atomic update smoke** now builds **signed** synthetic bundles with an ephemeral
+  test key and asserts unsigned bundles are rejected during update.
+
 ## v1.8.1 - Fix integration tamper test (verify installed toolkit)
 
 ### Fixed

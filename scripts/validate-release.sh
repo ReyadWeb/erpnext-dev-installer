@@ -56,7 +56,7 @@ bash -n lib/security.sh
 bash -n lib/update.sh
 pass "bash syntax valid"
 
-chmod +x erpnext-dev.sh scripts/validate-release.sh scripts/generate-release-checksums.sh scripts/run-shellcheck.sh scripts/check-module-consistency.sh scripts/test-atomic-update.sh scripts/release-signing-policy.sh
+chmod +x erpnext-dev.sh scripts/validate-release.sh scripts/generate-release-checksums.sh scripts/run-shellcheck.sh scripts/check-module-consistency.sh scripts/test-atomic-update.sh scripts/test-staged-signature.sh scripts/release-signing-policy.sh
 
 # Module lists and dispatcher targets must all agree. This is the single guard
 # that prevents a module from being sourced at runtime while missing from the
@@ -212,6 +212,14 @@ pass "release-signing-policy: pre-release without key allows publish-unsigned"
 policy_out="$(scripts/release-signing-policy.sh v1.2.3 1)"
 [[ "$policy_out" == "sign" ]] || fail "release-signing-policy stable+key should sign, got: ${policy_out}"
 pass "release-signing-policy: stable tag with key requires sign"
+
+scripts/test-staged-signature.sh >/tmp/erpnext-dev-staged-sig.$$ 2>&1 || {
+  cat /tmp/erpnext-dev-staged-sig.$$
+  rm -f /tmp/erpnext-dev-staged-sig.$$
+  fail "test-staged-signature.sh failed"
+}
+rm -f /tmp/erpnext-dev-staged-sig.$$
+pass "staged signature verification matrix passed"
 
 if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
   # shellcheck disable=SC2024 # redirect is intentionally to the invoking user's /tmp file, not root's

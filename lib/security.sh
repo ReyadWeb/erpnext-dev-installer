@@ -7,6 +7,10 @@ _ERPNEXT_DEV_SECURITY_LOADED=1
 
 TOOLKIT_RELEASE_REPO="${TOOLKIT_RELEASE_REPO:-https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer}"
 
+# Fingerprint of the maintainer release-signing key. Trust anchor for verify-signature
+# and for stable tag-channel update-toolkit (must match VALIDSIG from bundled pubkey).
+TOOLKIT_SIGNING_FINGERPRINT_DEFAULT="BFC10C79427CF73496EA6F5A30BFD17DD559C8B6"
+
 toolkit_release_lib_files() {
   printf '%s\n' \
     common.sh config.sh access.sh frappe.sh support.sh backup.sh ssl.sh firewall.sh \
@@ -320,39 +324,76 @@ toolkit_prune_releases() {
   done < <(ls -1dt "${releases_dir}"/*/ 2>/dev/null)
 }
 
-# Verify the detached signature over a staged SHA256SUMS using the pinned key
-# that ships inside the same release tree. Hard-fails on a bad signature; warns
-# (and continues) only when signing material is genuinely absent.
+# Verify a detached GPG signature over SHA256SUMS using a local public-key file.
+# Enforces TOOLKIT_SIGNING_KEY_FINGERPRINT or TOOLKIT_SIGNING_FINGERPRINT_DEFAULT.
+# Returns 0 on success; 1 on failure (messages via err()).
+toolkit_gpg_verify_signature_files() {
+  local checksum_file="$1" signature_file="$2" pubkey_file="$3"
+  local gnupg_home verify_out want got
+
+  if ! command -v gpg >/dev/null 2>&1; then
+    err "gpg is not installed. Install gnupg to verify release signatures (Ubuntu: sudo apt-get install -y gnupg)."
+    return 1
+  fi
+
+  if [[ ! -f "$checksum_file" ]]; then
+    err "Missing checksum file: ${checksum_file}"
+    return 1
+  fi
+  if [[ ! -f "$signature_file" ]]; then
+    err "Missing detached signature ${signature_file}. Stable release updates require SHA256SUMS.asc."
+    return 1
+  fi
+  if [[ ! -f "$pubkey_file" ]]; then
+    err "Missing bundled signing public key: ${pubkey_file}"
+    return 1
+  fi
+
+  gnupg_home="$(mktemp -d "${TMPDIR:-/tmp}/erpnext-dev-gpg.XXXXXX")" || {
+    err "Could not create temporary keyring."
+    return 1
+  }
+
+  if ! GNUPGHOME="$gnupg_home" gpg --batch --import "$pubkey_file" >/dev/null 2>&1; then
+    err "Could not import signing public key from ${pubkey_file}."
+    rm -rf "$gnupg_home"
+    return 1
+  fi
+
+  verify_out="$(GNUPGHOME="$gnupg_home" gpg --status-fd 1 --verify "$signature_file" "$checksum_file" 2>/dev/null || true)"
+  rm -rf "$gnupg_home"
+
+  if ! printf '%s\n' "$verify_out" | grep -q '^\[GNUPG:\] GOODSIG'; then
+    err "Release signature verification failed (signature did not verify against the bundled key)."
+    return 1
+  fi
+
+  want="$(printf '%s' "${TOOLKIT_SIGNING_KEY_FINGERPRINT:-$TOOLKIT_SIGNING_FINGERPRINT_DEFAULT}" | tr -d ' ' | tr '[:lower:]' '[:upper:]')"
+  if [[ -n "$want" ]]; then
+    got="$(printf '%s\n' "$verify_out" | awk '/^\[GNUPG:\] VALIDSIG/ { print $3; exit }')"
+    if [[ -z "$got" || "$got" != *"$want"* ]]; then
+      err "Signing key fingerprint ${got:-unknown} does not match pinned maintainer fingerprint ${want}."
+      return 1
+    fi
+  fi
+
+  return 0
+}
+
+# Verify the detached signature over a staged SHA256SUMS using the bundled public key
+# in the same release tree. Stable tag-channel updates require signature, gpg, pubkey,
+# and a signer fingerprint matching the pinned maintainer key.
 toolkit_verify_staged_signature() {
   local tree="$1"
   local sig="${tree}/SHA256SUMS.asc"
   local sums="${tree}/SHA256SUMS"
   local pubkey="${tree}/docs/erpnext-dev-signing-key.asc"
-  local gnupg_home rc=0
 
-  if [[ ! -f "$sig" ]]; then
-    warn "No SHA256SUMS.asc in the release; proceeding on checksums only (unsigned)."
+  if toolkit_gpg_verify_signature_files "$sums" "$sig" "$pubkey"; then
+    ok "Release signature verified; signing key matches pinned maintainer fingerprint."
     return 0
   fi
-  if ! command -v gpg >/dev/null 2>&1; then
-    warn "gpg not available; verified checksums but could not verify the signature."
-    return 0
-  fi
-  if [[ ! -f "$pubkey" ]]; then
-    warn "No bundled signing key; verified checksums but could not verify the signature."
-    return 0
-  fi
-
-  gnupg_home="$(mktemp -d)"
-  if gpg --homedir "$gnupg_home" --batch --import "$pubkey" >/dev/null 2>&1 \
-     && gpg --homedir "$gnupg_home" --batch --verify "$sig" "$sums" >/dev/null 2>&1; then
-    ok "Release signature verified against the bundled pinned key."
-  else
-    rc=1
-    err "Release signature verification FAILED for ${version:-release}."
-  fi
-  rm -rf "$gnupg_home"
-  return "$rc"
+  return 1
 }
 
 update_toolkit() {
@@ -420,7 +461,10 @@ update_toolkit() {
     ( cd "$tree" && sha256sum -c SHA256SUMS >/dev/null ) || fail "Checksum verification failed for the ${version} bundle."
     status_line "Checksums" "OK" "every packaged file matches SHA256SUMS"
 
-    toolkit_verify_staged_signature "$tree" || fail "Refusing to install a release with an invalid signature."
+    command -v gpg >/dev/null 2>&1 || fail "gpg is required for stable release updates. Install gnupg (Ubuntu: sudo apt-get install -y gnupg)."
+    status_line "Signature gate" "INFO" "SHA256SUMS.asc + pinned maintainer fingerprint required"
+
+    toolkit_verify_staged_signature "$tree" || fail "Refusing to install a release with an invalid or untrusted signature."
   fi
 
   bash -n "${tree}/erpnext-dev.sh" || fail "Downloaded toolkit failed bash syntax validation."
@@ -664,11 +708,6 @@ run_security_audit() {
   ui_box_end
 }
 
-# Fingerprint of the maintainer release-signing key. This is the trust anchor:
-# it travels inside the (checksum-verifiable) script, so verify-signature can
-# enforce the signer identity even when the public key is fetched separately.
-TOOLKIT_SIGNING_FINGERPRINT_DEFAULT="BFC10C79427CF73496EA6F5A30BFD17DD559C8B6"
-
 # Locate the maintainer public key bundled with the toolkit.
 find_toolkit_pubkey_file() {
   local active_dir stable_dir candidate
@@ -757,48 +796,30 @@ verify_toolkit_signature() {
   status_line "Checksums" "INFO" "$checksum_file"
   status_line "Signature" "INFO" "$signature_file"
 
+  local pubkey_file=""
   if [[ "$pubkey" =~ ^https:// ]]; then
-    if ! curl -fsSL "$pubkey" | GNUPGHOME="$gnupg_home" gpg --import 2>/dev/null; then
-      status_line "Public key" "FAIL" "could not download or import key from ${pubkey}"
+    pubkey_file="${gnupg_home}/imported.pub.asc"
+    if ! curl -fsSL "$pubkey" >"$pubkey_file"; then
+      status_line "Public key" "FAIL" "could not download key from ${pubkey}"
       ui_box_end
       return 1
     fi
   elif [[ -f "$pubkey" ]]; then
-    if ! GNUPGHOME="$gnupg_home" gpg --import "$pubkey" 2>/dev/null; then
-      status_line "Public key" "FAIL" "could not import key file ${pubkey}"
-      ui_box_end
-      return 1
-    fi
+    pubkey_file="$pubkey"
   else
     status_line "Public key" "FAIL" "not a readable file or https URL: ${pubkey}"
     ui_box_end
     return 1
   fi
-  status_line "Public key" "OK" "imported into throwaway keyring"
+  status_line "Public key" "OK" "resolved for verification"
 
-  verify_out="$(GNUPGHOME="$gnupg_home" gpg --status-fd 1 --verify "$signature_file" "$checksum_file" 2>/dev/null || true)"
-  if printf '%s\n' "$verify_out" | grep -q '^\[GNUPG:\] GOODSIG'; then
-    status_line "Signature" "OK" "GOOD signature over SHA256SUMS"
-  else
-    status_line "Signature" "FAIL" "signature did not verify against the provided key"
+  if ! toolkit_gpg_verify_signature_files "$checksum_file" "$signature_file" "$pubkey_file"; then
+    status_line "Signature" "FAIL" "verification or fingerprint pin failed"
     ui_box_end
     return 1
   fi
-
-  local want got
-  want="$(printf '%s' "${TOOLKIT_SIGNING_KEY_FINGERPRINT:-$TOOLKIT_SIGNING_FINGERPRINT_DEFAULT}" | tr -d ' ' | tr '[:lower:]' '[:upper:]')"
-  if [[ -n "$want" ]]; then
-    got="$(printf '%s\n' "$verify_out" | awk '/^\[GNUPG:\] VALIDSIG/ { print $3; exit }')"
-    if [[ -n "$got" && "$got" == *"$want" ]]; then
-      status_line "Key fingerprint" "OK" "matches pinned fingerprint ${want}"
-    else
-      status_line "Key fingerprint" "FAIL" "signing key ${got:-unknown} does not match pinned ${want}"
-      ui_box_end
-      return 1
-    fi
-  else
-    status_line "Key fingerprint" "INFO" "not pinned; set TOOLKIT_SIGNING_KEY_FINGERPRINT to enforce identity"
-  fi
+  status_line "Signature" "OK" "GOOD signature over SHA256SUMS"
+  status_line "Key fingerprint" "OK" "matches pinned maintainer fingerprint"
 
   ok "Release signature verified."
   echo "Next: $(toolkit_cmd verify-toolkit) confirms the installed files match these signed checksums."
