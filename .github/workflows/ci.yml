@@ -49,5 +49,37 @@ jobs:
           sha256sum -c SHA256SUMS
           ./erpnext-dev.sh version
           ./erpnext-dev.sh verify-toolkit | grep -qi "active match.*OK"
+          # Negative: tampering any module must fail whole-tree verify-toolkit.
+          cp -a lib/common.sh lib/common.sh.bak
+          echo CORRUPT >> lib/common.sh
+          if ./erpnext-dev.sh verify-toolkit >/tmp/erpnext-dev-vt-tamper.$$ 2>&1; then
+            mv lib/common.sh.bak lib/common.sh
+            cat /tmp/erpnext-dev-vt-tamper.$$
+            rm -f /tmp/erpnext-dev-vt-tamper.$$
+            exit 1
+          fi
+          grep -qi "FAIL" /tmp/erpnext-dev-vt-tamper.$$ || {
+            mv lib/common.sh.bak lib/common.sh
+            cat /tmp/erpnext-dev-vt-tamper.$$
+            rm -f /tmp/erpnext-dev-vt-tamper.$$
+            exit 1
+          }
+          mv lib/common.sh.bak lib/common.sh
+          rm -f /tmp/erpnext-dev-vt-tamper.$$
           ./erpnext-dev.sh --help >/dev/null
           echo "Quickstart bundle path OK."
+
+  atomic-update-smoke:
+    name: Atomic update + rollback smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Hermetic update-toolkit / toolkit-rollback smoke
+        run: |
+          set -euo pipefail
+          chmod +x scripts/test-atomic-update.sh
+          sudo -E scripts/test-atomic-update.sh

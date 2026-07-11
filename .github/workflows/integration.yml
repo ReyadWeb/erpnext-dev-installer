@@ -99,6 +99,33 @@ jobs:
       - name: Install ERPNext (non-interactive)
         run: sudo -E ./erpnext-dev.sh -y install
 
+      - name: verify-toolkit integrity (positive and tamper negative)
+        run: |
+          set -euo pipefail
+          sudo -E ./erpnext-dev.sh verify-toolkit | grep -qi "active match.*OK"
+
+          stable="/opt/erpnext-dev"
+          lib="${stable}/current/lib/common.sh"
+          if [[ ! -f "$lib" ]]; then
+            lib="${stable}/lib/common.sh"
+          fi
+          [[ -f "$lib" ]] || { echo "::error::installed lib/common.sh not found"; exit 1; }
+
+          sudo cp -a "$lib" /tmp/erpnext-dev-common.sh.bak
+          echo CORRUPT | sudo tee -a "$lib" >/dev/null
+          if sudo -E ./erpnext-dev.sh verify-toolkit >/tmp/erpnext-dev-vt-tamper.out 2>&1; then
+            echo "::error::verify-toolkit passed after tampering ${lib}"
+            sudo mv /tmp/erpnext-dev-common.sh.bak "$lib"
+            exit 1
+          fi
+          grep -qi "FAIL" /tmp/erpnext-dev-vt-tamper.out || {
+            cat /tmp/erpnext-dev-vt-tamper.out
+            sudo mv /tmp/erpnext-dev-common.sh.bak "$lib"
+            exit 1
+          }
+          sudo mv /tmp/erpnext-dev-common.sh.bak "$lib"
+          echo "verify-toolkit tamper negative passed."
+
       - name: Doctor JSON smoke assertions
         run: |
           set -uo pipefail

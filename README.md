@@ -52,7 +52,7 @@ First install and verify the toolkit ([details below](#install-and-verify)):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
-VERSION="v1.7.0"
+VERSION="v1.8.0"
 BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz"
@@ -613,6 +613,19 @@ is kept on disk, so `toolkit-rollback` restores it instantly.
 `verify-toolkit` looks for `SHA256SUMS` in the current directory, beside the
 active/stable script, or in `/opt/erpnext-dev`; override with
 `CHECKSUM_FILE=/path/to/SHA256SUMS`.
+
+`verify-toolkit` checks the entrypoint and every runtime `lib/*.sh` module against
+`SHA256SUMS`. CI also asserts that tampering any module causes `verify-toolkit` to
+exit non-zero (negative fixture on extracted bundles and on live installs).
+
+`update-toolkit` and `toolkit-rollback` are exercised in CI by
+`scripts/test-atomic-update.sh`: a hermetic `file://` release server, synthetic
+versioned bundles, update → rollback, and a corrupt-bundle negative that proves a
+failed update never half-applies. Run locally with:
+
+```bash
+sudo -E scripts/test-atomic-update.sh
+```
 
 ### Pinned toolchain (reproducible installs)
 
