@@ -56,7 +56,7 @@ bash -n lib/security.sh
 bash -n lib/update.sh
 pass "bash syntax valid"
 
-chmod +x erpnext-dev.sh scripts/validate-release.sh scripts/generate-release-checksums.sh scripts/run-shellcheck.sh scripts/check-module-consistency.sh
+chmod +x erpnext-dev.sh scripts/validate-release.sh scripts/generate-release-checksums.sh scripts/run-shellcheck.sh scripts/check-module-consistency.sh scripts/test-atomic-update.sh scripts/release-signing-policy.sh
 
 # Module lists and dispatcher targets must all agree. This is the single guard
 # that prevents a module from being sourced at runtime while missing from the
@@ -195,6 +195,24 @@ grep -q "Audit result.*FAIL" "$bad_out" || {
 rm -rf "$bad_dir" "$bad_out"
 pass "support-bundle-audit negative fixture correctly failed"
 
+chmod +x scripts/release-signing-policy.sh
+if scripts/release-signing-policy.sh v1.2.3 0 >/tmp/erpnext-dev-signpol.$$ 2>&1; then
+  cat /tmp/erpnext-dev-signpol.$$
+  rm -f /tmp/erpnext-dev-signpol.$$
+  fail "release-signing-policy should fail stable tag without GPG key"
+fi
+[[ "$(cat /tmp/erpnext-dev-signpol.$$)" == "fail" ]] || fail "release-signing-policy stable+no-key should print fail"
+rm -f /tmp/erpnext-dev-signpol.$$
+pass "release-signing-policy: stable tag without key fails"
+
+policy_out="$(scripts/release-signing-policy.sh v1.2.3-unsigned 0)"
+[[ "$policy_out" == "publish-unsigned" ]] || fail "release-signing-policy pre-release+no-key should publish-unsigned, got: ${policy_out}"
+pass "release-signing-policy: pre-release without key allows publish-unsigned"
+
+policy_out="$(scripts/release-signing-policy.sh v1.2.3 1)"
+[[ "$policy_out" == "sign" ]] || fail "release-signing-policy stable+key should sign, got: ${policy_out}"
+pass "release-signing-policy: stable tag with key requires sign"
+
 if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
   # shellcheck disable=SC2024 # redirect is intentionally to the invoking user's /tmp file, not root's
   sudo -E ./erpnext-dev.sh menu-self-test >/tmp/erpnext-dev-menu-self-test.$$ 2>&1 || {
@@ -218,8 +236,17 @@ if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
   }
   rm -f /tmp/erpnext-dev-ops-wizard.$$
   pass "production-ops-wizard quit smoke test passed"
+
+  scripts/test-atomic-update.sh >/tmp/erpnext-dev-atomic.$$ 2>&1 || {
+    cat /tmp/erpnext-dev-atomic.$$
+    rm -f /tmp/erpnext-dev-atomic.$$
+    fail "test-atomic-update.sh failed"
+  }
+  rm -f /tmp/erpnext-dev-atomic.$$
+  pass "atomic update smoke test passed"
 else
   pass "skipped menu-self-test and production-ops-wizard smoke tests (passwordless sudo not available)"
+  pass "skipped atomic update smoke test (passwordless sudo not available)"
 fi
 
 if find . -maxdepth 2 -type f -name 'GITHUB-UPDATE-v*.md' | grep -q .; then

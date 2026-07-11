@@ -1,3 +1,24 @@
+## v1.8.0 - Reliability proof: atomic update CI + gate enforcement tests
+
+### Added
+
+- **`scripts/test-atomic-update.sh`**: hermetic smoke test for `update-toolkit` and
+  `toolkit-rollback` using a local `file://` release server and synthetic bundles
+  (v9.9.8 / v9.9.9). Asserts the `current` symlink flips correctly, rollback
+  restores the previous release, and a corrupt bundle is rejected without
+  half-applying. Runs in CI (`atomic-update-smoke` job) and locally with
+  `sudo -E scripts/test-atomic-update.sh`.
+- **`scripts/release-signing-policy.sh`**: extracted stable-vs-pre-release signing
+  decision from `release.yml`. Unit-tested in `validate-release.sh` (stable tag
+  without GPG key → fail; pre-release without key → publish-unsigned; stable with
+  key → sign).
+
+### Changed
+
+- **Negative `verify-toolkit` assertions** in CI: tampering `lib/common.sh` on an
+  extracted bundle or a live install must exit non-zero and report `FAIL`.
+- `release.yml` calls `release-signing-policy.sh` instead of inlining the regex.
+
 ## v1.7.0 - Hardening: private lock path, secret-scan negative fixtures, pinned toolchain
 
 ### Security

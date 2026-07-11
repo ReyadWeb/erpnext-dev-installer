@@ -33,6 +33,8 @@ targets=(
   scripts/run-shellcheck.sh
   scripts/check-module-consistency.sh
   scripts/build-release-bundle.sh
+  scripts/test-atomic-update.sh
+  scripts/release-signing-policy.sh
 )
 
 for target in "${targets[@]}"; do

@@ -1,3 +1,21 @@
+## v1.8.0 reliability proof (atomic update + gate enforcement)
+
+```bash
+scripts/validate-release.sh          # includes release-signing-policy unit matrix
+sudo -E scripts/test-atomic-update.sh   # hermetic update → rollback + corrupt-bundle negative
+```
+
+Expected:
+
+```text
+release-signing-policy: stable tag without key fails
+release-signing-policy: pre-release without key allows publish-unsigned
+release-signing-policy: stable tag with key requires sign
+atomic update smoke: v9.9.8 → v9.9.9 → rollback; corrupt v9.9.9 rejected; current unchanged
+CI quickstart step: verify-toolkit passes on extract, fails after lib/common.sh tamper
+CI integration step: verify-toolkit passes on /opt install, fails after lib/common.sh tamper
+```
+
 ## v1.2.0 Phase C security hardening
 
 ```bash

@@ -69,21 +69,17 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
+          has_key=0
+          [[ -n "${GPG_PRIVATE_KEY:-}" ]] && has_key=1
 
-          # A stable release tag is exactly vMAJOR.MINOR.PATCH (no pre-release suffix).
-          if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            stable=1
-          else
-            stable=0
+          if ! policy="$(scripts/release-signing-policy.sh "$tag" "$has_key")"; then
+            echo "::error::GPG_PRIVATE_KEY is not set. Stable releases MUST be signed."
+            echo "Configure the signing key (see SECURITY.md), or cut an unsigned emergency"
+            echo "build using a pre-release tag such as ${tag}-unsigned."
+            exit 1
           fi
 
-          if [[ -z "${GPG_PRIVATE_KEY:-}" ]]; then
-            if [[ "$stable" -eq 1 ]]; then
-              echo "::error::GPG_PRIVATE_KEY is not set. Stable releases MUST be signed."
-              echo "Configure the signing key (see SECURITY.md), or cut an unsigned emergency"
-              echo "build using a pre-release tag such as ${tag}-unsigned."
-              exit 1
-            fi
+          if [[ "$policy" == "publish-unsigned" ]]; then
             echo "::warning::No signing key; publishing pre-release ${tag} UNSIGNED (escape hatch)."
             exit 0
           fi
