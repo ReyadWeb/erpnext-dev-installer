@@ -278,41 +278,44 @@ symlinked lock directory or lock file is refused before any open/truncate, and
 the lock file itself is mode `0600` (no more `1777`/`666`). This closes the
 shared-`/tmp` symlink-redirect risk.
 
-## Recommended release-security roadmap
+## Release security status and roadmap
 
-### v1.1.69
+### Implemented (v1.6.0 – v1.8.1)
 
-Add this `SECURITY.md` and the companion `RELIABILITY-PLAN.md`. Document the threat model, bootstrap trust issue, release verification plan, credential handling expectations, and support-bundle limitations.
+- **Gated publish:** validate → integration → sign → publish on every stable tag
+- **Mandatory signing** for stable tags (`vX.Y.Z`); pre-release tags may publish unsigned
+- **Full-tree integrity:** `verify-toolkit` checks entrypoint + all 17 modules
+- **Atomic self-update:** bundle verify + `releases/<ver>` + `current` symlink + rollback
+- **CI proof:** atomic update smoke, signing policy unit tests, tamper negatives
 
-### v1.1.70
-
-Implemented: release checksum artifacts and tag-pinned install instructions for `erpnext-dev.sh`.
-
-Current workflow:
+**Current bootstrap workflow:**
 
 ```bash
-VERSION="v1.1.72"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+VERSION="v1.8.1"
+BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
+tar -xzf "erpnext-dev-${VERSION}.tar.gz" && cd "erpnext-dev-${VERSION}"
 sha256sum -c SHA256SUMS
-chmod +x erpnext-dev.sh
-sudo ./erpnext-dev.sh start-here
+sudo ./erpnext-dev.sh verify-signature
+sudo ./erpnext-dev.sh verify-toolkit
 ```
 
-### v1.1.71
+### Planned — v1.9.0 (signing authority separation)
 
-Adds `verify-toolkit`, which checks the active/installed toolkit hash and reports whether it matches a known checksum file when present.
+Move release signing secrets out of repository Actions secrets into a GitHub
+**Environment** (`release-signing`) with required reviewer approval, or adopt
+OIDC/keyless signing. See [`ROADMAP.md`](ROADMAP.md) Phase 1.
 
-### v1.1.72
+### Historical milestones (implemented)
 
-Add minimal GitHub Actions CI:
+<details>
+<summary>v1.1.69 – v1.1.72 release-trust foundation</summary>
 
-- `bash -n erpnext-dev.sh`;
-- version check;
-- help output smoke test;
-- menu self-test where safe;
-- release package file audit;
-- grep checks for accidentally included credentials or `GITHUB-UPDATE-v*.md` files.
+- v1.1.70: SHA256 checksums and tag-pinned bootstrap
+- v1.1.71: `verify-toolkit`
+- v1.1.72: GitHub Actions CI and `scripts/validate-release.sh`
+
+</details>
 
 ## Reporting security issues
 

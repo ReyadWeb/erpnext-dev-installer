@@ -1,3 +1,124 @@
+# ERPNext Developer Toolkit — Roadmap
+
+**Current release:** v1.8.1 (July 2026)  
+**Full history:** [`CHANGELOG.md`](CHANGELOG.md) · **Security:** [`SECURITY.md`](SECURITY.md) · **Testing:** [`TESTING.md`](TESTING.md)
+
+---
+
+## Where we are
+
+| Use case | Rating | Status |
+|----------|--------|--------|
+| Local dev VM (single admin) | **9.5 / 10** | Field-tested; guided HTTPS, apps, backups |
+| Public VPS production (single admin) | **9.5 / 10** | CI-proven install + restore + production runtime; **VPS validation in progress** |
+| Supply chain / release trust | **9.0 / 10** | Gated signed releases, atomic update CI, signing policy unit tests |
+| Reproducibility | **9.0 / 10** | Pinned toolchain (`versions`), integration CI |
+| Enterprise / multi-user host | **8.5 / 10** | Lock hardened; not a shared-shell product |
+| Community / packaging polish | **8.0 / 10** | No CONTRIBUTING/templates yet |
+
+**Overall (single-admin dedicated VM): 9.5 / 10** after VPS production checklist passes.
+
+---
+
+## Completed (v1.4.0 → v1.8.1)
+
+| Area | Version | What shipped |
+|------|---------|--------------|
+| Guarded ERPNext upgrades | v1.4.x | `update-preflight`, `safe-update-wizard`, `update-rollback` |
+| Release bundle + quickstart | v1.4.3+ | Full-tree tarball, `verify-signature`, bundle CI |
+| Production runtime | v1.5.0 | Supervisor (gunicorn + workers); no `bench start` in production |
+| Gated signed releases | v1.6.0 | validate → integration → sign → publish; mandatory stable signing |
+| Atomic self-update | v1.6.0 | `releases/<ver>` + `current` symlink; `toolkit-rollback` |
+| Full-tree integrity | v1.4.6+ | `verify-toolkit` checks all 17 modules |
+| Hardening | v1.7.0 | Private lock path, negative secret-scan fixtures, `BENCH_VERSION` pin |
+| Reliability proof | v1.8.0–1.8.1 | Atomic update CI smoke; signing policy tests; tamper negatives |
+
+**CI today:** lint/shellcheck → validate-release → atomic-update-smoke → (on tag) integration install + backup/restore + production runtime + tamper negative → sign → publish.
+
+---
+
+## Path to 9.8+
+
+Target: **9.8+ overall** for single-admin production VPS within **3–5 weeks** of focused work (or **2–3 weeks** if community/docs run in parallel with backups).
+
+### Phase 1 — v1.9.0: Signing authority separation (~1 week)
+
+**Goal:** Signing key compromise ≠ repository compromise. Supply chain **9.0 → 9.5**.
+
+**Recommended track:** GitHub **Environment** `release-signing` with required reviewer(s); move `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` to environment secrets; `publish` job targets that environment.
+
+**Alternative (stronger):** OIDC + keyless (Sigstore/cosign) or offline/HSM signing (~2 weeks).
+
+**Deliverables:**
+- [`.github/workflows/release.yml`](.github/workflows/release.yml) uses `environment: release-signing`
+- Updated [`SECURITY.md`](SECURITY.md) threat model + key rotation runbook
+- Keep [`scripts/release-signing-policy.sh`](scripts/release-signing-policy.sh) unit tests
+
+**Rating after VPS pass + v1.9.0:** **9.6–9.7**
+
+### Phase 2 — v1.10.0: Object-storage off-site backups (~1–2 weeks)
+
+**Goal:** Backups not tied to rsync/SSH alone. Ops **~8.5 → 9.2**.
+
+**Scope:** S3-compatible target (AWS S3, Backblaze B2, MinIO) alongside rsync; wizard wiring; restore docs; MinIO CI smoke.
+
+**Deliverables:** extend [`lib/backup.sh`](lib/backup.sh) + menus; README + SECURITY credential guidance.
+
+**Rating after v1.10.0:** **9.75**
+
+### Phase 3 — v1.11.0: Community polish + docs consolidation (~3–5 days)
+
+**Goal:** Market/readiness **8.0 → 9.0**. Can overlap with Phase 2.
+
+**Scope:** `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue/PR templates; trim stale TESTING.md blocks.
+
+**Rating after v1.11.0:** **9.8+**
+
+### Phase 4 (optional) — v1.11.x: Extended CI confidence (~3–5 days)
+
+Post-install `update-toolkit` smoke against real GitHub release assets; document weekly integration alerts. Defer 24h soak unless required.
+
+---
+
+## Near-term priority order
+
+1. **VPS production validation** — confirms 9.5 is real-world, not CI-only
+2. **v1.9.0** — signing environment separation
+3. **v1.10.0** — object-storage backups
+4. **v1.11.0** — community + docs polish → **9.8+**
+
+---
+
+## Definition of “9.8+ ready”
+
+- Signed, gated release bundle install
+- Supervisor production runtime (not dev server)
+- HTTPS + firewall + hardening guided flows
+- Backup, verify, restore-rehearse (rsync today; object storage after v1.10.0)
+- Atomic self-update + rollback
+- Guarded ERPNext upgrades (`safe-update-wizard`)
+- Integrity proof (`verify-toolkit`, `verify-signature`) + support-bundle audit
+- Signing separated from repo write access (v1.9.0)
+
+---
+
+## Suggested timeline
+
+| Week | Focus | Release |
+|------|--------|---------|
+| 1 | VPS production test; patch v1.8.x if needed | — |
+| 2 | Signing environment / OIDC (Phase 1) | **v1.9.0** |
+| 3–4 | S3-compatible backups + MinIO CI (Phase 2) | **v1.10.0** |
+| 5 | CONTRIBUTING, templates, docs trim (Phase 3) | **v1.11.0** → **9.8+** |
+
+---
+
+## Historical archive
+
+Milestone notes from v1.1.x through v1.4.0 are kept below for traceability. For current planning, use the sections above.
+
+---
+
 # v1.4.0 roadmap update - guarded ERPNext upgrades (E5)
 
 Status: **implemented**.

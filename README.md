@@ -14,14 +14,19 @@ It supports two setup paths:
 - **Public VPS / cloud VM** — a real domain or subdomain such as `erp.example.com`.
 
 > Version history lives in [`CHANGELOG.md`](CHANGELOG.md). Security posture and
-> release-signing details live in [`SECURITY.md`](SECURITY.md). This README
-> focuses on installation, operations, and usage.
+> release-signing details live in [`SECURITY.md`](SECURITY.md). Planned work and
+> the path to **9.8+** are in [`ROADMAP.md`](ROADMAP.md). This README focuses on
+> installation, operations, and usage.
+
+**Current release:** v1.8.1 · **Readiness:** ~9.5/10 for single-admin local/public VM
+(after VPS production validation). Next milestone: **v1.9.0** (signing authority separation).
 
 ---
 
 ## Menu
 
 - [Start here](#start-here) — the important command for each case
+- [Project status and roadmap](#project-status-and-roadmap)
 - [Install and verify](#install-and-verify)
 - [Requirements and preflight](#requirements-and-preflight)
 - [Local development VM](#local-development-vm)
@@ -86,6 +91,20 @@ After install, everything else uses the stable `erpnext-dev` command:
 
 > Run interactive menu commands (for example `production-ops-wizard`) on their
 > own — don't chain other commands after them in the same line.
+
+---
+
+## Project status and roadmap
+
+| Area | Rating | Notes |
+|------|--------|--------|
+| Local dev VM | 9.5 | Guided install, HTTPS, apps, backups — field-tested |
+| Public VPS production | 9.5 | Production runtime, gated releases — **validate on your VPS** |
+| Supply chain | 9.0 | Signed + gated CI; signing key still in repo secrets → **v1.9.0** |
+| Path to 9.8+ | — | v1.9.0 signing separation → v1.10.0 object-storage backups → v1.11.0 community polish |
+
+See [`ROADMAP.md`](ROADMAP.md) for the full plan and timeline. VPS production checklist:
+[`TESTING.md` — VPS production validation](TESTING.md#vps-production-validation-v181).
 
 ---
 
@@ -712,14 +731,16 @@ manual review.
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history and release notes |
 | [`SECURITY.md`](SECURITY.md) | Threat model, credential handling, release signing |
 | [`TESTING.md`](TESTING.md) | Validation scenarios and QA commands |
-| [`ROADMAP.md`](ROADMAP.md) | Planned improvements |
+| [`ROADMAP.md`](ROADMAP.md) | Current plan (9.5 → 9.8+) and historical milestones |
 | [`RELEASE-MANIFEST.txt`](RELEASE-MANIFEST.txt) | Files expected in each release (validated in CI) |
 
 ---
 
 ## Production caution
 
-This installer can prepare a production-candidate VM, but production readiness
-still requires decisions outside the script: an off-VM backup target, a rehearsed
-restore, a VM/cloud snapshot policy, cloud firewall rules, DNS/proxy/SSL
-ownership, an update process, and monitoring/alerting expectations.
+This installer can prepare a production-candidate VM. After v1.8.1 the core path is
+CI-proven (install, backup/restore, production runtime, signed releases), but
+production readiness still requires **your** validation on a real VPS: domain/DNS,
+cloud firewall, off-VM backup target, restore rehearsal, snapshot policy,
+monitoring expectations, and an update process. Use the checklist in
+[`TESTING.md`](TESTING.md#vps-production-validation-v181) before calling the site live.

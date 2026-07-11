@@ -1,4 +1,50 @@
-## v1.8.0 reliability proof (atomic update + gate enforcement)
+# Testing guide
+
+**Current release:** v1.8.1 · See [`ROADMAP.md`](ROADMAP.md) for what is CI-proven vs what requires field validation.
+
+---
+
+## VPS production validation (v1.8.1)
+
+Use this checklist on a **fresh Ubuntu 24.04 or 26.04 LTS VPS** with a real domain,
+mimicking production. Install from the signed bundle:
+
+```bash
+sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
+VERSION="v1.8.1"
+BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
+tar -xzf "erpnext-dev-${VERSION}.tar.gz" && cd "erpnext-dev-${VERSION}"
+sha256sum -c SHA256SUMS
+sudo ./erpnext-dev.sh verify-signature
+sudo ./erpnext-dev.sh install-preflight
+sudo ./erpnext-dev.sh public-vm-guided-setup   # or public-vm-quickstart
+```
+
+### Checklist
+
+| # | Area | Pass criteria |
+|---|------|----------------|
+| 1 | Integrity | `verify-signature` GOODSIG; `verify-toolkit` all modules OK |
+| 2 | Install | Site reachable on **hostname** (not raw IP for normal use) |
+| 3 | Production runtime | `production-runtime-status` → supervisor RUNNING; **no** `bench start` |
+| 4 | HTTPS | Production SSL wizard; browser login styled and working |
+| 5 | Security | UFW + optional Fail2Ban; `security-audit` acceptable |
+| 6 | Backups | `backup-files` + `backup-verify` |
+| 7 | Restore | Restore rehearsal or `restore-full` on disposable clone/snapshot |
+| 8 | Off-VM backup | rsync target configured; dry-run + real run (if using) |
+| 9 | Toolkit update | `update-toolkit` then `toolkit-rollback` once |
+| 10 | ERPNext upgrade | `update-preflight` + `safe-update-wizard` (maintenance window) |
+| 11 | Ops | `production-ops-wizard`, `doctor`, `support-bundle` + audit |
+| 12 | Go-live | `go-live-record`, cloud firewall + DNS/proxy confirmed |
+
+Record failures with command output; open issues or patch v1.8.x before production traffic.
+
+---
+
+## CI and developer validation (v1.8.x)
+
+### v1.8.0 reliability proof (atomic update + gate enforcement)
 
 ```bash
 scripts/validate-release.sh          # includes release-signing-policy unit matrix
