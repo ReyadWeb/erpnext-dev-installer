@@ -103,6 +103,13 @@ run_toolkit() {
     "${ROOT_DIR}/erpnext-dev.sh" "$@"
 }
 
+verify_at_current() {
+  local stable_root="$1"
+  local rel_script="${stable_root}/current/erpnext-dev.sh"
+  # Pin CHECKSUM_FILE so verify-toolkit does not pick up ./SHA256SUMS from the repo cwd.
+  CHECKSUM_FILE="${stable_root}/current/SHA256SUMS" "$rel_script" verify-toolkit "$@"
+}
+
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   command -v sudo >/dev/null 2>&1 || fail "root or sudo required"
   exec sudo -E "$0" "$@"
@@ -139,7 +146,7 @@ TOOLKIT_UPDATE_VERSION=v9.9.8 run_toolkit update-toolkit >/tmp/erpnext-dev-atomi
 rm -f /tmp/erpnext-dev-atomic-u1.$$
 assert_current_is "$stable" "v9.9.8"
 assert_version_at "${stable}/current/erpnext-dev.sh" "9.9.8"
-"${stable}/current/erpnext-dev.sh" verify-toolkit >/tmp/erpnext-dev-atomic-v1.$$ 2>&1 || {
+verify_at_current "$stable" >/tmp/erpnext-dev-atomic-v1.$$ 2>&1 || {
   cat /tmp/erpnext-dev-atomic-v1.$$
   fail "verify-toolkit failed after v9.9.8 update"
 }
@@ -167,7 +174,7 @@ run_toolkit toolkit-rollback >/tmp/erpnext-dev-atomic-rb.$$ 2>&1 || {
 rm -f /tmp/erpnext-dev-atomic-rb.$$
 assert_current_is "$stable" "v9.9.8"
 assert_version_at "${stable}/current/erpnext-dev.sh" "9.9.8"
-"${stable}/current/erpnext-dev.sh" verify-toolkit >/tmp/erpnext-dev-atomic-v2.$$ 2>&1 || {
+verify_at_current "$stable" >/tmp/erpnext-dev-atomic-v2.$$ 2>&1 || {
   cat /tmp/erpnext-dev-atomic-v2.$$
   fail "verify-toolkit failed after rollback"
 }
