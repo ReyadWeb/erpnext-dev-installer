@@ -1677,7 +1677,7 @@ Expected:
 No /tmp log permission error.
 Root runs create unique logs under /var/log/erpnext-dev when writable.
 Normal-user runs create unique logs under ~/.local/state/erpnext-dev/logs, or /tmp/erpnext-dev-<uid>-logs as a fallback.
-The shared lock file uses /tmp/erpnext-dev-locks/toolkit.lock.
+The lock file is private (dir mode 0700, symlink refused): root uses /run/lock/erpnext-dev/toolkit.lock; a normal user uses $XDG_RUNTIME_DIR/erpnext-dev/toolkit.lock, falling back to /tmp/erpnext-dev-<uid>-locks/toolkit.lock.
 ```
 
 ## Package file check

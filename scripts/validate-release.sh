@@ -153,6 +153,48 @@ grep -q "Audit result.*OK" /tmp/erpnext-dev-support-audit.$$ || {
 rm -rf "$fixture_dir" /tmp/erpnext-dev-support-audit.$$
 pass "support-bundle-audit clean fixture passed"
 
+# Negative fixture: a bundle carrying secrets/forbidden names MUST fail the audit.
+# Without this, a regression that silently disabled the scanner would still pass CI.
+bad_dir="$(mktemp -d /tmp/erpnext-dev-support-badfixture.XXXXXX)"
+bad_archive="${bad_dir}/erpnext-dev-support-bundle-badfixture.tar.gz"
+bad_root="${bad_dir}/erpnext-dev-support-bundle-badfixture"
+mkdir -p "$bad_root"
+# Forbidden filename + secret content.
+cat > "${bad_root}/site_config.json" <<'EOF_BAD'
+{ "db_password": "supersecret123", "encryption_key": "abc" }
+EOF_BAD
+cat > "${bad_root}/id_ed25519" <<'EOF_BAD'
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAA
+-----END OPENSSH PRIVATE KEY-----
+EOF_BAD
+# Build the secret keywords from fragments so this validator's own source does
+# not contain a literal "<keyword>=" assignment (which its repo self-scan below
+# would otherwise flag). The generated fixture file still contains the full
+# strings, which is what the support-bundle scanner must catch.
+kw_pw="pass""word"
+kw_tok="tok""en"
+{
+  printf '%s=hunter2hunter2\n' "$kw_pw"
+  printf '%s=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\n' "$kw_tok"
+} > "${bad_root}/notes.txt"
+: > "${bad_root}/database.sql.gz"
+tar -C "$bad_dir" -czf "$bad_archive" erpnext-dev-support-bundle-badfixture
+
+bad_out="/tmp/erpnext-dev-support-badaudit.$$"
+if SUPPORT_BUNDLE_AUDIT_ARCHIVE="$bad_archive" ./erpnext-dev.sh support-bundle-audit >"$bad_out" 2>&1; then
+  cat "$bad_out"
+  rm -rf "$bad_dir" "$bad_out"
+  fail "support-bundle-audit passed a bundle containing secrets (scanner regression)"
+fi
+grep -q "Audit result.*FAIL" "$bad_out" || {
+  cat "$bad_out"
+  rm -rf "$bad_dir" "$bad_out"
+  fail "support-bundle-audit did not report FAIL for the unsafe fixture"
+}
+rm -rf "$bad_dir" "$bad_out"
+pass "support-bundle-audit negative fixture correctly failed"
+
 if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
   # shellcheck disable=SC2024 # redirect is intentionally to the invoking user's /tmp file, not root's
   sudo -E ./erpnext-dev.sh menu-self-test >/tmp/erpnext-dev-menu-self-test.$$ 2>&1 || {

@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.6.3"
+SCRIPT_VERSION="1.7.0"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -59,6 +59,9 @@ PYTHON_VERSION="${PYTHON_VERSION:-3.14}"
 # "latest" from the unversioned install URL.
 NVM_VERSION="${NVM_VERSION:-0.40.3}"
 UV_VERSION="${UV_VERSION:-0.11.28}"
+# Pin the frappe-bench CLI installed via uv so installs are reproducible. Set
+# BENCH_VERSION= (empty) to intentionally install the latest published bench.
+BENCH_VERSION="${BENCH_VERSION-5.31.0}"
 
 DB_ADMIN_USER="${DB_ADMIN_USER:-frappe_db_admin}"
 DB_ADMIN_PASSWORD="${DB_ADMIN_PASSWORD:-}"
@@ -94,7 +97,17 @@ if [[ "$LOG_DIR_WAS_SET" -eq 0 ]]; then
 fi
 
 if [[ "$LOCK_DIR_WAS_SET" -eq 0 ]]; then
-  LOCK_DIR="/tmp/erpnext-dev-locks"
+  # Never use a world-shared lock dir: a predictable path in a 1777 directory
+  # lets another local user pre-plant a symlink and have a later root run follow
+  # it. Root uses /run/lock (root-owned tmpfs); non-root uses its private runtime
+  # dir, falling back to a per-uid /tmp dir created mode 0700.
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    LOCK_DIR="/run/lock/erpnext-dev"
+  elif [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
+    LOCK_DIR="${XDG_RUNTIME_DIR}/erpnext-dev"
+  else
+    LOCK_DIR="/tmp/erpnext-dev-${EUID:-$(id -u)}-locks"
+  fi
 fi
 if [[ "$LOCK_FILE_WAS_SET" -eq 0 ]]; then
   LOCK_FILE="${LOCK_DIR}/toolkit.lock"
@@ -346,6 +359,40 @@ show_where_installed() {
   status_line "CLI command" "${cli_state}" "${TOOLKIT_CLI_PATH}${cli_target:+ -> ${cli_target}}"
   status_line "Config file" "${config_state}" "${CONFIG_FILE}"
   status_line "Short command" "INFO" "erpnext-dev"
+  toolkit_version_matrix_status_lines
+  ui_box_end
+}
+
+# Single source of truth for the pinned toolchain. Emits "Label|value" pairs so
+# callers can render them however they like (status lines, plain text bundle).
+toolkit_version_matrix_pairs() {
+  printf '%s|%s\n' "Toolkit" "${SCRIPT_VERSION}"
+  printf '%s|%s\n' "Node" "${NODE_VERSION}"
+  printf '%s|%s\n' "nvm" "${NVM_VERSION}"
+  printf '%s|%s\n' "uv" "${UV_VERSION}"
+  printf '%s|%s\n' "Python" "${PYTHON_VERSION}"
+  printf '%s|%s\n' "Frappe branch" "${FRAPPE_BRANCH}"
+  printf '%s|%s\n' "ERPNext branch" "${ERPNEXT_BRANCH}"
+  printf '%s|%s\n' "frappe-bench" "${BENCH_VERSION:-unpinned (latest)}"
+}
+
+# Render the matrix as status lines inside an already-open UI box.
+toolkit_version_matrix_status_lines() {
+  local label value
+  while IFS='|' read -r label value; do
+    [[ -n "$label" ]] || continue
+    status_line "${label}" "INFO" "${value}"
+  done < <(toolkit_version_matrix_pairs)
+}
+
+# Standalone read-only `versions` command: shows the pinned compatibility matrix.
+show_toolkit_versions() {
+  ui_box_start "Toolkit compatibility matrix"
+  toolkit_version_matrix_status_lines
+  echo
+  echo "These versions are pinned for reproducible installs. Override any of them"
+  echo "with an environment variable, e.g. BENCH_VERSION= (empty) installs the"
+  echo "latest published frappe-bench."
   ui_box_end
 }
 
@@ -577,6 +624,7 @@ Start here:
 
 Core:
   version             Print toolkit version
+  versions            Show the pinned compatibility matrix (Node/nvm/uv/Python/branches/bench)
   where-installed     Show active script, stable /opt path, CLI path, and config path
   verify-toolkit      Show installed script SHA256 and compare against SHA256SUMS when available
   verify-signature    Verify the GPG signature over SHA256SUMS (needs TOOLKIT_SIGNING_PUBKEY)
@@ -823,7 +871,7 @@ parse_args() {
         DOCTOR_FORMAT="json"
         shift
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|support-bundle-audit|audit-support-bundle|support-bundle-audit-test|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|go-live-record|go-live-status|cloud-firewall-checklist|cloudflare-checklist|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|health-check|health-check-run-now|configure-health-check-timer|health-check-status|health-check-journal|disable-health-check-timer|health-monitoring-wizard|production-monitoring-wizard|service-recovery-plan|restore-preflight|production-ops-wizard|production-ops-dashboard|operations-wizard|operations-dashboard|ops-wizard|ops-dashboard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|update-preflight|upgrade-preflight|safe-update|safe-update-wizard|update-erpnext|upgrade-erpnext|update-rollback|rollback-update|wait-ready|menu|help|-h|--help|version|--version|where-installed|verify-toolkit|toolkit-verify|verify-install|verify-signature|verify-release-signature|verify-sig|install-cli|repair-cli|update-toolkit|toolkit-rollback|update-toolkit-rollback|rollback-toolkit|clear-lock|unlock|force-unlock|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|setup-production-runtime|convert-to-production|production-runtime-setup|convert-to-dev-runtime|convert-to-development-runtime|production-runtime-status|runtime-mode-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-audit|security-audit-test|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|support-bundle-audit|audit-support-bundle|support-bundle-audit-test|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|go-live-record|go-live-status|cloud-firewall-checklist|cloudflare-checklist|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|health-check|health-check-run-now|configure-health-check-timer|health-check-status|health-check-journal|disable-health-check-timer|health-monitoring-wizard|production-monitoring-wizard|service-recovery-plan|restore-preflight|production-ops-wizard|production-ops-dashboard|operations-wizard|operations-dashboard|ops-wizard|ops-dashboard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|update-preflight|upgrade-preflight|safe-update|safe-update-wizard|update-erpnext|upgrade-erpnext|update-rollback|rollback-update|wait-ready|menu|help|-h|--help|version|--version|versions|version-matrix|toolchain|where-installed|verify-toolkit|toolkit-verify|verify-install|verify-signature|verify-release-signature|verify-sig|install-cli|repair-cli|update-toolkit|toolkit-rollback|update-toolkit-rollback|rollback-toolkit|clear-lock|unlock|force-unlock|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|setup-production-runtime|convert-to-production|production-runtime-setup|convert-to-dev-runtime|convert-to-development-runtime|production-runtime-status|runtime-mode-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-audit|security-audit-test|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-raven|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -848,6 +896,7 @@ main() {
   case "${ACTION:-menu}" in
     ""|menu) show_menu ;;
     version|--version) echo "${APP_NAME} v${SCRIPT_VERSION}" ;;
+    versions|version-matrix|toolchain) show_toolkit_versions ;;
     where-installed) show_where_installed ;;
     verify-toolkit|toolkit-verify|verify-install) verify_toolkit_integrity ;;
     verify-signature|verify-release-signature|verify-sig) verify_toolkit_signature ;;

@@ -423,6 +423,9 @@ Generated: $(date -Iseconds 2>/dev/null || date)
 Script:    ${APP_NAME} v${SCRIPT_VERSION}
 Site:      ${SITE_NAME}
 
+Pinned toolchain:
+$(toolkit_version_matrix_pairs | sed 's/^/- /; s/|/: /')
+
 Safe-to-share intent:
 - This bundle is designed for troubleshooting and support.
 - It includes share-safe diagnostics, status summaries, and recent redacted service errors.
@@ -775,7 +778,7 @@ show_command_audit() {
   ui_box_start "Command Audit / Key Workflows"
   status_line "Start here" "OK" "first-run, public-vm-guided-setup, public-vm-quickstart, local-dev-quickstart"
   status_line "Preflight" "OK" "install-preflight, environment-preflight"
-  status_line "Toolkit CLI" "OK" "where-installed, install-cli, repair-cli, update-toolkit"
+  status_line "Toolkit CLI" "OK" "where-installed, versions, install-cli, repair-cli, update-toolkit"
   status_line "Config" "OK" "set-domain, show-config, setup-effort-guide"
   status_line "Install/status" "OK" "guided-setup, status, doctor, support-bundle"
   status_line "Credentials" "OK" "credentials-info, credentials-show, credentials-file-status, credentials-secure, credentials-delete, reset-admin-password"

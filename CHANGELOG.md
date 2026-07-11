@@ -1,3 +1,34 @@
+## v1.7.0 - Hardening: private lock path, secret-scan negative fixtures, pinned toolchain
+
+### Security
+
+- **Lock-file hardening.** The single-instance lock no longer uses a
+  world-shared `/tmp/erpnext-dev-locks` directory (dir `1777`, file `666`).
+  Root now uses `/run/lock/erpnext-dev/`, a normal user uses
+  `$XDG_RUNTIME_DIR/erpnext-dev/` (falling back to `/tmp/erpnext-dev-<uid>-locks/`),
+  the directory is created mode `0700` and must be owned by us or root, a
+  symlinked lock directory/file is refused before any open, and the lock file
+  is mode `0600`. This closes the shared-`/tmp` symlink-redirect risk on
+  multi-user hosts. `clear-lock` no longer recreates a `666` file.
+
+### Added
+
+- **`versions`** (`version-matrix` / `toolchain` aliases): prints the pinned
+  compatibility matrix (Toolkit/Node/nvm/uv/Python/Frappe/ERPNext/frappe-bench).
+  The same matrix now appears in `where-installed` and every support bundle.
+- **`BENCH_VERSION` pin** (default `5.31.0`): `frappe-bench` is installed at a
+  pinned version for reproducible installs. `BENCH_VERSION=` (empty) unpins and
+  installs the latest published release.
+- **Negative secret-scan fixture** in `scripts/validate-release.sh`: CI now
+  asserts `support-bundle-audit` exits non-zero and reports `FAIL` on a bundle
+  containing planted secrets/forbidden filenames, so a regression that disabled
+  the scanner can no longer pass green.
+
+### Changed
+
+- The pinned toolchain (Node/nvm/uv/Python/branches/bench) is a single source of
+  truth in `erpnext-dev.sh`, documented in the README and `SECURITY.md`.
+
 ## v1.6.3 - Safer lock recovery + clearer busy-lock errors
 
 ### Added

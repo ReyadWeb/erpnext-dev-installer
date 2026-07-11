@@ -65,48 +65,64 @@ warn() { echo -e "${YELLOW}WARN:${RESET} $*"; }
 err() { echo -e "${RED}ERROR:${RESET} $*" >&2; }
 fail() { err "$*"; echo "Log file: $LOG_FILE" >&2; exit 1; }
 
-prepare_lock_file() {
-  local uid fallback_dir
+# Create a private lock directory owned by this user with mode 0700. Returns 0 if
+# the directory is safe to use (exists, is a real dir, not a symlink, owned by us).
+toolkit_prepare_lock_dir() {
+  local dir="$1"
+  local uid
   uid="${EUID:-$(id -u)}"
 
-  if [[ "$LOCK_FILE_WAS_SET" -eq 0 ]]; then
-    mkdir -p "$LOCK_DIR" 2>/dev/null || true
-    chmod 1777 "$LOCK_DIR" 2>/dev/null || true
-  else
-    mkdir -p "$(dirname "$LOCK_FILE")" 2>/dev/null || true
+  # Refuse a symlinked directory: a symlink here could redirect the lock file
+  # (and its truncate) to an attacker-chosen target.
+  if [[ -L "$dir" ]]; then
+    return 1
+  fi
+  mkdir -p "$dir" 2>/dev/null || return 1
+  chmod 700 "$dir" 2>/dev/null || true
+
+  # Must be a directory we own (defends against a pre-existing dir owned by
+  # someone else on a shared /run or /tmp).
+  [[ -d "$dir" && ! -L "$dir" ]] || return 1
+  if command -v stat >/dev/null 2>&1; then
+    local owner
+    owner="$(stat -c '%u' "$dir" 2>/dev/null || echo -1)"
+    [[ "$owner" == "$uid" || "$owner" == "0" ]] || return 1
+  fi
+  return 0
+}
+
+prepare_lock_file() {
+  local uid lock_dir fallback_dir
+  uid="${EUID:-$(id -u)}"
+
+  lock_dir="$(dirname "$LOCK_FILE")"
+  if ! toolkit_prepare_lock_dir "$lock_dir"; then
+    fallback_dir="/tmp/erpnext-dev-${uid}-locks"
+    if ! toolkit_prepare_lock_dir "$fallback_dir"; then
+      echo "ERROR: Cannot create a private lock directory (${lock_dir} or ${fallback_dir})." >&2
+      exit 1
+    fi
+    LOCK_FILE="${fallback_dir}/toolkit.lock"
+  fi
+
+  # Refuse a symlinked lock file: following it would let a pre-planted symlink
+  # redirect our truncate/write to an attacker-chosen target.
+  if [[ -L "$LOCK_FILE" ]]; then
+    echo "ERROR: Refusing to use a symlinked lock file: $LOCK_FILE" >&2
+    echo "Remove it if you are sure it is safe: sudo rm -f \"$LOCK_FILE\"" >&2
+    exit 1
   fi
 
   # Create the lock file if missing; do NOT truncate an existing one — another
   # process may hold flock on that inode and we want its pid= metadata intact.
   if [[ ! -e "$LOCK_FILE" ]]; then
     : >"$LOCK_FILE" 2>/dev/null || {
-      fallback_dir="/tmp/erpnext-dev-${uid}-locks"
-      mkdir -p "$fallback_dir" 2>/dev/null || {
-        echo "ERROR: Cannot create fallback lock directory: $fallback_dir" >&2
-        exit 1
-      }
-      chmod 700 "$fallback_dir" 2>/dev/null || true
-      LOCK_FILE="${fallback_dir}/toolkit.lock"
-      : >"$LOCK_FILE" 2>/dev/null || {
-        echo "ERROR: Cannot write lock file: $LOCK_FILE" >&2
-        exit 1
-      }
-    }
-  elif [[ ! -w "$LOCK_FILE" ]]; then
-    fallback_dir="/tmp/erpnext-dev-${uid}-locks"
-    mkdir -p "$fallback_dir" 2>/dev/null || {
-      echo "ERROR: Cannot create fallback lock directory: $fallback_dir" >&2
-      exit 1
-    }
-    chmod 700 "$fallback_dir" 2>/dev/null || true
-    LOCK_FILE="${fallback_dir}/toolkit.lock"
-    [[ -e "$LOCK_FILE" ]] || : >"$LOCK_FILE" 2>/dev/null || {
       echo "ERROR: Cannot write lock file: $LOCK_FILE" >&2
       exit 1
     }
   fi
-
-  chmod 666 "$LOCK_FILE" 2>/dev/null || true
+  # Private lock file: owner read/write only. The directory is already 0700.
+  chmod 600 "$LOCK_FILE" 2>/dev/null || true
 }
 
 # List PIDs that currently hold an open handle on the lock file (best-effort).
@@ -144,6 +160,11 @@ toolkit_describe_lock_holders() {
 
 acquire_toolkit_lock() {
   prepare_lock_file
+  # Final defense in depth: never open a symlinked lock file.
+  if [[ -L "$LOCK_FILE" ]]; then
+    err "Refusing to open a symlinked lock file: $LOCK_FILE"
+    exit 1
+  fi
   # Open read/write without truncating so a failed acquire still leaves holder metadata readable.
   exec 200<>"$LOCK_FILE"
   if ! flock -n 200; then
@@ -202,9 +223,7 @@ clear_toolkit_lock() {
   fi
 
   rm -f "$LOCK_FILE" 2>/dev/null || fail "Could not remove ${LOCK_FILE}"
-  # Recreate an empty lock path so the next run has a predictable file.
-  : >"$LOCK_FILE" 2>/dev/null || true
-  chmod 666 "$LOCK_FILE" 2>/dev/null || true
+  # The next run recreates the lock file (mode 0600) in its private lock dir.
   ok "Lock cleared. You can run: sudo erpnext-dev"
   ui_box_end
 }

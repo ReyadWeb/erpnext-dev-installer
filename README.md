@@ -52,7 +52,7 @@ First install and verify the toolkit ([details below](#install-and-verify)):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
-VERSION="v1.6.3"
+VERSION="v1.7.0"
 BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz"
@@ -614,16 +614,39 @@ is kept on disk, so `toolkit-rollback` restores it instantly.
 active/stable script, or in `/opt/erpnext-dev`; override with
 `CHECKSUM_FILE=/path/to/SHA256SUMS`.
 
+### Pinned toolchain (reproducible installs)
+
+For reproducible installs the toolkit pins its whole bootstrap toolchain. Run
+`erpnext-dev versions` to print the current compatibility matrix (it is also
+included in `where-installed` and every support bundle):
+
+| Component | Pinned via | Default |
+| --- | --- | --- |
+| Node.js | `NODE_VERSION` | `24` |
+| nvm | `NVM_VERSION` | `0.40.3` |
+| uv | `UV_VERSION` | `0.11.28` |
+| Python | `PYTHON_VERSION` | `3.14` |
+| Frappe branch | `FRAPPE_BRANCH` | `version-16` |
+| ERPNext branch | `ERPNEXT_BRANCH` | `version-16` |
+| frappe-bench | `BENCH_VERSION` | `5.31.0` |
+
+Each is override-able via its environment variable. `BENCH_VERSION=` (empty)
+intentionally unpins `frappe-bench` and installs the latest published release.
+
 ### Stale lock: "Another toolkit task is already running"
 
-The toolkit uses a lock so two installs/menus cannot run at once. The lock file
-path is usually `/tmp/erpnext-dev-locks/toolkit.lock`. Seeing that error almost
-always means **another `erpnext-dev` session is still open** (second SSH window,
-background menu, stuck process) — not that the file itself is "stuck."
+The toolkit uses a lock so two installs/menus cannot run at once. The lock lives
+in a private, non-world-writable directory: `/run/lock/erpnext-dev/toolkit.lock`
+when run as root, or `$XDG_RUNTIME_DIR/erpnext-dev/toolkit.lock` (falling back to
+`/tmp/erpnext-dev-<uid>-locks/toolkit.lock`) for a normal user. The directory is
+created mode `0700` and a symlinked lock file is refused, so another local user
+cannot pre-plant the path. Seeing that error almost always means **another
+`erpnext-dev` session is still open** (second SSH window, background menu, stuck
+process) — not that the file itself is "stuck."
 
 ```bash
 # See who holds the lock (also printed automatically on lock failure):
-sudo fuser -v /tmp/erpnext-dev-locks/toolkit.lock
+sudo fuser -v /run/lock/erpnext-dev/toolkit.lock
 ps aux | grep -E '[e]rpnext-dev'
 
 # Prefer the safe clearer (refuses if a live process still holds the lock):
