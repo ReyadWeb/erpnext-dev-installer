@@ -27,6 +27,14 @@
   Hyper-V/VirtualBox/WSL2 on Windows) with a universal in-guest netplan fallback.
   `kvm-fixed-ip-guide` / `kvm-guide` remain as the Linux/KVM-specific aliases.
 
+### Fixed
+
+- **Ubuntu 26.04 / GitHub Actions: frappe user creation.** Prefer `useradd` /
+  `userdel` over `adduser` / `deluser --remove-home`. On 26.04, `adduser`'s
+  `sanitize_string` can abort when `sudo -E` preserves a caller `HOME` that
+  contains nvm test filenames with quotes or Unicode (Actions runners). Same
+  pattern applied to backup-user creation.
+
 ### Tests
 
 - New hermetic `scripts/test-host-os-output.sh` asserts the per-OS DNS/test
