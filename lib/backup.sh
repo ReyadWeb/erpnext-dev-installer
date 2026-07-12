@@ -2111,12 +2111,14 @@ backup_server_setup() {
     status_line "Linux user" "OK" "exists: $backup_user"
   else
     log "Creating backup user ${backup_user}"
-    if command -v adduser >/dev/null 2>&1; then
-      $SUDO adduser --disabled-password --gecos "" "$backup_user"
+    # Prefer useradd: Ubuntu 26.04+ adduser can fail via sanitize_string when
+    # the caller's HOME contains special filenames (e.g. Actions runner ~/.nvm).
+    if command -v useradd >/dev/null 2>&1; then
+      $SUDO useradd --create-home --shell /bin/bash --comment "" "$backup_user"
     else
-      $SUDO useradd --create-home --shell /bin/bash "$backup_user"
-      $SUDO passwd -l "$backup_user" >/dev/null 2>&1 || true
+      $SUDO env HOME=/root adduser --disabled-password --gecos "" "$backup_user"
     fi
+    $SUDO passwd -l "$backup_user" >/dev/null 2>&1 || true
     status_line "Linux user" "OK" "created: $backup_user"
   fi
   $SUDO passwd -l "$backup_user" >/dev/null 2>&1 || true

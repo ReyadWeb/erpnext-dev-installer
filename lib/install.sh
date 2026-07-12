@@ -246,7 +246,17 @@ create_frappe_user() {
   if id "$FRAPPE_USER" >/dev/null 2>&1; then
     ok "User ${FRAPPE_USER} already exists"
   else
-    $SUDO adduser --disabled-password --gecos "" "$FRAPPE_USER"
+    # Prefer useradd over adduser for non-interactive creation.
+    # On Ubuntu 26.04+, adduser's Perl sanitize_string can abort when the
+    # caller's HOME (often preserved by `sudo -E`) contains filenames with
+    # quotes/Unicode — notably GitHub Actions runners' preinstalled
+    # ~/.nvm/test fixtures. useradd does not walk that tree.
+    if command -v useradd >/dev/null 2>&1; then
+      $SUDO useradd --create-home --shell /bin/bash --comment "" "$FRAPPE_USER"
+      $SUDO passwd -l "$FRAPPE_USER" >/dev/null 2>&1 || true
+    else
+      $SUDO env HOME=/root adduser --disabled-password --gecos "" "$FRAPPE_USER"
+    fi
     ok "User ${FRAPPE_USER} created without password login"
   fi
 }
@@ -701,7 +711,14 @@ full_purge() {
   fi
 
   if id "$FRAPPE_USER" >/dev/null 2>&1; then
-    $SUDO deluser --remove-home "$FRAPPE_USER" || true
+    # Avoid deluser --remove-home on Ubuntu 26.04+: sanitize_string can fail on
+    # non-ASCII/special filenames under the home tree (same class as adduser).
+    if command -v userdel >/dev/null 2>&1; then
+      $SUDO userdel "$FRAPPE_USER" || true
+    else
+      $SUDO deluser "$FRAPPE_USER" || true
+    fi
+    $SUDO rm -rf "$FRAPPE_HOME" || true
   fi
 
   $SUDO mariadb <<SQL || true
