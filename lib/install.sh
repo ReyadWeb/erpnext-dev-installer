@@ -595,7 +595,7 @@ run_repair() {
 
 run_install() {
   require_sudo
-  install_self_for_reuse
+  install_self_for_reuse || fail "Could not install the toolkit to ${INSTALLER_CANONICAL_PATH:-/opt/erpnext-dev/erpnext-dev.sh}"
   check_os
   check_internet
   maybe_offer_root_storage_expansion
@@ -1101,7 +1101,7 @@ set_local_dev_defaults() {
 
 run_local_dev_quickstart() {
   require_sudo
-  install_self_for_reuse
+  install_self_for_reuse || fail "Could not install the toolkit to ${INSTALLER_CANONICAL_PATH:-/opt/erpnext-dev/erpnext-dev.sh}"
 
   ui_box_start "Local VM Quickstart"
   echo "This path uses local development defaults and keeps inputs minimal."

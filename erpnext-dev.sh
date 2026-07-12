@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.9.3"
+SCRIPT_VERSION="1.9.4"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -317,26 +317,52 @@ install_self_for_reuse() {
   # toolkit into /opt and expose the short erpnext-dev command for future use.
   local src dest src_root dest_root
   dest="${INSTALLER_CANONICAL_PATH:-/opt/erpnext-dev/erpnext-dev.sh}"
-  src="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || true)"
-  [[ -n "$src" && -f "$src" ]] || return 0
+
+  # Prefer the path resolved at bootstrap. Re-resolving BASH_SOURCE[0] with
+  # readlink -f can return empty on Ubuntu 26.04 + sudo-rs when the invoke path
+  # is relative (e.g. sudo ./erpnext-dev.sh), which previously skipped the /opt
+  # copy silently and broke integration verify-toolkit on the 26.04 leg.
+  src="${ERPNEXT_DEV_ENTRY_SCRIPT:-}"
+  if [[ -z "$src" || ! -f "$src" ]]; then
+    src="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || true)"
+  fi
+  if [[ -z "$src" || ! -f "$src" ]]; then
+    src="${BASH_SOURCE[0]}"
+    if [[ "$src" != /* ]]; then
+      src="$(cd "$(dirname "$src")" && pwd)/$(basename "$src")"
+    fi
+  fi
+  if [[ ! -f "$src" ]]; then
+    warn "Could not resolve toolkit entry script for /opt install (src=${src:-<empty>})"
+    return 1
+  fi
 
   src_root="$(cd "$(dirname "$src")" && pwd)"
   dest_root="$(dirname "$dest")"
-  mkdir -p "$dest_root" 2>/dev/null || true
+  mkdir -p "$dest_root" 2>/dev/null || {
+    warn "Could not create ${dest_root}"
+    return 1
+  }
 
   if [[ "$src" != "$dest" ]]; then
-    if cp "$src" "$dest" 2>/dev/null; then
-      chmod 755 "$dest" 2>/dev/null || true
-      chown root:root "$dest" 2>/dev/null || true
+    if ! cp "$src" "$dest" 2>/dev/null; then
+      warn "Could not copy toolkit entry script to ${dest}"
+      return 1
     fi
+    chmod 755 "$dest" 2>/dev/null || true
+    chown root:root "$dest" 2>/dev/null || true
   else
     chmod 755 "$dest" 2>/dev/null || true
     chown root:root "$dest" 2>/dev/null || true
   fi
 
-  sync_toolkit_lib_tree "$src_root" "$dest_root" 2>/dev/null || warn "Could not copy toolkit lib/ tree to ${dest_root}/lib"
+  if ! sync_toolkit_lib_tree "$src_root" "$dest_root"; then
+    warn "Could not copy toolkit lib/ tree to ${dest_root}/lib"
+    return 1
+  fi
 
   install_toolkit_cli_entry 2>/dev/null || true
+  return 0
 }
 
 

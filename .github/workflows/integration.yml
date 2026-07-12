@@ -46,6 +46,12 @@ jobs:
     # vary), so its leg is marked experimental and runs non-blocking: it must
     # execute and report on every tag, but a preview-only flake must never block
     # a release. Ubuntu 24.04 remains the mandatory, release-gating leg.
+    #
+    # Ubuntu 26.04 gotcha (fixed v1.9.4+): sudo-rs ignores `sudo -E` and
+    # readlink -f on a relative ./erpnext-dev.sh can return empty under some
+    # invoke paths. install_self_for_reuse now falls back to ERPNEXT_DEV_ENTRY_SCRIPT
+    # and an absolute-path resolve so /opt/erpnext-dev is always populated.
+    # Integration passes CHECKSUM_FILE via `sudo env` (not sudo -E) for the same reason.
     continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
@@ -106,6 +112,21 @@ jobs:
 
       - name: Install ERPNext (non-interactive)
         run: sudo -E ./erpnext-dev.sh -y install
+
+      - name: Assert stable toolkit at /opt (install contract)
+        run: |
+          set -euo pipefail
+          # install_self_for_reuse must copy the running tree to /opt so follow-up
+          # commands and verify-toolkit exercise the installed copy, not the checkout.
+          if [[ ! -f /opt/erpnext-dev/erpnext-dev.sh ]]; then
+            echo "::error::Expected /opt/erpnext-dev/erpnext-dev.sh after install (see install_self_for_reuse / Ubuntu 26.04 sudo-rs note in TESTING.md)"
+            sudo ./erpnext-dev.sh where-installed || true
+            ls -la /opt/erpnext-dev/ 2>/dev/null || echo "/opt/erpnext-dev missing"
+            ls -la /usr/local/bin/erpnext-dev 2>/dev/null || true
+            exit 1
+          fi
+          test -f /opt/erpnext-dev/lib/common.sh
+          echo "Stable toolkit present: $(readlink -f /opt/erpnext-dev/erpnext-dev.sh)"
 
       - name: verify-toolkit integrity (positive and tamper negative)
         run: |

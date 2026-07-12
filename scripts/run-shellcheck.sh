@@ -36,6 +36,7 @@ targets=(
   scripts/test-atomic-update.sh
   scripts/test-staged-signature.sh
   scripts/test-host-os-output.sh
+  scripts/test-install-self-path.sh
   scripts/release-signing-policy.sh
 )
 

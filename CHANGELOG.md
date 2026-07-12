@@ -1,3 +1,27 @@
+## v1.9.4 - Ubuntu 26.04 integration: stable /opt install fix
+
+### Fixed
+
+- **Ubuntu 26.04 / sudo-rs: `/opt/erpnext-dev` not populated after install.**
+  `install_self_for_reuse` relied on `readlink -f "${BASH_SOURCE[0]}"`, which
+  can return empty when the toolkit is invoked as `sudo ./erpnext-dev.sh` on
+  Ubuntu 26.04 (sudo-rs). The copy to `/opt` was skipped silently, ERPNext still
+  installed, but integration's `verify-toolkit` step failed with
+  `installed toolkit not found at /opt/erpnext-dev/erpnext-dev.sh`. The copy
+  now falls back to `ERPNEXT_DEV_ENTRY_SCRIPT` and absolute-path resolution;
+  `run_install` / `local-dev-quickstart` fail fast if `/opt` cannot be written.
+
+### Tests
+
+- New hermetic `scripts/test-install-self-path.sh` asserts entry + `lib/` copy
+  when `ERPNEXT_DEV_ENTRY_SCRIPT` is set. Integration adds **Assert stable toolkit
+  at /opt** before verify-toolkit.
+
+### Docs
+
+- `TESTING.md`: Ubuntu 26.04 integration leg notes (sudo-rs, `sudo env` vs
+  `sudo -E`, install_self failure mode). Comment block in `integration.yml`.
+
 ## v1.9.3 - Local host setup friction reduction
 
 ### Improved

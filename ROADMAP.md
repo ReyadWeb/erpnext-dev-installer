@@ -1,6 +1,6 @@
 # ERPNext Developer Toolkit — Roadmap
 
-**Current release:** v1.9.3 (July 2026) — local host setup friction reduction  
+**Current release:** v1.9.4 (July 2026) — Ubuntu 26.04 /opt install fix  
 **External review (July 2026):** enterprise-candidate for single-admin Ubuntu VM ops — **9.4 / 10** (**9.6–9.7** after v1.8.2 + v1.9.0 + v1.9.1 + VPS pass)  
 **Full history:** [`CHANGELOG.md`](CHANGELOG.md) · **Security:** [`SECURITY.md`](SECURITY.md) · **Testing:** [`TESTING.md`](TESTING.md)
 
@@ -68,6 +68,12 @@ cannot be produced by repository write access alone. Setup + key-rotation runboo
   the release-gating leg); it becomes a hard gate when the 26.04 runner reaches GA
 - Support wording: *"Supports Ubuntu 24.04 and 26.04; integration runs on 24.04 (gating) + 26.04 (preview, non-blocking)."*
 
+### v1.9.4 — Ubuntu 26.04 integration: stable /opt install fix — **implemented**
+
+- `install_self_for_reuse` falls back to `ERPNEXT_DEV_ENTRY_SCRIPT` when `readlink -f` fails (sudo-rs / relative invoke)
+- Install/quickstart fail fast if `/opt/erpnext-dev` cannot be populated
+- Integration: assert stable toolkit at `/opt` before verify-toolkit; `TESTING.md` documents the 26.04 gotcha
+
 ### v1.9.3 — Local host setup friction reduction — **implemented**
 
 - README one-command download → verify → `local-dev-quickstart`
@@ -91,7 +97,7 @@ CONTRIBUTING, CODE_OF_CONDUCT, issue/PR templates, docs consolidation.
 
 ---
 
-## Completed (v1.4.0 → v1.9.3)
+## Completed (v1.4.0 → v1.9.4)
 
 | Area | Version | What shipped |
 |------|---------|--------------|
@@ -108,6 +114,7 @@ CONTRIBUTING, CODE_OF_CONDUCT, issue/PR templates, docs consolidation.
 | CI supply-chain hardening | v1.9.1 | Actions pinned to commit SHAs + Dependabot; Ubuntu 26.04 non-blocking integration leg |
 | Cross-platform local host support | v1.9.2 | Persisted `HOST_OS`; OS-aware hosts-file/test/mkcert/fixed-IP emitters for Linux/macOS/Windows/WSL2 |
 | Local host setup friction reduction | v1.9.3 | One-command install README path; copy-paste host mapping/mkcert one-liners; hosts newline guard |
+| Ubuntu 26.04 /opt install fix | v1.9.4 | `install_self_for_reuse` path fallback; integration assert before verify-toolkit |
 
 **CI today:** lint/shellcheck → validate-release → atomic-update-smoke → (on tag) integration install + backup/restore + production runtime + tamper negative → **environment-approved** sign → publish.
 

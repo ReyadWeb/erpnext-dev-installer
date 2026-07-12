@@ -56,7 +56,7 @@ bash -n lib/security.sh
 bash -n lib/update.sh
 pass "bash syntax valid"
 
-chmod +x erpnext-dev.sh scripts/validate-release.sh scripts/generate-release-checksums.sh scripts/run-shellcheck.sh scripts/check-module-consistency.sh scripts/test-atomic-update.sh scripts/test-staged-signature.sh scripts/test-host-os-output.sh scripts/release-signing-policy.sh
+chmod +x erpnext-dev.sh scripts/validate-release.sh scripts/generate-release-checksums.sh scripts/run-shellcheck.sh scripts/check-module-consistency.sh scripts/test-atomic-update.sh scripts/test-staged-signature.sh scripts/test-host-os-output.sh scripts/test-install-self-path.sh scripts/release-signing-policy.sh
 
 # Module lists and dispatcher targets must all agree. This is the single guard
 # that prevents a module from being sourced at runtime while missing from the
@@ -228,6 +228,14 @@ scripts/test-host-os-output.sh >/tmp/erpnext-dev-host-os.$$ 2>&1 || {
 }
 rm -f /tmp/erpnext-dev-host-os.$$
 pass "host-OS output matrix passed"
+
+scripts/test-install-self-path.sh >/tmp/erpnext-dev-install-self.$$ 2>&1 || {
+  cat /tmp/erpnext-dev-install-self.$$
+  rm -f /tmp/erpnext-dev-install-self.$$
+  fail "test-install-self-path.sh failed"
+}
+rm -f /tmp/erpnext-dev-install-self.$$
+pass "install-self path resolution passed"
 
 if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
   # shellcheck disable=SC2024 # redirect is intentionally to the invoking user's /tmp file, not root's

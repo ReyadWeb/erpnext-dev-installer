@@ -44,6 +44,29 @@ Record failures with command output; open issues or patch v1.8.x before producti
 
 ## CI and developer validation (v1.8.x – v1.9.x)
 
+### Ubuntu 26.04 integration leg (sudo-rs / install_self_for_reuse)
+
+GitHub's `ubuntu-26.04` runner image ships **sudo-rs**, which ignores `sudo -E`
+(preserving the environment). Integration already passes `CHECKSUM_FILE` via
+`sudo env VAR=val` for `verify-toolkit` — not `sudo -E`.
+
+**Failure mode (fixed in v1.9.4+):** `install_self_for_reuse` used
+`readlink -f "${BASH_SOURCE[0]}"` when copying the checkout into
+`/opt/erpnext-dev/`. On the 26.04 leg, that can return empty for a relative
+invoke path (`sudo ./erpnext-dev.sh -y install`). The copy was skipped silently,
+ERPNext still installed, but integration's `verify-toolkit` step failed with
+`installed toolkit not found at /opt/erpnext-dev/erpnext-dev.sh`.
+
+**Fix:** fall back to `ERPNEXT_DEV_ENTRY_SCRIPT` (resolved at bootstrap) and
+absolute-path the invoke location; fail install if `/opt` copy fails. Integration
+adds an explicit **Assert stable toolkit at /opt** step before verify-toolkit.
+
+Hermetic regression: `scripts/test-install-self-path.sh` (wired into
+`validate-release.sh`).
+
+The 26.04 matrix leg stays **non-blocking** until the preview runner reaches GA;
+then flip `experimental: false` in `.github/workflows/integration.yml`.
+
 ### v1.9.2 cross-platform local host support (host-mapping regression matrix)
 
 Hermetic check (no VM, no sudo): `scripts/test-host-os-output.sh` asserts the
