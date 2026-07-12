@@ -91,27 +91,39 @@ run_case() {
     linux)
       assert_contains "$label dns" "$dns" "/etc/hosts"
       assert_contains "$label dns" "$dns" 'sudo sed -i "/'
+      assert_contains "$label dns" "$dns" "Copy and run this entire command"
+      assert_contains "$label dns" "$dns" " && "
       assert_absent   "$label dns" "$dns" "sed -i ''"
       assert_contains "$label tests" "$tests" "getent hosts"
       assert_contains "$label mkcert" "$hint" "apt"
+      mkcert_line="$(print_host_mkcert_trust_copy_one_liner "$SITE_NAME" "$VM_IP" "testuser")"
+      assert_contains "$label mkcert one-liner" "$mkcert_line" "mkcert -install && mkcert -cert-file"
+      assert_contains "$label mkcert one-liner" "$mkcert_line" "scp ${SITE_NAME}.crt"
       ;;
     macos)
       assert_contains "$label dns" "$dns" "/etc/hosts"
       assert_contains "$label dns" "$dns" "sudo sed -i ''"
+      assert_contains "$label dns" "$dns" "Copy and run this entire command"
       assert_contains "$label tests" "$tests" "dscacheutil"
       assert_absent   "$label tests" "$tests" "getent hosts"
       assert_contains "$label mkcert" "$hint" "brew install mkcert"
+      mkcert_line="$(print_host_mkcert_trust_copy_one_liner "$SITE_NAME" "$VM_IP" "testuser")"
+      assert_contains "$label mkcert one-liner" "$mkcert_line" "mkcert -install && mkcert -cert-file"
       ;;
     windows)
       assert_contains "$label dns" "$dns" 'drivers\etc\hosts'
       assert_contains "$label dns" "$dns" "Set-Content"
-      assert_contains "$label dns" "$dns" 'VM_IP = "192.168.122.50"'
+      assert_contains "$label dns" "$dns" 'VM_IP="192.168.122.50"'
+      assert_contains "$label dns" "$dns" "Copy and run this entire command"
       assert_contains "$label tests" "$tests" "Resolve-DnsName"
       assert_contains "$label mkcert" "$hint" "choco install mkcert"
+      mkcert_line="$(print_host_mkcert_trust_copy_one_liner "$SITE_NAME" "$VM_IP" "testuser")"
+      assert_contains "$label mkcert one-liner" "$mkcert_line" "mkcert -install && mkcert -cert-file"
+      assert_contains "$label mkcert one-liner" "$mkcert_line" "scp ${SITE_NAME}.crt"
       ;;
     windows-wsl)
       assert_contains "$label dns" "$dns" 'drivers\etc\hosts'
-      assert_contains "$label dns" "$dns" 'VM_IP = "127.0.0.1"'
+      assert_contains "$label dns" "$dns" 'VM_IP="127.0.0.1"'
       assert_contains "$label tests" "$tests" "Resolve-DnsName"
       ;;
   esac

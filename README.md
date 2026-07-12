@@ -59,7 +59,26 @@ It supports two setup paths:
 
 ## Start here
 
-First install and verify the toolkit ([details below](#install-and-verify)):
+**Fresh local dev VM — download, verify, and install in one command:**
+
+```bash
+sudo apt-get update && sudo apt-get install -y curl ca-certificates tar && \
+VERSION="v1.9.2" && \
+BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}" && \
+cd ~ && \
+curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz" && \
+tar -xzf "erpnext-dev-${VERSION}.tar.gz" && \
+cd "erpnext-dev-${VERSION}" && \
+sha256sum -c SHA256SUMS && \
+sudo ./erpnext-dev.sh local-dev-quickstart
+```
+
+Press **Enter** at the domain prompt to keep the default `erp.test`. Choose **Linux**
+for host OS when asked (or your actual host OS). After install, run the printed
+**host mapping** and **mkcert/scp** commands on your physical host machine — each
+is a single copy-paste line.
+
+Or install step by step ([details below](#install-and-verify)):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
@@ -246,13 +265,12 @@ unstyled/broken login page (Frappe Host-header mismatch).
   and the WSL2 IP changes each boot, so the toolkit maps `erp.test → 127.0.0.1`
   instead of chasing the VM IP.
 
-Trusted local HTTPS order: (1) HOST hosts file, (2) confirm styled
-`http://erp.test:8000`, (3) on the HOST install mkcert (per the table above),
-`mkcert -install`, generate, and `scp` into the VM `/tmp/`, (4) stay in
-`local-ssl-wizard` option 2 and press Enter after scp — it installs Nginx HTTPS
-and you open **`https://erp.test`**. `mkcert -install` trusts the CA in the right
-store per OS (Keychain on macOS, the certificate store on Windows, NSS on Linux).
-Self-signed (wizard option 1) stays entirely in the VM but browsers will warn.
+Trusted local HTTPS order: (1) HOST hosts file — one copy-paste command from
+`local-host-checkpoint`, (2) confirm styled `http://erp.test:8000`, (3) on the HOST
+run the single mkcert line from `local-ssl-wizard` option 2 (installs CA, generates
+cert, and `scp`s into the VM `/tmp/`), (4) stay in the wizard and press Enter after
+scp — it installs Nginx HTTPS and you open **`https://erp.test`**. Self-signed
+(wizard option 1) stays entirely in the VM but browsers will warn.
 
 For a stable IP, `sudo erpnext-dev local-fixed-ip-guide` prints guidance for your
 host OS and hypervisor (KVM/libvirt on Linux; UTM/VMware/Parallels on macOS;

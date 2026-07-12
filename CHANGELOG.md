@@ -39,6 +39,10 @@
   tee -a /etc/hosts` before appending, so an existing file without a trailing
   newline (e.g. a LocalWP `## Local - End ##` block) can no longer glue the new
   `VM_IP LOCAL_DOMAIN` entry onto the previous line and break resolution.
+- **Copy-paste host commands.** Host mapping and mkcert/scp steps are now emitted
+  as single one-line commands (with a short description) instead of numbered
+  multi-line steps, so operators can copy the full line without missing a step.
+  README adds a one-command download → verify → `local-dev-quickstart` path.
 
 ### Tests
 

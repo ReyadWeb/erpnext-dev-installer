@@ -164,7 +164,9 @@ host_mapping_ip() {
 # VM IP, tailored to the operator's host OS. Unix hosts (Linux/macOS) edit
 # /etc/hosts; Windows edits the drivers\etc\hosts file from an elevated
 # PowerShell. macOS uses BSD sed (`sed -i ''`), which differs from GNU sed.
-print_host_dns_commands_for_site() {
+# One copy-paste HOST command to map the local domain (backs up, removes stale
+# entries, guarantees a trailing newline, then appends VM_IP LOCAL_DOMAIN).
+print_host_dns_one_liner_for_site() {
   local site="${1:-$SITE_NAME}" vm_ip="${2:-}"
   local escaped_site map_ip host_os
   vm_ip="${vm_ip:-$(get_vm_ip)}"
@@ -174,37 +176,33 @@ print_host_dns_commands_for_site() {
 
   case "$host_os" in
     windows|windows-wsl)
-      echo "  # Run in Windows PowerShell opened as Administrator:"
-      echo "  \$VM_IP = \"${map_ip}\""
-      echo "  \$LOCAL_DOMAIN = \"${site}\""
-      echo "  \$hosts = \"\$env:SystemRoot\\System32\\drivers\\etc\\hosts\""
-      echo "  Copy-Item \$hosts \"\$hosts.bak.\$(Get-Date -Format yyyyMMdd-HHmmss)\""
-      echo "  \$pattern = '\\s+' + [regex]::Escape(\$LOCAL_DOMAIN) + '(\\s|\$)'"
-      echo "  (Get-Content \$hosts) -notmatch \$pattern | Set-Content \$hosts"
-      echo "  Add-Content \$hosts \"\$VM_IP \$LOCAL_DOMAIN\""
+      echo "\$VM_IP=\"${map_ip}\"; \$LOCAL_DOMAIN=\"${site}\"; \$hosts=\"\$env:SystemRoot\\System32\\drivers\\etc\\hosts\"; Copy-Item \$hosts \"\$hosts.bak.\$(Get-Date -Format yyyyMMdd-HHmmss)\"; \$pattern='\\s+'+[regex]::Escape(\$LOCAL_DOMAIN)+'(\\s|\$)'; (Get-Content \$hosts) -notmatch \$pattern | Set-Content \$hosts; Add-Content \$hosts \"\$VM_IP \$LOCAL_DOMAIN\""
       ;;
     macos)
-      echo "  VM_IP=\"${map_ip}\""
-      echo "  LOCAL_DOMAIN=\"${site}\""
-      echo "  sudo cp /etc/hosts \"/etc/hosts.bak.\$(date +%Y%m%d-%H%M%S)\""
       # BSD/macOS sed requires an explicit (empty) backup suffix after -i.
-      echo "  sudo sed -i '' \"/[[:space:]]${escaped_site}\\([[:space:]]\\|\$\\)/d\" /etc/hosts"
-      # Guard against a hosts file with no trailing newline (e.g. LocalWP's
-      # \"## Local - End ##\" block), which would otherwise glue the entry.
-      echo "  [ -n \"\$(tail -c1 /etc/hosts)\" ] && echo | sudo tee -a /etc/hosts >/dev/null"
-      echo "  echo \"\${VM_IP} \${LOCAL_DOMAIN}\" | sudo tee -a /etc/hosts"
+      echo "VM_IP=\"${map_ip}\" LOCAL_DOMAIN=\"${site}\" && sudo cp /etc/hosts \"/etc/hosts.bak.\$(date +%Y%m%d-%H%M%S)\" && sudo sed -i '' \"/[[:space:]]${escaped_site}\\([[:space:]]\\|\$\\)/d\" /etc/hosts && { [ -n \"\$(tail -c1 /etc/hosts)\" ] && echo | sudo tee -a /etc/hosts >/dev/null || true; } && echo \"\${VM_IP} \${LOCAL_DOMAIN}\" | sudo tee -a /etc/hosts"
       ;;
     *)
-      echo "  VM_IP=\"${map_ip}\""
-      echo "  LOCAL_DOMAIN=\"${site}\""
-      echo "  sudo cp /etc/hosts \"/etc/hosts.bak.\$(date +%Y%m%d-%H%M%S)\""
-      echo "  sudo sed -i \"/[[:space:]]${escaped_site}\\([[:space:]]\\|\$\\)/d\" /etc/hosts"
-      # Guard against a hosts file with no trailing newline (e.g. LocalWP's
-      # \"## Local - End ##\" block), which would otherwise glue the entry.
-      echo "  [ -n \"\$(tail -c1 /etc/hosts)\" ] && echo | sudo tee -a /etc/hosts >/dev/null"
-      echo "  echo \"\${VM_IP} \${LOCAL_DOMAIN}\" | sudo tee -a /etc/hosts"
+      echo "VM_IP=\"${map_ip}\" LOCAL_DOMAIN=\"${site}\" && sudo cp /etc/hosts \"/etc/hosts.bak.\$(date +%Y%m%d-%H%M%S)\" && sudo sed -i \"/[[:space:]]${escaped_site}\\([[:space:]]\\|\$\\)/d\" /etc/hosts && { [ -n \"\$(tail -c1 /etc/hosts)\" ] && echo | sudo tee -a /etc/hosts >/dev/null || true; } && echo \"\${VM_IP} \${LOCAL_DOMAIN}\" | sudo tee -a /etc/hosts"
       ;;
   esac
+}
+
+print_host_dns_commands_for_site() {
+  local site="${1:-$SITE_NAME}" vm_ip="${2:-}"
+  local host_os host_label
+  host_os="$(effective_host_os)"
+  host_label="$(host_os_label "$host_os")"
+
+  case "$host_os" in
+    windows|windows-wsl)
+      echo "  Copy and run this entire command in PowerShell (Administrator):"
+      ;;
+    *)
+      echo "  Copy and run this entire command on the ${host_label} HOST:"
+      ;;
+  esac
+  echo "  $(print_host_dns_one_liner_for_site "$site" "$vm_ip")"
 }
 
 # Print the HOST-side commands to verify the mapping and reach the site,

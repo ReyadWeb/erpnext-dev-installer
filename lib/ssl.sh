@@ -1640,11 +1640,10 @@ ssl_nginx_enabled_path() {
 }
 
 show_local_ssl_guide() {
-  local vm_ip cert_path key_path escaped_site vm_ssh_user cmd_self cmd_mkcert cmd_configure cmd_status cmd_verify cmd_disable
+  local vm_ip cert_path key_path vm_ssh_user cmd_self cmd_mkcert cmd_configure cmd_status cmd_verify cmd_disable
   vm_ip="$(get_vm_ip)"
   cert_path="$(ssl_cert_path)"
   key_path="$(ssl_key_path)"
-  escaped_site="${SITE_NAME//./\.}"
   vm_ssh_user="$(suggested_vm_ssh_user)"
   cmd_self="${INSTALLER_CANONICAL_PATH} create-self-signed-local-cert"
   cmd_mkcert="${INSTALLER_CANONICAL_PATH} mkcert-guide"
@@ -1705,10 +1704,8 @@ Option 2: Trusted local certificate with mkcert
   Full checklist:
     ${cmd_mkcert}
 
-  HOST commands:
-    mkcert -install
-    mkcert -cert-file ${SITE_NAME}.crt -key-file ${SITE_NAME}.key ${SITE_NAME} ${vm_ip} localhost 127.0.0.1
-    scp ${SITE_NAME}.crt ${SITE_NAME}.key ${vm_ssh_user}@${vm_ip}:/tmp/
+  HOST commands (one-time mkcert install, then one copy-paste line):
+$(print_host_mkcert_trust_copy_commands "$SITE_NAME" "$vm_ip" "$vm_ssh_user" | sed 's/^/  /')
 
   VM commands:
     sudo mkdir -p ${SSL_CERT_DIR}
@@ -1722,11 +1719,7 @@ Option 2: Trusted local certificate with mkcert
     ${cmd_verify}
 
 Host /etc/hosts still needs to map ${SITE_NAME} to this VM IP:
-  VM_IP="${vm_ip}"
-  LOCAL_DOMAIN="${SITE_NAME}"
-  sudo cp /etc/hosts "/etc/hosts.bak.\$(date +%Y%m%d-%H%M%S)"
-  sudo sed -i "/[[:space:]]${escaped_site}\([[:space:]]\|$\)/d" /etc/hosts
-  echo "\${VM_IP} \${LOCAL_DOMAIN}" | sudo tee -a /etc/hosts
+$(print_host_dns_commands_for_site "$SITE_NAME" "$vm_ip")
 
 Host tests:
   getent hosts ${SITE_NAME}
@@ -1768,13 +1761,40 @@ host_mkcert_install_hint() {
   esac
 }
 
+# One copy-paste HOST command: trust the local CA, generate the site cert/key,
+# and scp both files into the VM /tmp/ directory.
+print_host_mkcert_trust_copy_one_liner() {
+  local site="${1:-$SITE_NAME}" vm_ip="${2:-}" ssh_user="${3:-}"
+  vm_ip="${vm_ip:-$(get_vm_ip)}"
+  ssh_user="${ssh_user:-$(suggested_vm_ssh_user)}"
+  printf 'mkcert -install && mkcert -cert-file %s.crt -key-file %s.key %s %s localhost 127.0.0.1 && scp %s.crt %s.key %s@%s:/tmp/' \
+    "$site" "$site" "$site" "$vm_ip" "$site" "$site" "$ssh_user" "$vm_ip"
+}
+
+print_host_mkcert_trust_copy_commands() {
+  local site="${1:-$SITE_NAME}" vm_ip="${2:-}" ssh_user="${3:-}"
+  local host_os host_label
+  host_os="$(effective_host_os)"
+  host_label="$(host_os_label "$host_os")"
+  vm_ip="${vm_ip:-$(get_vm_ip)}"
+  ssh_user="${ssh_user:-$(suggested_vm_ssh_user)}"
+
+  echo "  One-time: install mkcert on the ${host_label} HOST if needed:"
+  host_mkcert_install_hint | sed 's/^  /     /'
+  echo
+  echo "  Copy and run this entire command on the ${host_label} HOST:"
+  echo "  $(print_host_mkcert_trust_copy_one_liner "$site" "$vm_ip" "$ssh_user")"
+  if [[ "$host_os" == "windows" || "$host_os" == "windows-wsl" ]]; then
+    echo "  (Windows 10+ ships scp via OpenSSH; run from PowerShell. WSL2: run from the WSL shell.)"
+  fi
+}
+
 show_mkcert_local_ssl_guide() {
-  local vm_ip cert_path key_path escaped_site vm_ssh_user cmd_install cmd_configure cmd_verify cmd_disable cmd_env
+  local vm_ip cert_path key_path vm_ssh_user cmd_install cmd_configure cmd_verify cmd_disable cmd_env
   local host_label mkcert_deps host_dns_cmds host_dns_tests
   vm_ip="$(get_vm_ip)"
   cert_path="$(ssl_cert_path)"
   key_path="$(ssl_key_path)"
-  escaped_site="${SITE_NAME//./\.}"
   vm_ssh_user="$(suggested_vm_ssh_user)"
   cmd_install="${INSTALLER_CANONICAL_PATH} install-local-ssl-cert"
   cmd_configure="${INSTALLER_CANONICAL_PATH} configure-local-ssl"
@@ -1804,25 +1824,18 @@ Important:
 
 Checklist:
 
-1) On the ${host_label} HOST, install mkcert dependencies:
+1) On the ${host_label} HOST, install mkcert dependencies (one time):
 
 ${mkcert_deps}
 
-2) On the HOST, trust the local CA:
+2) On the HOST, trust the CA, generate the cert/key, and copy into the VM:
 
-  mkcert -install
+  Copy and run this entire command on the ${host_label} HOST:
+  $(print_host_mkcert_trust_copy_one_liner "$SITE_NAME" "$vm_ip" "$(suggested_vm_ssh_user)")
 
-3) On the HOST, generate the certificate and key:
+  If your VM uses a different SSH user, replace '$(suggested_vm_ssh_user)' in the scp target.
 
-  mkcert -cert-file ${SITE_NAME}.crt -key-file ${SITE_NAME}.key ${SITE_NAME} ${vm_ip} localhost 127.0.0.1
-
-4) On the HOST, copy the cert/key into the VM:
-
-  scp ${SITE_NAME}.crt ${SITE_NAME}.key ${vm_ssh_user}@${vm_ip}:/tmp/
-
-  If your VM uses a different SSH user, replace '${vm_ssh_user}' with that user.
-
-5) Inside the VM, install the cert/key safely:
+3) Inside the VM, install the cert/key safely:
 
   ${cmd_install}
 
@@ -1836,12 +1849,12 @@ ${mkcert_deps}
 
   Existing cert/key files are backed up first, and permissions are enforced.
 
-6) Inside the VM, enable/reload the HTTPS reverse proxy:
+4) Inside the VM, enable/reload the HTTPS reverse proxy:
 
   ${cmd_configure}
   ${cmd_verify}
 
-7) On the ${host_label} HOST, confirm DNS/hosts and HTTPS:
+5) On the ${host_label} HOST, confirm DNS/hosts and HTTPS:
 
 ${host_dns_cmds}
 
@@ -1915,15 +1928,7 @@ run_trusted_mkcert_setup() {
   echo "------------------------------------------------------------"
   echo "Step 1 — HOST: install CA, generate cert, copy into the VM"
   echo "------------------------------------------------------------"
-  echo "Run these on the ${host_label} HOST machine:"
-  echo "  0. Install mkcert (one time):"
-  host_mkcert_install_hint | sed 's/^  /     /'
-  echo "  1. mkcert -install"
-  echo "  2. mkcert -cert-file ${SITE_NAME}.crt -key-file ${SITE_NAME}.key ${SITE_NAME} ${vm_ip} localhost 127.0.0.1"
-  echo "  3. scp ${SITE_NAME}.crt ${SITE_NAME}.key ${ssh_user}@${vm_ip}:/tmp/"
-  if [[ "$host_os" == "windows" || "$host_os" == "windows-wsl" ]]; then
-    echo "     (Windows 10+ ships scp via OpenSSH; run from PowerShell. WSL2: run from the WSL shell.)"
-  fi
+  print_host_mkcert_trust_copy_commands "$SITE_NAME" "$vm_ip" "$ssh_user"
   echo
   echo "Stay in this wizard. After scp finishes, press Enter here to continue."
   echo "Detailed guide: $(toolkit_cmd mkcert-guide)"
@@ -2419,8 +2424,7 @@ install_local_ssl_cert() {
     warn "Source certificate/key not found."
     echo
     echo "For trusted local SSL, generate the files on the HOST using mkcert, then copy them into the VM:"
-    echo "  mkcert -cert-file ${SITE_NAME}.crt -key-file ${SITE_NAME}.key ${SITE_NAME} $(get_vm_ip) localhost 127.0.0.1"
-    echo "  scp ${SITE_NAME}.crt ${SITE_NAME}.key $(suggested_vm_ssh_user)@$(get_vm_ip):/tmp/"
+    print_host_mkcert_trust_copy_commands "$SITE_NAME" "$(get_vm_ip)" "$(suggested_vm_ssh_user)"
     echo
     echo "Then rerun:"
     echo "  $(toolkit_cmd install-local-ssl-cert)"
@@ -2553,9 +2557,8 @@ Expected host mapping entry:
 
 For trusted SSL, run on the ${host_label} HOST:
 ${mkcert_deps}
-  mkcert -install
-  mkcert -cert-file ${SITE_NAME}.crt -key-file ${SITE_NAME}.key ${SITE_NAME} ${vm_ip} localhost 127.0.0.1
-  scp ${SITE_NAME}.crt ${SITE_NAME}.key $(suggested_vm_ssh_user)@${vm_ip}:/tmp/
+  Copy and run this entire command:
+  $(print_host_mkcert_trust_copy_one_liner "$SITE_NAME" "$vm_ip" "$(suggested_vm_ssh_user)")
 
 Then run inside this VM:
   $(toolkit_cmd install-local-ssl-cert)
