@@ -10,6 +10,10 @@
   `installed toolkit not found at /opt/erpnext-dev/erpnext-dev.sh`. The copy
   now falls back to `ERPNEXT_DEV_ENTRY_SCRIPT` and absolute-path resolution;
   `run_install` / `local-dev-quickstart` fail fast if `/opt` cannot be written.
+- **CI verify-toolkit exit 141 (SIGPIPE) on Ubuntu 26.04.** Piping
+  `verify-toolkit` into `grep -q` under `set -o pipefail` races: quiet grep
+  closes the pipe on first match and the writer gets SIGPIPE. Integration /
+  CI / release workflows now capture output to a file, then grep.
 
 ### Tests
 
@@ -20,7 +24,8 @@
 ### Docs
 
 - `TESTING.md`: Ubuntu 26.04 integration leg notes (sudo-rs, `sudo env` vs
-  `sudo -E`, install_self failure mode). Comment block in `integration.yml`.
+  `sudo -E`, install_self failure mode, SIGPIPE/`grep -q` gotcha). Comment
+  block in `integration.yml`.
 
 ## v1.9.3 - Local host setup friction reduction
 

@@ -61,6 +61,12 @@ ERPNext still installed, but integration's `verify-toolkit` step failed with
 absolute-path the invoke location; fail install if `/opt` copy fails. Integration
 adds an explicit **Assert stable toolkit at /opt** step before verify-toolkit.
 
+**Second failure mode (exit 141 / SIGPIPE):** under `set -o pipefail`, piping
+`verify-toolkit` into `grep -q` makes grep exit as soon as it matches and close
+the pipe. The writer then gets SIGPIPE (exit 141). That race is reliable on
+Ubuntu 26.04 / sudo-rs. CI must **capture output to a file, then grep** — never
+`cmd | grep -q` under `pipefail`.
+
 Hermetic regression: `scripts/test-install-self-path.sh` (wired into
 `validate-release.sh`).
 

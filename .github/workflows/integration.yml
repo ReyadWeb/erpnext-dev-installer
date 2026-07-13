@@ -52,6 +52,7 @@ jobs:
     # invoke paths. install_self_for_reuse now falls back to ERPNEXT_DEV_ENTRY_SCRIPT
     # and an absolute-path resolve so /opt/erpnext-dev is always populated.
     # Integration passes CHECKSUM_FILE via `sudo env` (not sudo -E) for the same reason.
+    # Also: never pipe verify-toolkit into `grep -q` under pipefail — SIGPIPE/141.
     continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
@@ -147,7 +148,17 @@ jobs:
           # Pass CHECKSUM_FILE via `sudo env` rather than `sudo -E`: Ubuntu 26.04
           # ships sudo-rs, which ignores -E and would drop the variable, breaking
           # verification. `sudo env VAR=val` works on both classic sudo and sudo-rs.
-          sudo env CHECKSUM_FILE="$checksum" erpnext-dev verify-toolkit | grep -qi "active match.*OK"
+          #
+          # Capture to a file, then grep. Do NOT pipe into `grep -q`: with
+          # `set -o pipefail`, quiet grep exits as soon as it matches and closes
+          # the pipe, so verify-toolkit gets SIGPIPE (exit 141). That race is
+          # reliable on Ubuntu 26.04 / sudo-rs and intermittent elsewhere.
+          sudo env CHECKSUM_FILE="$checksum" erpnext-dev verify-toolkit >/tmp/erpnext-dev-vt-positive.out 2>&1
+          if ! grep -qi "active match.*OK" /tmp/erpnext-dev-vt-positive.out; then
+            echo "::error::verify-toolkit positive check failed (no Active match OK)"
+            cat /tmp/erpnext-dev-vt-positive.out
+            exit 1
+          fi
 
           sudo cp -a "$lib" /tmp/erpnext-dev-common.sh.bak
           printf '\n# tamper-fixture\n' | sudo tee -a "$lib" >/dev/null

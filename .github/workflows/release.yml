@@ -127,7 +127,14 @@ jobs:
           cd "${workdir}/erpnext-dev-${tag}"
           sha256sum -c SHA256SUMS
           ./erpnext-dev.sh version
-          ./erpnext-dev.sh verify-toolkit | grep -qi "active match.*OK"
+          # Capture then grep — never pipe into grep -q under pipefail (SIGPIPE/141).
+          ./erpnext-dev.sh verify-toolkit >/tmp/erpnext-dev-vt-positive.$$ 2>&1
+          grep -qi "active match.*OK" /tmp/erpnext-dev-vt-positive.$$ || {
+            cat /tmp/erpnext-dev-vt-positive.$$
+            rm -f /tmp/erpnext-dev-vt-positive.$$
+            exit 1
+          }
+          rm -f /tmp/erpnext-dev-vt-positive.$$
           echo "Bundle is self-contained and verifies from a clean extract."
 
       - name: Publish GitHub release
