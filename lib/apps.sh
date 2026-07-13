@@ -21,14 +21,27 @@ app_profile_list() {
     wiki \
     print_designer \
     drive \
+    gameplan \
+    lending \
     raven \
     insights \
     telephony \
-    helpdesk
+    helpdesk \
+    india_compliance
 }
 
 app_profile_branch_overrides() {
-  echo "CRM_BRANCH, HRMS_BRANCH, EDUCATION_BRANCH, PAYMENTS_BRANCH, WEBSHOP_BRANCH, BUILDER_BRANCH, LMS_BRANCH, WIKI_BRANCH, PRINT_DESIGNER_BRANCH, DRIVE_BRANCH, RAVEN_BRANCH, INSIGHTS_BRANCH, TELEPHONY_BRANCH, HELPDESK_BRANCH"
+  echo "CRM_BRANCH, HRMS_BRANCH, EDUCATION_BRANCH, PAYMENTS_BRANCH, WEBSHOP_BRANCH, BUILDER_BRANCH, LMS_BRANCH, WIKI_BRANCH, PRINT_DESIGNER_BRANCH, DRIVE_BRANCH, GAMEPLAN_BRANCH, LENDING_BRANCH, RAVEN_BRANCH, INSIGHTS_BRANCH, TELEPHONY_BRANCH, HELPDESK_BRANCH, INDIA_COMPLIANCE_BRANCH"
+}
+
+# Human-readable publisher label for curated apps.
+# shellcheck disable=SC2120  # arg is optional; most callers rely on LIB_APP_ORIGIN
+app_origin_label() {
+  local origin="${1:-${LIB_APP_ORIGIN:-frappe}}"
+  case "$origin" in
+    community|third-party|third_party) printf 'Community / third-party\n' ;;
+    *) printf 'Frappe (official)\n' ;;
+  esac
 }
 
 app_profile_defaults() {
@@ -39,6 +52,9 @@ app_profile_defaults() {
   LIB_APP_REPO=""
   LIB_APP_BRANCH=""
   LIB_APP_NOTES=""
+  # frappe = github.com/frappe/* maintained by Frappe Technologies
+  # community = popular third-party / partner apps (still open source)
+  LIB_APP_ORIGIN="frappe"
 
   case "$profile" in
     crm)
@@ -132,12 +148,35 @@ app_profile_defaults() {
       LIB_APP_BRANCH="${DRIVE_BRANCH:-}"
       LIB_APP_NOTES="File storage, sharing, and collaboration app. Treat as advanced for ERPNext stacks and test on a disposable VM snapshot first."
       ;;
+    gameplan|frappe-gameplan)
+      LIB_APP_DISPLAY="Frappe Gameplan"
+      LIB_APP_NAME="gameplan"
+      LIB_APP_REPO="https://github.com/frappe/gameplan"
+      LIB_APP_BRANCH="${GAMEPLAN_BRANCH:-}"
+      LIB_APP_NOTES="Async discussions and project knowledge for remote teams (official Frappe product). Uses the repository default branch unless GAMEPLAN_BRANCH is set."
+      ;;
+    lending|frappe-lending)
+      LIB_APP_DISPLAY="Frappe Lending"
+      LIB_APP_NAME="lending"
+      LIB_APP_REPO="https://github.com/frappe/lending"
+      LIB_APP_BRANCH="${LENDING_BRANCH:-version-16}"
+      LIB_APP_NOTES="Loan management system for NBFCs and lenders (official Frappe product). Niche compared with CRM/HRMS; defaults to LENDING_BRANCH=version-16."
+      ;;
     raven|chat)
       LIB_APP_DISPLAY="Raven Team Chat"
       LIB_APP_NAME="raven"
       LIB_APP_REPO="https://github.com/The-Commit-Company/raven"
       LIB_APP_BRANCH="${RAVEN_BRANCH:-}"
-      LIB_APP_NOTES="Open-source team messaging app built on Frappe with ERPNext/FrappeHR integrations. Treat as advanced and test notifications/access paths carefully."
+      LIB_APP_ORIGIN="community"
+      LIB_APP_NOTES="Community / third-party team messaging (The Commit Company), not a Frappe Technologies product. Open source with ERPNext/FrappeHR integrations. Treat as advanced and test notifications/access paths carefully."
+      ;;
+    india_compliance|india-compliance|gst|india-gst)
+      LIB_APP_DISPLAY="India Compliance (GST)"
+      LIB_APP_NAME="india_compliance"
+      LIB_APP_REPO="https://github.com/resilient-tech/india-compliance"
+      LIB_APP_BRANCH="${INDIA_COMPLIANCE_BRANCH:-version-16}"
+      LIB_APP_ORIGIN="community"
+      LIB_APP_NOTES="Community / third-party GST, e-invoice, and e-waybill compliance for Indian businesses (Resilient Tech) — the most-installed marketplace compliance app. Not a Frappe Technologies product. Defaults to INDIA_COMPLIANCE_BRANCH=version-16. Some GST API features need an India Compliance account."
       ;;
     *)
       return 1
@@ -322,7 +361,7 @@ for token in raw.replace("\r", "\n").replace(",", "\n").split():
 items = [x for x in items if x in valid_set]
 
 ordered = []
-preferred = ("frappe", "erpnext", "crm", "hrms", "education", "payments", "webshop", "builder", "lms", "wiki", "print_designer", "drive", "raven", "insights", "telephony", "helpdesk")
+preferred = ("frappe", "erpnext", "crm", "hrms", "education", "payments", "webshop", "builder", "lms", "wiki", "print_designer", "drive", "gameplan", "lending", "raven", "insights", "telephony", "helpdesk", "india_compliance")
 
 # Keep core and curated apps in a predictable order for cleaner diagnostics.
 for name in preferred:
@@ -491,7 +530,7 @@ run_app_status() {
   for profile in $(app_profile_list); do
     app_profile_defaults "$profile" || continue
     app="$LIB_APP_NAME"
-    label="$LIB_APP_DISPLAY"
+    label="$LIB_APP_DISPLAY ($(app_origin_label))"
 
     if site_app_installed "$app"; then
       status_line "$label" "OK" "installed on ${SITE_NAME}"
@@ -547,17 +586,19 @@ print_app_profile() {
   local repo="$3"
   local branch="$4"
   local notes="$5"
+  local origin="${6:-${LIB_APP_ORIGIN:-frappe}}"
 
   echo
-  echo "App:    ${display}"
-  echo "Name:   ${app_name}"
-  echo "Repo:   ${repo}"
+  echo "App:       ${display}"
+  echo "Name:      ${app_name}"
+  echo "Publisher: $(app_origin_label "$origin")"
+  echo "Repo:      ${repo}"
   if [[ -n "$branch" ]]; then
-    echo "Branch: ${branch}"
+    echo "Branch:    ${branch}"
   else
-    echo "Branch: default repository branch"
+    echo "Branch:    default repository branch"
   fi
-  echo "Notes:  ${notes}"
+  echo "Notes:     ${notes}"
   echo
 }
 
@@ -761,7 +802,7 @@ assess_app_compatibility() {
         APP_COMPAT_DETAIL="Frappe Webshop target is ${branch_text}; verify upstream compatibility before use."
       fi
       ;;
-    builder|lms|wiki|print_designer)
+    builder|lms|wiki|print_designer|gameplan)
       if [[ -z "$branch" ]]; then
         APP_COMPAT_STATUS="WARN"
         APP_COMPAT_DETAIL="${display} uses the repository default branch, so compatibility can change as upstream moves."
@@ -769,6 +810,19 @@ assess_app_compatibility() {
       elif [[ -n "$target_major" ]]; then
         APP_COMPAT_STATUS="OK"
         APP_COMPAT_DETAIL="Target branch ${branch_text} is version-pinned and matches the detected core major version."
+      else
+        APP_COMPAT_STATUS="INFO"
+        APP_COMPAT_DETAIL="${display} target is ${branch_text}; verify upstream compatibility before important data."
+      fi
+      ;;
+    lending|india_compliance)
+      if [[ -n "$target_major" ]]; then
+        APP_COMPAT_STATUS="OK"
+        APP_COMPAT_DETAIL="Target branch ${branch_text} is version-pinned and matches the detected core major version."
+      elif [[ -z "$branch" ]]; then
+        APP_COMPAT_STATUS="WARN"
+        APP_COMPAT_DETAIL="${display} uses the repository default branch; pin a version-* branch for production."
+        APP_COMPAT_RECOMMENDATION="Set a version-matched branch override after confirming upstream support for your Frappe/ERPNext version."
       else
         APP_COMPAT_STATUS="INFO"
         APP_COMPAT_DETAIL="${display} target is ${branch_text}; verify upstream compatibility before important data."
@@ -819,6 +873,7 @@ show_app_compatibility_card() {
   fi
   status_line "Compatibility" "$APP_COMPAT_STATUS" "$APP_COMPAT_DETAIL"
   status_line "Recommendation" "INFO" "$APP_COMPAT_RECOMMENDATION"
+  status_line "Publisher" "INFO" "$(app_origin_label "${LIB_APP_ORIGIN:-frappe}")"
   echo "Notes: ${notes}"
 }
 
@@ -998,10 +1053,11 @@ show_app_install_guide() {
   echo "Recommended order:"
   echo "  1) Payments before Webshop if you plan to test online checkout"
   echo "  2) Webshop / E-Commerce after ERPNext items and prices are ready"
-  echo "  3) CRM, HRMS, Insights, Builder, LMS, Wiki, or Print Designer as needed"
-  echo "  4) Drive and Raven only on a disposable VM snapshot first"
-  echo "  5) Telephony before Helpdesk, unless the wizard installs it"
-  echo "  6) Helpdesk after Telephony dependency is ready"
+  echo "  3) CRM, HRMS, Insights, Builder, LMS, Wiki, Print Designer, Gameplan, or Lending as needed"
+  echo "  4) India Compliance (community) for Indian GST / e-invoice sites"
+  echo "  5) Drive and Raven only on a disposable VM snapshot first"
+  echo "  6) Telephony before Helpdesk, unless the wizard installs it"
+  echo "  7) Helpdesk after Telephony dependency is ready"
   echo
   echo "Safety workflow:"
   echo "  - Install one optional app at a time."
@@ -1211,9 +1267,10 @@ run_app_install_wizard() {
     echo "============================================================"
     echo "Choose one app to install. Status and guide tools are listed first."
     echo
-    print_two_column_menu       "1) Installed apps / status"       "2) Compatibility"       "3) CRM"       "4) HR / HRMS"       "5) Education"       "6) Payments"       "7) Webshop / E-Commerce"       "8) Builder"       "9) Learning / LMS"       "10) Wiki"       "11) Print Designer"       "12) Drive"       "13) Raven Chat"       "14) Insights"       "15) Telephony"       "16) Helpdesk"       "17) Advanced tools"       "18) Rollback guide"
+    print_two_column_menu       "1) Installed apps / status"       "2) Compatibility"       "3) CRM [official]"       "4) HR / HRMS [official]"       "5) Education [official]"       "6) Payments [official]"       "7) Webshop / E-Commerce [official]"       "8) Builder [official]"       "9) Learning / LMS [official]"       "10) Wiki [official]"       "11) Print Designer [official]"       "12) Drive [official]"       "13) Gameplan [official]"       "14) Lending [official]"       "15) Raven Chat [community]"       "16) Insights [official]"       "17) Telephony [official]"       "18) Helpdesk [official]"       "19) India Compliance [community]"       "20) Advanced tools"       "21) Rollback guide"
     echo
-    echo "Install one app at a time. The wizard will offer a backup checkpoint first."
+    echo "Install one app at a time. [official]=Frappe Technologies; [community]=third-party."
+    echo "The wizard will offer a backup checkpoint first."
     menu_footer
     menu_read_choice choice
 
@@ -1230,12 +1287,15 @@ run_app_install_wizard() {
       10) install_app_profile wiki; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
       11) install_app_profile print_designer; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
       12) install_app_profile drive; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
-      13) install_app_profile raven; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
-      14) install_app_profile insights; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
-      15) install_app_profile telephony; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
-      16) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
-      17) show_advanced_app_tools_menu; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
-      18) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      13) install_app_profile gameplan; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      14) install_app_profile lending; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      15) install_app_profile raven; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      16) install_app_profile insights; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      17) install_app_profile telephony; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      18) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      19) install_app_profile india_compliance; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      20) show_advanced_app_tools_menu; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
+      21) show_app_rollback_guide; pause_after_screen "Press Enter to return to App Installation Wizard..." ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *) warn "Invalid option" ;;
@@ -1264,7 +1324,7 @@ install_frappe_app() {
     fail "Invalid branch name: ${branch}"
   fi
 
-  print_app_profile "$display" "$app_name" "$repo" "$branch" "$notes"
+  print_app_profile "$display" "$app_name" "$repo" "$branch" "$notes" "${LIB_APP_ORIGIN:-frappe}"
   confirm_app_compatibility_before_install "$bench_dir" "$app_name" "$display" "$repo" "$branch" "$notes" || return 1
 
   # Repair any existing apps.txt corruption before backups or bench site commands.
@@ -1431,9 +1491,10 @@ show_app_library_menu() {
     echo "============================================================"
     echo "Choose an app to install, or use the status/guide tools."
     echo
-    print_two_column_menu       "1) Wizard"       "2) Installed apps / status"       "3) Compatibility"       "4) Installed apps"       "5) Guide"       "6) Rollback guide"       "7) CRM"       "8) HR / HRMS"       "9) Education"       "10) Payments"       "11) Webshop / E-Commerce"       "12) Builder"       "13) Learning / LMS"       "14) Wiki"       "15) Print Designer"       "16) Drive"       "17) Raven Chat"       "18) Helpdesk"       "19) Telephony"       "20) Insights"       "21) Advanced tools"
+    print_two_column_menu       "1) Wizard"       "2) Installed apps / status"       "3) Compatibility"       "4) Installed apps"       "5) Guide"       "6) Rollback guide"       "7) CRM [official]"       "8) HR / HRMS [official]"       "9) Education [official]"       "10) Payments [official]"       "11) Webshop / E-Commerce [official]"       "12) Builder [official]"       "13) Learning / LMS [official]"       "14) Wiki [official]"       "15) Print Designer [official]"       "16) Drive [official]"       "17) Gameplan [official]"       "18) Lending [official]"       "19) Raven Chat [community]"       "20) Helpdesk [official]"       "21) Telephony [official]"       "22) Insights [official]"       "23) India Compliance [community]"       "24) Advanced tools"
     echo
     echo "Notes: one app at a time; keep a backup checkpoint."
+    echo "[official]=Frappe Technologies; [community]=third-party open source."
     menu_footer
     local app_choice=""
     menu_read_choice app_choice
@@ -1455,11 +1516,14 @@ show_app_library_menu() {
       14) install_app_profile wiki; pause_after_screen "Press Enter to return to App Library..." ;;
       15) install_app_profile print_designer; pause_after_screen "Press Enter to return to App Library..." ;;
       16) install_app_profile drive; pause_after_screen "Press Enter to return to App Library..." ;;
-      17) install_app_profile raven; pause_after_screen "Press Enter to return to App Library..." ;;
-      18) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Library..." ;;
-      19) install_app_profile telephony; pause_after_screen "Press Enter to return to App Library..." ;;
-      20) install_app_profile insights; pause_after_screen "Press Enter to return to App Library..." ;;
-      21) show_advanced_app_tools_menu; pause_after_screen "Press Enter to return to App Library..." ;;
+      17) install_app_profile gameplan; pause_after_screen "Press Enter to return to App Library..." ;;
+      18) install_app_profile lending; pause_after_screen "Press Enter to return to App Library..." ;;
+      19) install_app_profile raven; pause_after_screen "Press Enter to return to App Library..." ;;
+      20) install_app_profile helpdesk; pause_after_screen "Press Enter to return to App Library..." ;;
+      21) install_app_profile telephony; pause_after_screen "Press Enter to return to App Library..." ;;
+      22) install_app_profile insights; pause_after_screen "Press Enter to return to App Library..." ;;
+      23) install_app_profile india_compliance; pause_after_screen "Press Enter to return to App Library..." ;;
+      24) show_advanced_app_tools_menu; pause_after_screen "Press Enter to return to App Library..." ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *) warn "Invalid option" ;;

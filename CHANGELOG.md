@@ -1,3 +1,16 @@
+## Unreleased
+
+### Added
+
+- **Gameplan, Lending, and India Compliance** in the curated app library:
+  `install-gameplan`, `install-lending`, `install-india-compliance` (aliases
+  `install-gst`, `install-india-gst`). India Compliance is the most-installed
+  community GST/e-invoice app on Frappe Cloud; Gameplan and Lending are official
+  Frappe products previously missing from the toolkit.
+- **Official vs community publisher labels** on every curated app (`Frappe
+  (official)` vs `Community / third-party`). Menus show `[official]` /
+  `[community]`; install prompts and `app-status` surface the publisher.
+
 ## v1.9.4 - Ubuntu 26.04 integration: stable /opt install fix
 
 ### Fixed

@@ -602,18 +602,29 @@ sudo erpnext-dev app-install-wizard
 sudo erpnext-dev app-status
 ```
 
-| App | Command | App | Command |
-|---|---|---|---|
-| CRM | `install-crm` | HR / HRMS | `install-hrms` |
-| Education | `install-education` | Payments | `install-payments` |
-| Webshop / E-Commerce | `install-webshop` | Builder | `install-builder` |
-| Learning / LMS | `install-lms` | Wiki | `install-wiki` |
-| Print Designer | `install-print-designer` | Drive | `install-drive` |
-| Raven Chat | `install-raven` | Helpdesk | `install-helpdesk` |
-| Telephony | `install-telephony` | Insights | `install-insights` |
+| App | Publisher | Command |
+|---|---|---|
+| CRM | Frappe (official) | `install-crm` |
+| HR / HRMS | Frappe (official) | `install-hrms` |
+| Education | Frappe (official) | `install-education` |
+| Payments | Frappe (official) | `install-payments` |
+| Webshop / E-Commerce | Frappe (official) | `install-webshop` |
+| Builder | Frappe (official) | `install-builder` |
+| Learning / LMS | Frappe (official) | `install-lms` |
+| Wiki | Frappe (official) | `install-wiki` |
+| Print Designer | Frappe (official) | `install-print-designer` |
+| Drive | Frappe (official) | `install-drive` |
+| Gameplan | Frappe (official) | `install-gameplan` |
+| Lending | Frappe (official) | `install-lending` |
+| Helpdesk | Frappe (official) | `install-helpdesk` |
+| Telephony | Frappe (official) | `install-telephony` |
+| Insights | Frappe (official) | `install-insights` |
+| India Compliance (GST) | Community (Resilient Tech) | `install-india-compliance` |
+| Raven Team Chat | Community (The Commit Company) | `install-raven` |
 
+Menus and install prompts label each app as **Frappe (official)** or **Community / third-party**.
 Custom Git apps and registry repair live under `sudo erpnext-dev advanced-app-tools`
-and carry stronger warnings, since third-party apps may be incompatible or unsafe.
+and carry stronger warnings, since unlisted third-party apps may be incompatible or unsafe.
 
 > After installing **Education**, the site root may redirect to the Education
 > portal. ERPNext Desk is still at `/app`; the login page is at `/login`.
