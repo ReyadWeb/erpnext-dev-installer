@@ -18,9 +18,9 @@ It supports two setup paths:
 > the path to **9.8+** are in [`ROADMAP.md`](ROADMAP.md). This README focuses on
 > installation, operations, and usage.
 
-**Current release:** v1.9.4 · **Readiness:** ~9.5/10 for single-admin local/public VM
-(after VPS production validation). v1.9.4 fixes Ubuntu 26.04 `/opt` install under
-sudo-rs; v1.9.3 adds one-command install and copy-paste host lines. Next milestone:
+**Current release:** v1.9.5 · **Readiness:** ~9.5/10 for single-admin local/public VM
+(after VPS production validation). v1.9.5 adds Gameplan, Lending, and India
+Compliance with official vs community publisher labels. Next milestone:
 **v1.10.0** (object-storage off-site backups).
 
 > **OS support:** Ubuntu 24.04 and 26.04 LTS are supported. Automated integration
@@ -64,7 +64,7 @@ sudo-rs; v1.9.3 adds one-command install and copy-paste host lines. Next milesto
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar && \
-VERSION="v1.9.4" && \
+VERSION="v1.9.5" && \
 BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}" && \
 cd ~ && \
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz" && \
@@ -83,7 +83,7 @@ Or install step by step ([details below](#install-and-verify)):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
-VERSION="v1.9.4"
+VERSION="v1.9.5"
 BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz"
@@ -92,13 +92,13 @@ sha256sum -c SHA256SUMS
 ```
 
 > **Retrying after a failed download?** If an earlier attempt returned 404, left a
-> partial tarball, or you switched versions (for example from `v1.9.3` to `v1.9.4`),
+> partial tarball, or you switched versions (for example from `v1.9.4` to `v1.9.5`),
 > remove leftovers from your home directory first so you do not mix old and new
 > files, then re-run the block above:
 >
 > ```bash
 > cd ~
-> rm -rf erpnext-dev-v1.9.3 erpnext-dev-v1.9.4
+> rm -rf erpnext-dev-v1.9.4 erpnext-dev-v1.9.5
 > rm -f erpnext-dev-v*.tar.gz SHA256SUMS SHA256SUMS.asc
 > ```
 >

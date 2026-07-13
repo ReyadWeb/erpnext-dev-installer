@@ -1,6 +1,6 @@
 # ERPNext Developer Toolkit — Roadmap
 
-**Current release:** v1.9.4 (July 2026) — Ubuntu 26.04 /opt install fix  
+**Current release:** v1.9.5 (July 2026) — Gameplan, Lending, India Compliance + publisher labels  
 **External review (July 2026):** enterprise-candidate for single-admin Ubuntu VM ops — **9.4 / 10** (**9.6–9.7** after v1.8.2 + v1.9.0 + v1.9.1 + VPS pass)  
 **Full history:** [`CHANGELOG.md`](CHANGELOG.md) · **Security:** [`SECURITY.md`](SECURITY.md) · **Testing:** [`TESTING.md`](TESTING.md)
 
@@ -68,6 +68,12 @@ cannot be produced by repository write access alone. Setup + key-rotation runboo
   the release-gating leg); it becomes a hard gate when the 26.04 runner reaches GA
 - Support wording: *"Supports Ubuntu 24.04 and 26.04; integration runs on 24.04 (gating) + 26.04 (preview, non-blocking)."*
 
+### v1.9.5 — App library: Gameplan, Lending, India Compliance — **implemented**
+
+- Official: `install-gameplan`, `install-lending`
+- Community: `install-india-compliance` (GST); Raven remains labeled community
+- Publisher labels on menus, install prompts, and `app-status`
+
 ### v1.9.4 — Ubuntu 26.04 integration: stable /opt install fix — **implemented**
 
 - `install_self_for_reuse` falls back to `ERPNEXT_DEV_ENTRY_SCRIPT` when `readlink -f` fails (sudo-rs / relative invoke)
@@ -97,7 +103,7 @@ CONTRIBUTING, CODE_OF_CONDUCT, issue/PR templates, docs consolidation.
 
 ---
 
-## Completed (v1.4.0 → v1.9.4)
+## Completed (v1.4.0 → v1.9.5)
 
 | Area | Version | What shipped |
 |------|---------|--------------|
@@ -115,6 +121,7 @@ CONTRIBUTING, CODE_OF_CONDUCT, issue/PR templates, docs consolidation.
 | Cross-platform local host support | v1.9.2 | Persisted `HOST_OS`; OS-aware hosts-file/test/mkcert/fixed-IP emitters for Linux/macOS/Windows/WSL2 |
 | Local host setup friction reduction | v1.9.3 | One-command install README path; copy-paste host mapping/mkcert one-liners; hosts newline guard |
 | Ubuntu 26.04 /opt install fix | v1.9.4 | `install_self_for_reuse` path fallback; integration assert before verify-toolkit |
+| App library expansion + publisher labels | v1.9.5 | Gameplan, Lending, India Compliance; official vs community labels |
 
 **CI today:** lint/shellcheck → validate-release → atomic-update-smoke → (on tag) integration install + backup/restore + production runtime + tamper negative → **environment-approved** sign → publish.
 

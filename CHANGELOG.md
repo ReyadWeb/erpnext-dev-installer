@@ -1,4 +1,4 @@
-## Unreleased
+## v1.9.5 - App library: Gameplan, Lending, India Compliance
 
 ### Added
 
