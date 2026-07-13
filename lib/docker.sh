@@ -25,6 +25,9 @@ DOCKER_ERPNEXT_IMAGE="${DOCKER_ERPNEXT_IMAGE:-frappe/erpnext:v16.26.2}"
 DOCKER_PROJECT_NAME="${DOCKER_PROJECT_NAME:-erpnext-dev}"
 DOCKER_PUBLISH_PORT="${DOCKER_PUBLISH_PORT:-8080}"
 DOCKER_READY_TIMEOUT="${DOCKER_READY_TIMEOUT:-900}"
+# How long to wait for the one-shot create-site job (site + erpnext install) to
+# complete before treating the install as failed.
+DOCKER_CREATE_SITE_TIMEOUT="${DOCKER_CREATE_SITE_TIMEOUT:-900}"
 DOCKER_CREDENTIALS_FILE="${DOCKER_CREDENTIALS_FILE:-${DOCKER_WORKDIR}/erpnext-dev-docker-credentials.txt}"
 
 docker_clone_dir() { printf '%s/frappe_docker\n' "$DOCKER_WORKDIR"; }
@@ -349,6 +352,44 @@ docker_compose_up() {
   docker_compose up -d
 }
 
+# Wait for the one-shot create-site job to finish and confirm it succeeded.
+#
+# `docker compose up -d` returns as soon as containers START, not when the
+# one-shot create-site job COMPLETES. Without this check a failed site creation
+# looks like a successful install and the published port then answers 404
+# forever (the frontend is up but the backend has no such site). This blocks
+# until create-site exits, surfaces its logs on failure, and returns non-zero so
+# the caller can fail loudly with the real root cause.
+docker_wait_for_site_creation() {
+  require_sudo
+  local deadline now cid state code
+  deadline=$(( $(date +%s) + DOCKER_CREATE_SITE_TIMEOUT ))
+  log "Waiting for the create-site job to finish (site: $(docker_site_name))"
+  while :; do
+    cid="$(docker_compose ps -aq create-site 2>/dev/null | tail -n1)"
+    if [[ -n "$cid" ]]; then
+      state="$(${SUDO:-} docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || echo unknown)"
+      if [[ "$state" == "exited" ]]; then
+        code="$(${SUDO:-} docker inspect -f '{{.State.ExitCode}}' "$cid" 2>/dev/null || echo 1)"
+        if [[ "$code" == "0" ]]; then
+          ok "Site created: $(docker_site_name)"
+          return 0
+        fi
+        err "create-site job failed (exit ${code}). Recent create-site logs:"
+        docker_compose logs --no-color --tail 120 create-site 2>/dev/null || true
+        return 1
+      fi
+    fi
+    now="$(date +%s)"
+    if [[ "$now" -ge "$deadline" ]]; then
+      warn "create-site did not finish within ${DOCKER_CREATE_SITE_TIMEOUT}s. Recent create-site logs:"
+      docker_compose logs --no-color --tail 120 create-site 2>/dev/null || true
+      return 1
+    fi
+    sleep 5
+  done
+}
+
 docker_runtime_start() {
   require_sudo
   if [[ ! -f "$(docker_compose_base_file)" ]]; then
@@ -525,6 +566,7 @@ docker_guided_install() {
   write_dev_config_file
 
   docker_compose_up || fail "docker compose up failed. Inspect with: $(toolkit_cmd logs)"
+  docker_wait_for_site_creation || fail "Site creation failed. See the create-site logs above, or run: $(toolkit_cmd logs)"
   docker_ready || warn "Stack started but readiness check timed out; it may still be initializing."
   docker_print_access
   ok "Docker deployment engine setup complete."

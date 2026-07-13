@@ -416,8 +416,11 @@ jobs:
         run: |
           set -euo pipefail
           ok=0
+          # Send the site Host header to match how Frappe resolves the target site
+          # (mirrors the native smoke leg). The Docker frontend also pins the site
+          # via FRAPPE_SITE_NAME_HEADER, so this is defensive alignment.
           for i in $(seq 1 60); do
-            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8080/api/method/ping || true)"
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -H "Host: ${SITE_NAME}" http://localhost:8080/api/method/ping || true)"
             echo "attempt ${i}/60: http=${code}"
             case "$code" in
               200|401|403) echo "ERPNext (Docker) serving on :8080 (http=${code})"; ok=1; break ;;

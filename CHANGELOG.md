@@ -1,3 +1,23 @@
+## v1.10.2 - Docker install verifies site creation (fixes silent 404)
+
+### Fixed
+
+- **Docker install no longer reports success when site creation fails.**
+  `docker compose up -d` returns as soon as containers *start*, not when the
+  one-shot `create-site` job *completes*. So a failed `bench new-site` looked
+  like a successful install, and the published port then answered `404` forever
+  (the frontend nginx is up, but the backend has no such site). The guided
+  Docker install now waits for the `create-site` job to exit, checks its exit
+  code, and **fails loudly with the create-site logs** when it errors, instead
+  of falling through to a warning. Tunable via `DOCKER_CREATE_SITE_TIMEOUT`
+  (default 900s).
+
+### Changed
+
+- CI `docker-install-smoke` now sends the site `Host` header when probing the
+  published port, mirroring the native smoke leg (defensive; the Docker
+  frontend also pins the site via `FRAPPE_SITE_NAME_HEADER`).
+
 ## v1.10.1 - Docker Compose invocation fix + broader Debian host matrix
 
 ### Fixed
