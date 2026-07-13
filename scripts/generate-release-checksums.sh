@@ -19,6 +19,8 @@ checksum_files=(
   lib/storage.sh
   lib/service.sh
   lib/status.sh
+  lib/docker.sh
+  lib/engine.sh
   lib/install.sh
   lib/ops.sh
   lib/security.sh

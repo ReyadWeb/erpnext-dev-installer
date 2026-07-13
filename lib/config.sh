@@ -234,6 +234,15 @@ load_future_domain_config_if_available() {
     fi
   fi
 
+  # Load the saved deployment engine unless provided via the environment this run.
+  # Store the raw value; effective_deployment_engine (lib/engine.sh) validates it
+  # lazily so we do not depend on engine.sh being sourced yet.
+  if [[ "${DEPLOYMENT_ENGINE_ENV_PROVIDED:-0}" -ne 1 ]] && [[ -z "${DEPLOYMENT_ENGINE:-}" ]]; then
+    if saved="$(read_saved_config_value DEPLOYMENT_ENGINE 2>/dev/null)" && [[ -n "$saved" ]]; then
+      DEPLOYMENT_ENGINE="$saved"
+    fi
+  fi
+
   # Load the saved host OS unless it was provided via the environment this run.
   if [[ "${HOST_OS_ENV_PROVIDED:-0}" -ne 1 ]] && ! validate_host_os_value "${HOST_OS:-}"; then
     if saved="$(read_saved_config_value HOST_OS 2>/dev/null)" && [[ -n "$saved" ]]; then
@@ -582,6 +591,7 @@ PRODUCTION_DOMAIN=${PRODUCTION_DOMAIN}
 PRODUCTION_SSL_MODE=${PRODUCTION_SSL_MODE}
 RUNTIME_MODE=$(runtime_mode)
 HOST_OS=${HOST_OS}
+DEPLOYMENT_ENGINE=$(effective_deployment_engine)
 FRAPPE_USER=${FRAPPE_USER}
 BENCH_PARENT=${BENCH_PARENT}
 BENCH_NAME=${BENCH_NAME}
@@ -602,6 +612,7 @@ PRODUCTION_DOMAIN=${PRODUCTION_DOMAIN}
 PRODUCTION_SSL_MODE=${PRODUCTION_SSL_MODE}
 RUNTIME_MODE=$(runtime_mode)
 HOST_OS=${HOST_OS}
+DEPLOYMENT_ENGINE=$(effective_deployment_engine)
 FRAPPE_USER=${FRAPPE_USER}
 BENCH_PARENT=${BENCH_PARENT}
 BENCH_NAME=${BENCH_NAME}
@@ -639,6 +650,7 @@ show_site_config() {
   status_line "Current site" "INFO" "$SITE_NAME"
   status_line "Site source" "INFO" "$SITE_NAME_SOURCE"
   status_line "Host OS" "INFO" "$(host_os_label)$(host_os_is_unset && printf ' (not set; run %s)' "$(toolkit_cmd set-host-os)")"
+  status_line "Deployment engine" "INFO" "$(deployment_engine_label)"
   status_line "Config file" "INFO" "${CONFIG_FILE} (${saved})"
   status_line "Legacy config" "INFO" "${LEGACY_CONFIG_FILE} (${legacy_saved})"
   status_line "Expected bench" "INFO" "$BENCH_DIR"

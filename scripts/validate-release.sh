@@ -46,6 +46,10 @@ bash -n lib/storage.sh
 bash -n lib/service.sh
 [[ -f lib/status.sh ]] || fail "lib/status.sh is missing"
 bash -n lib/status.sh
+[[ -f lib/docker.sh ]] || fail "lib/docker.sh is missing"
+bash -n lib/docker.sh
+[[ -f lib/engine.sh ]] || fail "lib/engine.sh is missing"
+bash -n lib/engine.sh
 [[ -f lib/install.sh ]] || fail "lib/install.sh is missing"
 bash -n lib/install.sh
 [[ -f lib/ops.sh ]] || fail "lib/ops.sh is missing"
@@ -56,7 +60,7 @@ bash -n lib/security.sh
 bash -n lib/update.sh
 pass "bash syntax valid"
 
-chmod +x erpnext-dev.sh scripts/validate-release.sh scripts/generate-release-checksums.sh scripts/run-shellcheck.sh scripts/check-module-consistency.sh scripts/test-atomic-update.sh scripts/test-staged-signature.sh scripts/test-host-os-output.sh scripts/test-install-self-path.sh scripts/release-signing-policy.sh
+chmod +x erpnext-dev.sh scripts/validate-release.sh scripts/generate-release-checksums.sh scripts/run-shellcheck.sh scripts/check-module-consistency.sh scripts/test-atomic-update.sh scripts/test-staged-signature.sh scripts/test-host-os-output.sh scripts/test-install-self-path.sh scripts/test-engine-select.sh scripts/release-signing-policy.sh
 
 # Module lists and dispatcher targets must all agree. This is the single guard
 # that prevents a module from being sourced at runtime while missing from the
@@ -236,6 +240,14 @@ scripts/test-install-self-path.sh >/tmp/erpnext-dev-install-self.$$ 2>&1 || {
 }
 rm -f /tmp/erpnext-dev-install-self.$$
 pass "install-self path resolution passed"
+
+scripts/test-engine-select.sh >/tmp/erpnext-dev-engine-select.$$ 2>&1 || {
+  cat /tmp/erpnext-dev-engine-select.$$
+  rm -f /tmp/erpnext-dev-engine-select.$$
+  fail "test-engine-select.sh failed"
+}
+rm -f /tmp/erpnext-dev-engine-select.$$
+pass "deployment-engine selection passed"
 
 if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
   # shellcheck disable=SC2024 # redirect is intentionally to the invoking user's /tmp file, not root's

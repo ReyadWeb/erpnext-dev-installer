@@ -280,10 +280,11 @@ run_full_status() {
   if [[ -f /etc/os-release ]]; then
     # shellcheck disable=SC1091
     . /etc/os-release
-    if [[ "${ID:-}" == "ubuntu" && ( "${VERSION_ID:-}" == "24.04" || "${VERSION_ID:-}" == "26.04" ) ]]; then
-      status_line "OS" "OK" "${PRETTY_NAME:-Ubuntu}"
+    if { [[ "${ID:-}" == "ubuntu" ]] && [[ "${VERSION_ID:-}" == "24.04" || "${VERSION_ID:-}" == "26.04" ]]; } \
+      || { [[ "${ID:-}" == "debian" ]] && [[ "${VERSION_ID:-}" == "13" ]]; }; then
+      status_line "OS" "OK" "${PRETTY_NAME:-unknown}"
     else
-      status_line "OS" "FAIL" "${PRETTY_NAME:-unknown}; supported: Ubuntu 24.04 / 26.04"
+      status_line "OS" "FAIL" "${PRETTY_NAME:-unknown}; supported: Ubuntu 24.04 / 26.04, Debian 13"
     fi
   else
     status_line "OS" "FAIL" "/etc/os-release not found"

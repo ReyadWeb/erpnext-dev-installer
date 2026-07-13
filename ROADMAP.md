@@ -1,6 +1,6 @@
 # ERPNext Developer Toolkit — Roadmap
 
-**Current release:** v1.9.5 (July 2026) — Gameplan, Lending, India Compliance + publisher labels  
+**Current release:** v1.10.0 (July 2026) — Multi-engine architecture: Docker as a first-class engine (wraps `frappe_docker`), alongside the native VM engine  
 **External review (July 2026):** enterprise-candidate for single-admin Ubuntu VM ops — **9.4 / 10** (**9.6–9.7** after v1.8.2 + v1.9.0 + v1.9.1 + VPS pass)  
 **Full history:** [`CHANGELOG.md`](CHANGELOG.md) · **Security:** [`SECURITY.md`](SECURITY.md) · **Testing:** [`TESTING.md`](TESTING.md)
 
@@ -19,7 +19,24 @@
 
 **Overall (single-admin dedicated VM): 9.5 / 10** — enterprise-candidate; **9.6–9.7** after VPS validation pass (v1.8.2 + v1.9.0 shipped).
 
-**Positioning:** Advanced lifecycle and operations platform for **non-containerized** ERPNext/Frappe on dedicated Ubuntu VMs — aligned with Frappe's Supervisor + Nginx model, not marketed as superior to Frappe's recommended Docker deployment.
+**Positioning:** A multi-engine lifecycle and operations platform for ERPNext/Frappe. The **native** engine targets non-containerized dedicated Ubuntu VMs (Supervisor + Nginx model); the **Docker** engine (v1.10.0) wraps Frappe's own `frappe_docker` for containerized, upstream-aligned deployments. Both run behind the same `erpnext-dev` CLI.
+
+---
+
+## Multi-engine deployment (v1.10.0+)
+
+The toolkit exposes two first-class deployment engines behind one CLI via a
+`DeploymentEngine` contract (`lib/engine.sh`). Native remains the default and is
+byte-for-byte unchanged; Docker only runs when explicitly selected.
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| **v1.10.0** | Engine contract + Docker **local-dev MVP**: install/start/stop/status/logs/health/backup/apps via `docker compose`, wrapping upstream `frappe_docker` `pwd.yml`. Hermetic engine-selection test + non-blocking `docker-install-smoke` CI leg. **Native Debian 13 (trixie)** accepted via the shared Debian-family apt/systemd install path; Debian 13 also accepted as a Docker host. | **implemented** |
+| **v1.11.0** | Docker **production runtime** + SSL / reverse-proxy parity; backups of Docker volumes and off-VM push; durable app installs via custom image build. | planned |
+| **v1.12.0** | Debian **native CI coverage** (GitHub provides no Debian runner today, so v1.10.0 native Debian is field-validated) + broader distro/runtime testing. | planned |
+
+Native engine matrix: Ubuntu 24.04 / 26.04, Debian 13. Docker engine host matrix:
+Ubuntu 24.04 / 26.04, Debian 13.
 
 ---
 

@@ -1314,6 +1314,11 @@ install_frappe_app() {
   local notes="$5"
   local bench_dir repo_q branch_q downloaded_branch
 
+  if deployment_engine_is_docker; then
+    docker_install_app "$app_name" "$display" "$repo" "$branch"
+    return
+  fi
+
   bench_dir="$(require_site_environment)" || return 1
 
   if ! validate_app_name "$app_name"; then

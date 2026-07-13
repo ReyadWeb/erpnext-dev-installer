@@ -4,6 +4,35 @@
 
 ---
 
+## v1.10.0 multi-engine (Docker engine)
+
+Hermetic check (no Docker daemon, no sudo, no network):
+`scripts/test-engine-select.sh` asserts engine normalization, the native default,
+config persistence round-trip, and the docker helper defaults. It runs inside
+`scripts/validate-release.sh`.
+
+```text
+scripts/test-engine-select.sh
+# expect: "engine-select tests: all checks passed"
+```
+
+Docker engine install is exercised by the **non-blocking** `docker-install-smoke`
+job in `.github/workflows/integration.yml` (ubuntu-24.04, `continue-on-error`):
+it forces `DEPLOYMENT_ENGINE=docker`, runs a real `install`, and probes
+`http://localhost:8080`. It reports on every tag but does not gate releases; the
+native `install-smoke` leg remains the release gate.
+
+Manual local check on a Docker-capable host:
+
+```bash
+sudo DEPLOYMENT_ENGINE=docker erpnext-dev install
+sudo erpnext-dev engine-status
+sudo erpnext-dev status      # docker compose ps
+curl -I http://localhost:8080
+```
+
+---
+
 ## VPS production validation (v1.9.0)
 
 Use this checklist on a **fresh Ubuntu 24.04 or 26.04 LTS VPS** with a real domain,

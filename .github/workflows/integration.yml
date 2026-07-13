@@ -365,3 +365,89 @@ jobs:
           name: integration-${{ matrix.os }}
           path: artifacts/
           if-no-files-found: ignore
+
+  docker-install-smoke:
+    name: Docker engine install + smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    # Experimental until the Docker engine reaches parity: the containerized leg
+    # runs and reports on every tag but must NOT block a release yet. Native
+    # remains the release-gating install path (install-smoke, ubuntu-24.04).
+    continue-on-error: true
+    env:
+      SITE_NAME: "erp.test"
+      # Force the Docker deployment engine (non-interactive install would default
+      # to native). The entry script reads this and routes to docker_guided_install.
+      DEPLOYMENT_ENGINE: "docker"
+      DOCKER_PUBLISH_PORT: "8080"
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Report runner + Docker capacity
+        run: |
+          echo "== OS =="; . /etc/os-release && echo "$PRETTY_NAME"
+          echo "== Docker =="; docker version || true
+          echo "== Compose =="; docker compose version || true
+          echo "== Disk =="; df -h /
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet \
+            /opt/hostedtoolcache/CodeQL /usr/local/.ghcup 2>/dev/null || true
+          df -h /
+
+      - name: Verify release checksums
+        run: sha256sum -c SHA256SUMS
+
+      - name: Engine-selection unit test (hermetic)
+        run: ./scripts/test-engine-select.sh
+
+      - name: Docker preflight (read-only)
+        run: sudo -E env DEPLOYMENT_ENGINE=docker ./erpnext-dev.sh install-preflight || true
+
+      - name: Install ERPNext via Docker engine (non-interactive)
+        run: sudo -E env DEPLOYMENT_ENGINE=docker DOCKER_PUBLISH_PORT=8080 SITE_NAME=erp.test ./erpnext-dev.sh -y install
+
+      - name: Smoke test published port
+        run: |
+          set -euo pipefail
+          ok=0
+          for i in $(seq 1 60); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8080/api/method/ping || true)"
+            echo "attempt ${i}/60: http=${code}"
+            case "$code" in
+              200|401|403) echo "ERPNext (Docker) serving on :8080 (http=${code})"; ok=1; break ;;
+            esac
+            sleep 10
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::Docker ERPNext not serving on :8080."
+            sudo -E env DEPLOYMENT_ENGINE=docker ./erpnext-dev.sh status || true
+            sudo -E env DEPLOYMENT_ENGINE=docker ./erpnext-dev.sh logs || true
+            exit 1
+          fi
+
+      - name: Engine status + doctor smoke
+        run: |
+          sudo -E env DEPLOYMENT_ENGINE=docker ./erpnext-dev.sh engine-status || true
+          sudo -E env DEPLOYMENT_ENGINE=docker ./erpnext-dev.sh doctor --plain || true
+
+      - name: Collect Docker diagnostics
+        if: always()
+        run: |
+          mkdir -p artifacts
+          sudo -E env DEPLOYMENT_ENGINE=docker ./erpnext-dev.sh status > artifacts/docker-status.txt 2>&1 || true
+          sudo docker compose -p erpnext-dev -f /opt/erpnext-dev/docker/frappe_docker/pwd.yml -f /opt/erpnext-dev/docker/erpnext-dev.override.yml --env-file /opt/erpnext-dev/docker/erpnext-dev.env logs --tail 200 > artifacts/docker-compose-logs.txt 2>&1 || true
+          sudo chown -R "$USER" artifacts 2>/dev/null || true
+
+      - name: Upload Docker diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: integration-docker
+          path: artifacts/
+          if-no-files-found: ignore

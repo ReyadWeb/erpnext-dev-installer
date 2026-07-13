@@ -25,14 +25,26 @@ check_os() {
   # shellcheck disable=SC1091
   . /etc/os-release
 
-  if [[ "${ID}" != "ubuntu" ]]; then
-    fail "This script is designed for Ubuntu Server 24.04 or 26.04. Detected: ${PRETTY_NAME:-unknown}"
-  fi
-
-  case "${VERSION_ID}" in
-    "24.04") ok "Ubuntu 24.04 LTS detected" ;;
-    "26.04") ok "Ubuntu 26.04 LTS detected" ;;
-    *) fail "Unsupported Ubuntu version: ${PRETTY_NAME:-Ubuntu ${VERSION_ID}}. Supported: Ubuntu 24.04 LTS and Ubuntu 26.04 LTS." ;;
+  # Native install supports Debian-family distributions with apt + systemd. The
+  # tested targets are Ubuntu 24.04/26.04 LTS and Debian 13 (trixie); all use the
+  # same apt package names, MariaDB/Redis systemd units, and useradd flow below.
+  case "${ID:-}" in
+    ubuntu)
+      case "${VERSION_ID}" in
+        "24.04") ok "Ubuntu 24.04 LTS detected" ;;
+        "26.04") ok "Ubuntu 26.04 LTS detected" ;;
+        *) fail "Unsupported Ubuntu version: ${PRETTY_NAME:-Ubuntu ${VERSION_ID}}. Supported: Ubuntu 24.04 LTS, Ubuntu 26.04 LTS, and Debian 13." ;;
+      esac
+      ;;
+    debian)
+      case "${VERSION_ID}" in
+        "13") ok "Debian 13 (trixie) detected" ;;
+        *) fail "Unsupported Debian version: ${PRETTY_NAME:-Debian ${VERSION_ID}}. Supported: Debian 13 (trixie). Ubuntu 24.04/26.04 LTS are also supported." ;;
+      esac
+      ;;
+    *)
+      fail "This script supports Ubuntu 24.04/26.04 LTS and Debian 13 (trixie). Detected: ${PRETTY_NAME:-unknown}"
+      ;;
   esac
 }
 
@@ -149,6 +161,21 @@ check_resources() {
 run_install_preflight() {
   require_sudo
   install_self_for_reuse
+
+  # Engine-aware preflight. Docker abstracts the guest OS, so it runs its own
+  # compatibility block (OS / engine / architecture / Docker / image).
+  if deployment_engine_is_docker; then
+    docker_preflight
+    echo
+    if [[ -t 0 ]] && confirm "Start the Docker ERPNext setup now?"; then
+      docker_guided_install
+      return 0
+    fi
+    echo "Next command:"
+    echo "  $(toolkit_cmd install)"
+    return 0
+  fi
+
   check_os
   check_internet
   check_resources
@@ -595,6 +622,15 @@ run_repair() {
 
 run_install() {
   require_sudo
+
+  # Choose the deployment engine once (native VM or Docker). Native keeps the
+  # exact behavior below; Docker hands off to the frappe_docker-backed engine.
+  choose_deployment_engine_for_setup 0
+  if deployment_engine_is_docker; then
+    docker_guided_install
+    return
+  fi
+
   install_self_for_reuse || fail "Could not install the toolkit to ${INSTALLER_CANONICAL_PATH:-/opt/erpnext-dev/erpnext-dev.sh}"
   check_os
   check_internet
@@ -1095,6 +1131,9 @@ set_local_dev_defaults() {
   # a concrete host OS once local defaults are saved.
   # shellcheck disable=SC2034  # consumed by write_dev_config_file in lib/config.sh
   HOST_OS="$(effective_host_os)"
+  # Record a concrete engine (defaults to native) so config always has a value.
+  # shellcheck disable=SC2034  # consumed by write_dev_config_file in lib/config.sh
+  DEPLOYMENT_ENGINE="$(effective_deployment_engine)"
   write_dev_config_file
   SITE_NAME_SOURCE="saved config"
 }
@@ -1116,10 +1155,18 @@ run_local_dev_quickstart() {
   # Ask once which host OS is in use; set_local_dev_defaults persists it below.
   choose_host_os_for_setup 0
 
+  # Choose the deployment engine. Docker hands off to the containerized flow.
+  choose_deployment_engine_for_setup 0
+  if deployment_engine_is_docker; then
+    docker_guided_install
+    return
+  fi
+
   ui_box_start "Local VM Setup Confirmation"
   status_line "Local VM domain" "OK" "${SITE_NAME}"
   status_line "Default if skipped" "INFO" "erp.test"
   status_line "Host OS" "INFO" "$(host_os_label)"
+  status_line "Deployment engine" "INFO" "$(deployment_engine_label)"
   status_line "Production domain" "INFO" "not used"
   ui_box_end
 

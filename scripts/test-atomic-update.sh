@@ -27,7 +27,7 @@ checksum_targets=(
   erpnext-dev.sh
   lib/common.sh lib/config.sh lib/access.sh lib/frappe.sh lib/support.sh
   lib/backup.sh lib/ssl.sh lib/firewall.sh lib/apps.sh lib/health.sh
-  lib/storage.sh lib/service.sh lib/status.sh lib/install.sh lib/ops.sh
+  lib/storage.sh lib/service.sh lib/status.sh lib/docker.sh lib/engine.sh lib/install.sh lib/ops.sh
   lib/security.sh lib/update.sh
   scripts/validate-release.sh scripts/run-shellcheck.sh
   scripts/check-module-consistency.sh scripts/build-release-bundle.sh

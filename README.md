@@ -3,7 +3,7 @@
 ![ERPNext Toolkit Banner](docs/assets/erp_installer_readme_banner.png)
 
 A guided installer and operations toolkit for **ERPNext / Frappe** on a fresh
-**Ubuntu 24.04 or 26.04 LTS** VM. One command installs the full stack; a single
+**Ubuntu 24.04 / 26.04 LTS or Debian 13** VM. One command installs the full stack; a single
 `erpnext-dev` command then handles day-to-day operations: HTTPS, firewall
 hardening, scheduled and off-VM backups, restore rehearsals, health checks,
 optional apps, guarded upgrades, diagnostics, and redacted support bundles.
@@ -18,21 +18,49 @@ It supports two setup paths:
 > the path to **9.8+** are in [`ROADMAP.md`](ROADMAP.md). This README focuses on
 > installation, operations, and usage.
 
-**Current release:** v1.9.5 · **Readiness:** ~9.5/10 for single-admin local/public VM
-(after VPS production validation). v1.9.5 adds Gameplan, Lending, and India
-Compliance with official vs community publisher labels. Next milestone:
-**v1.10.0** (object-storage off-site backups).
+**Current release:** v1.10.0 · **Readiness:** ~9.5/10 for single-admin local/public VM
+(after VPS production validation). v1.10.0 turns the toolkit into a **multi-engine**
+platform: choose a **native** VM install (default, unchanged) or a **Docker**
+engine that wraps the official `frappe_docker`, behind the same `erpnext-dev` CLI.
 
-> **OS support:** Ubuntu 24.04 and 26.04 LTS are supported. Automated integration
-> coverage runs on **Ubuntu 24.04 (release-gating)** plus **Ubuntu 26.04 (GitHub
-> public-preview runner, non-blocking)**; the 26.04 leg becomes a hard gate once
-> that runner image reaches general availability.
+> **OS support:** The native engine supports Ubuntu 24.04 / 26.04 LTS and Debian 13
+> (trixie). The Docker engine supports the same hosts. Automated integration coverage
+> runs on **Ubuntu 24.04 (release-gating)** plus **Ubuntu 26.04 (GitHub public-preview
+> runner, non-blocking)**; the 26.04 leg becomes a hard gate once that runner image
+> reaches general availability. Debian 13 uses the same Debian-family apt/systemd
+> install path (GitHub provides no Debian runner, so it is field-validated rather
+> than gated in CI).
+
+---
+
+## Deployment engines
+
+The toolkit is a multi-engine platform: the same `erpnext-dev` command drives two
+first-class deployment engines. During `install` / `local-dev-quickstart` you pick
+one; the choice is saved and every lifecycle command (`start`, `stop`, `status`,
+`logs`, `backup`, app installs, `doctor`) routes to it automatically.
+
+| Engine | What it does | Best for |
+| --- | --- | --- |
+| **Native** (default) | Installs ERPNext/Frappe directly on the VM (systemd, bench, host MariaDB/Redis/Nginx). Ubuntu 24.04/26.04, Debian 13. | Maximum host-level control and simplicity. |
+| **Docker** | Containerized stack wrapping the official `frappe_docker` (`pwd.yml`), published on a local port. | Isolation, portability, upstream production alignment. |
+
+```bash
+sudo erpnext-dev set-engine       # choose native or docker for a fresh setup
+sudo erpnext-dev engine-status    # show the active engine and its settings
+```
+
+The Docker engine in this release targets local development (install / start /
+stop / status / logs / health / backup / apps). Production runtime, SSL, and
+Debian-native support are on the [roadmap](ROADMAP.md). Native remains the
+release-gated, fully validated path.
 
 ---
 
 ## Menu
 
 - [Start here](#start-here) — the important command for each case
+- [Deployment engines](#deployment-engines)
 - [Project status and roadmap](#project-status-and-roadmap)
 - [Install and verify](#install-and-verify)
 - [Requirements and preflight](#requirements-and-preflight)
@@ -64,7 +92,7 @@ Compliance with official vs community publisher labels. Next milestone:
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar && \
-VERSION="v1.9.5" && \
+VERSION="v1.10.0" && \
 BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}" && \
 cd ~ && \
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz" && \
@@ -83,7 +111,7 @@ Or install step by step ([details below](#install-and-verify)):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
-VERSION="v1.9.5"
+VERSION="v1.10.0"
 BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz"
@@ -92,13 +120,13 @@ sha256sum -c SHA256SUMS
 ```
 
 > **Retrying after a failed download?** If an earlier attempt returned 404, left a
-> partial tarball, or you switched versions (for example from `v1.9.4` to `v1.9.5`),
+> partial tarball, or you switched versions (for example from `v1.9.5` to `v1.10.0`),
 > remove leftovers from your home directory first so you do not mix old and new
 > files, then re-run the block above:
 >
 > ```bash
 > cd ~
-> rm -rf erpnext-dev-v1.9.4 erpnext-dev-v1.9.5
+> rm -rf erpnext-dev-v1.9.5 erpnext-dev-v1.10.0
 > rm -f erpnext-dev-v*.tar.gz SHA256SUMS SHA256SUMS.asc
 > ```
 >

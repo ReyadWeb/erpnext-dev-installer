@@ -46,6 +46,12 @@ create_site_backup() {
   require_sudo
 
   local include_files="${1:-false}"
+
+  if deployment_engine_is_docker; then
+    docker_backup "$include_files"
+    return
+  fi
+
   local bench_dir backup_cmd tmp_output rc
   bench_dir="$(require_site_environment)" || return 1
 
@@ -128,6 +134,11 @@ print_backup_results() {
 
 list_site_backups() {
   require_sudo
+
+  if deployment_engine_is_docker; then
+    docker_list_backups
+    return
+  fi
 
   local bench_dir backup_rel backup_abs
   local db_count_cmd db_list_cmd public_count_cmd public_list_cmd private_count_cmd private_list_cmd

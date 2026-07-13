@@ -222,6 +222,11 @@ disable_autostart_service() {
 start_erpnext_service() {
   require_sudo
 
+  if deployment_engine_is_docker; then
+    docker_runtime_start
+    return
+  fi
+
   if runtime_is_production; then
     production_runtime_start
     return
@@ -248,6 +253,11 @@ start_erpnext_service() {
 stop_erpnext_service() {
   require_sudo
 
+  if deployment_engine_is_docker; then
+    docker_runtime_stop
+    return
+  fi
+
   if runtime_is_production; then
     production_runtime_stop
     return
@@ -269,6 +279,11 @@ stop_erpnext_service() {
 
 restart_erpnext_service() {
   require_sudo
+
+  if deployment_engine_is_docker; then
+    docker_runtime_restart
+    return
+  fi
 
   if runtime_is_production; then
     production_runtime_restart
@@ -296,6 +311,11 @@ restart_erpnext_service() {
 show_erpnext_service_status() {
   require_sudo
 
+  if deployment_engine_is_docker; then
+    docker_runtime_status
+    return
+  fi
+
   if runtime_is_production; then
     show_production_runtime_status
     return
@@ -310,6 +330,11 @@ show_erpnext_service_status() {
 
 show_erpnext_service_logs() {
   require_sudo
+
+  if deployment_engine_is_docker; then
+    docker_runtime_logs
+    return
+  fi
 
   if runtime_is_production; then
     show_production_runtime_logs

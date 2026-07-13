@@ -1,3 +1,57 @@
+## v1.10.0 - Multi-engine architecture: Docker as a first-class engine
+
+### Added
+
+- **Deployment engine contract (`lib/engine.sh`).** The toolkit now runs ERPNext
+  through one of two first-class engines behind the same CLI and operator
+  experience: `native` (direct VM install, the default and unchanged) or
+  `docker` (containerized). All routing lives in one place via `engine_*` verbs
+  rather than scattered `if docker` branches.
+- **Docker deployment engine (`lib/docker.sh`)** wrapping the official
+  [`frappe_docker`](https://github.com/frappe/frappe_docker) project. It clones a
+  pinned `frappe_docker` ref, uses its upstream `pwd.yml` as the base compose, and
+  overlays a small generated override (published port, pinned image tag, chosen
+  site name + admin password). Installs Docker Engine via the official
+  convenience script when missing, then `docker compose up -d`, creates the site,
+  installs ERPNext, and waits for the published port to answer.
+- **Engine selection + persistence.** `install` / `local-dev-quickstart` now show
+  a "Choose Deployment Engine" step; the choice is saved as `DEPLOYMENT_ENGINE`
+  in the toolkit config. New commands: `set-engine` (choose engine) and
+  `engine-status` (show the active engine and its settings). Advanced menu items
+  48/49 expose the same.
+- **Engine-aware lifecycle.** `start`, `stop`, `restart`, `status`, `logs`,
+  `backup`, `list-backups`, app installs, and `doctor` route through the active
+  engine, so the same commands work on both engines. Native behavior is
+  byte-for-byte unchanged (the native path is the default and only runs when
+  Docker is not explicitly selected).
+- **Native Debian 13 (trixie) support.** `check_os` (and the read-only `doctor` /
+  `status` OS checks) now accept Debian 13 in addition to Ubuntu 24.04 / 26.04.
+  The native install path already uses Debian-family apt packages, MariaDB/Redis
+  systemd units, and `useradd`, so Debian 13 installs through the same flow.
+  Previously the toolkit hard-failed on Debian with "designed for Ubuntu Server".
+- **Docker hosts:** Ubuntu 24.04 / 26.04 and Debian 13 are accepted as Docker
+  hosts (containers are OS-agnostic).
+
+### Testing
+
+- New hermetic unit test `scripts/test-engine-select.sh` (engine normalization,
+  native default, config round-trip, docker helper defaults) wired into
+  `validate-release.sh` and shellcheck.
+- New **non-blocking** `docker-install-smoke` CI job in `integration.yml`: runs a
+  real Docker-engine install on ubuntu-24.04 and probes the published port.
+  Experimental (`continue-on-error: true`) so it reports on every tag without
+  gating releases; the native install leg remains the release gate.
+
+### Notes
+
+- Docker engine scope in this release is local-dev MVP. Production runtime, SSL /
+  reverse-proxy parity, firewall/storage guidance, off-VM backups of Docker
+  volumes, and durable custom-image app installs are planned for later phases
+  (see `ROADMAP.md`).
+- Native Debian 13 is supported via the shared Debian-family install path. GitHub
+  hosted runners provide no Debian image, so it is not covered by an automated
+  native integration leg yet; treat it as community/field-validated.
+
 ## v1.9.5 - App library: Gameplan, Lending, India Compliance
 
 ### Added

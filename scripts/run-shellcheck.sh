@@ -24,6 +24,8 @@ targets=(
   lib/storage.sh
   lib/service.sh
   lib/status.sh
+  lib/docker.sh
+  lib/engine.sh
   lib/install.sh
   lib/ops.sh
   lib/security.sh
@@ -37,6 +39,7 @@ targets=(
   scripts/test-staged-signature.sh
   scripts/test-host-os-output.sh
   scripts/test-install-self-path.sh
+  scripts/test-engine-select.sh
   scripts/release-signing-policy.sh
 )
 

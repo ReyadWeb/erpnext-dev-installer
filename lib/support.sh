@@ -113,14 +113,28 @@ doctor_collect() {
     # shellcheck disable=SC1091
     . /etc/os-release
     DOCTOR_OS="${PRETTY_NAME:-unknown}"
-    if [[ "${ID:-}" == "ubuntu" && ( "${VERSION_ID:-}" == "24.04" || "${VERSION_ID:-}" == "26.04" ) ]]; then
+    if { [[ "${ID:-}" == "ubuntu" ]] && [[ "${VERSION_ID:-}" == "24.04" || "${VERSION_ID:-}" == "26.04" ]]; } \
+      || { [[ "${ID:-}" == "debian" ]] && [[ "${VERSION_ID:-}" == "13" ]]; }; then
       doctor_add_check "OS" "OK" "$DOCTOR_OS"
     else
-      doctor_add_check "OS" "FAIL" "${DOCTOR_OS}; supported: Ubuntu 24.04 / 26.04"
+      doctor_add_check "OS" "FAIL" "${DOCTOR_OS}; supported: Ubuntu 24.04 / 26.04, Debian 13"
     fi
   else
     DOCTOR_OS="unknown"
     doctor_add_check "OS" "FAIL" "/etc/os-release not found"
+  fi
+
+  # Deployment engine (native VM or Docker). Docker adds its own compatibility
+  # rows and skips the native systemd/bench probes that do not apply. Set the
+  # renderer-required bench version to a safe placeholder before returning early.
+  doctor_add_check "Deployment engine" "INFO" "$(deployment_engine_label)"
+  if deployment_engine_is_docker; then
+    DOCTOR_BENCH_VERSION="n/a (Docker engine)"
+    docker_doctor_detail
+    if [[ -f "$(docker_compose_base_file)" ]]; then
+      doctor_add_check "Docker site URL" "INFO" "$(docker_site_url)"
+    fi
+    return 0
   fi
 
   local py_system py_frappe node_frappe mariadb_version redis_version storage_detail storage_data storage_can_expand storage_layout storage_reason
