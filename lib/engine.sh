@@ -127,6 +127,13 @@ show_engine_status() {
     status_line "Published port" "INFO" "${DOCKER_PUBLISH_PORT:-8080}"
     status_line "ERPNext image" "INFO" "${DOCKER_ERPNEXT_IMAGE:-frappe/erpnext}"
     status_line "Site" "INFO" "$(docker_site_name 2>/dev/null || echo "${SITE_NAME:-erp.test}")"
+    if [[ -r "${DOCKER_PINS_FILE:-}" ]]; then
+      local pin_sha pin_digest
+      pin_sha="$(sed -n 's/^FRAPPE_DOCKER_SHA=//p' "$DOCKER_PINS_FILE" 2>/dev/null | tail -n1)"
+      pin_digest="$(sed -n 's/^DOCKER_ERPNEXT_IMAGE_DIGEST=//p' "$DOCKER_PINS_FILE" 2>/dev/null | tail -n1)"
+      [[ -n "$pin_sha" ]] && status_line "frappe_docker SHA" "INFO" "$pin_sha"
+      [[ -n "$pin_digest" ]] && status_line "Image digest" "INFO" "$pin_digest"
+    fi
   else
     status_line "Bench" "INFO" "${BENCH_DIR}"
     status_line "Service" "INFO" "${ERPNEXT_SERVICE_NAME}"

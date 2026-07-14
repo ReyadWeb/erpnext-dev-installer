@@ -1,3 +1,26 @@
+## Unreleased - Docker production runtime (in progress)
+
+The Docker engine is being extended from a local-dev MVP into a production-grade
+runtime. Work lands in phases behind the existing engine contract; the native
+path and the one-keystroke local-dev Docker flow (`pwd.yml`) are unchanged. A
+release (v1.11.0) will be cut once the phases below are complete and the Docker
+integration CI job is promoted to a hard release gate.
+
+### Added (foundation)
+
+- **Hardened Docker Engine install (P7).** Docker now installs from Docker's
+  official **signed apt repository** (keyring in `/etc/apt/keyrings/docker.gpg`
+  plus an arch/codename-pinned source installing `docker-ce`, `docker-ce-cli`,
+  `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin`) instead of
+  piping `get.docker.com` into a root shell. The convenience script is retained
+  only as a graceful fallback (e.g. a Debian codename Docker has not published
+  yet) and is downloaded-then-run rather than curl-piped.
+- **Immutable upstream pins (P2).** The exact `frappe_docker` commit SHA (via
+  `git rev-parse`) and the resolved ERPNext image digest (via `docker inspect`)
+  are recorded to `erpnext-dev.pins` at provision time, shown in the Docker
+  preflight and `engine-status`, and can be pinned explicitly via
+  `FRAPPE_DOCKER_REF=<sha>` and `DOCKER_ERPNEXT_IMAGE=frappe/erpnext@sha256:<digest>`.
+
 ## v1.10.4 - Debian mkcert host hint fix (trusted local HTTPS works on Debian)
 
 ### Fixed

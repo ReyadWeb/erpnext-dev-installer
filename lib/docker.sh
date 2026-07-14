@@ -17,10 +17,15 @@ _ERPNEXT_DEV_DOCKER_LOADED=1
 # ------------------------------------------------------------
 DOCKER_WORKDIR="${DOCKER_WORKDIR:-/opt/erpnext-dev/docker}"
 FRAPPE_DOCKER_REPO="${FRAPPE_DOCKER_REPO:-https://github.com/frappe/frappe_docker.git}"
-# Pin the frappe_docker checkout for reproducible provisioning. The image tag
-# below is the stronger reproducibility anchor; the repo only supplies pwd.yml.
+# Pin the frappe_docker checkout for reproducible provisioning. Set to an
+# immutable commit SHA (e.g. FRAPPE_DOCKER_REF=<40-char-sha>) for a fully audited
+# provision; the default tracks the upstream default branch. Either way the
+# resolved commit SHA is recorded at provision time (see docker_write_pins).
 FRAPPE_DOCKER_REF="${FRAPPE_DOCKER_REF:-main}"
-# Pinned production-ready image published by the Frappe team.
+# Pinned production-ready image published by the Frappe team. For maximum
+# reproducibility pin by DIGEST rather than tag, e.g.
+# DOCKER_ERPNEXT_IMAGE=frappe/erpnext@sha256:<digest>. The digest actually pulled
+# is recorded at provision time (see docker_write_pins).
 DOCKER_ERPNEXT_IMAGE="${DOCKER_ERPNEXT_IMAGE:-frappe/erpnext:v16.26.2}"
 DOCKER_PROJECT_NAME="${DOCKER_PROJECT_NAME:-erpnext-dev}"
 DOCKER_PUBLISH_PORT="${DOCKER_PUBLISH_PORT:-8080}"
@@ -29,6 +34,11 @@ DOCKER_READY_TIMEOUT="${DOCKER_READY_TIMEOUT:-900}"
 # complete before treating the install as failed.
 DOCKER_CREATE_SITE_TIMEOUT="${DOCKER_CREATE_SITE_TIMEOUT:-900}"
 DOCKER_CREDENTIALS_FILE="${DOCKER_CREDENTIALS_FILE:-${DOCKER_WORKDIR}/erpnext-dev-docker-credentials.txt}"
+# Immutable-pin audit record: the exact frappe_docker commit SHA checked out and
+# the resolved ERPNext image digest, captured at provision time.
+DOCKER_PINS_FILE="${DOCKER_PINS_FILE:-${DOCKER_WORKDIR}/erpnext-dev.pins}"
+DOCKER_FRAPPE_DOCKER_SHA="${DOCKER_FRAPPE_DOCKER_SHA:-}"
+DOCKER_ERPNEXT_IMAGE_DIGEST="${DOCKER_ERPNEXT_IMAGE_DIGEST:-}"
 
 docker_clone_dir() { printf '%s/frappe_docker\n' "$DOCKER_WORKDIR"; }
 docker_compose_base_file() { printf '%s/frappe_docker/pwd.yml\n' "$DOCKER_WORKDIR"; }
@@ -198,6 +208,86 @@ docker_compose() {
 # ------------------------------------------------------------
 # Host engine install (Docker Engine + compose plugin)
 # ------------------------------------------------------------
+# Install from Docker's official apt repository using a signed keyring and
+# distribution-pinned packages. This is the hardened path: packages are
+# GPG-verified by apt against Docker's published key, rather than executing an
+# arbitrary remote script as root. Returns non-zero (so the caller can fall
+# back) on any distro/repo problem -- e.g. a brand-new Debian codename whose
+# packages Docker has not published yet. Only apt-based hosts (Ubuntu/Debian)
+# are attempted here.
+docker_install_engine_apt_repo() {
+  require_sudo
+  local id="" codename="" arch keyring list url
+  if [[ -f /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    id="${ID:-}"
+    codename="${VERSION_CODENAME:-}"
+  fi
+  case "$id" in
+    ubuntu|debian) ;;
+    *) return 1 ;;
+  esac
+  [[ -n "$codename" ]] || codename="$(lsb_release -cs 2>/dev/null || true)"
+  [[ -n "$codename" ]] || return 1
+
+  url="https://download.docker.com/linux/${id}"
+  keyring="/etc/apt/keyrings/docker.gpg"
+  list="/etc/apt/sources.list.d/docker.list"
+
+  log "Installing Docker Engine from the official Docker apt repository (${id} ${codename})"
+
+  export DEBIAN_FRONTEND=noninteractive
+  $SUDO apt-get update -y >/dev/null 2>&1 || true
+  $SUDO apt-get install -y ca-certificates curl gnupg >/dev/null 2>&1 || return 1
+
+  $SUDO install -m 0755 -d /etc/apt/keyrings || return 1
+  # Re-fetch the key each time so a rotated key is picked up; dearmor to a keyring.
+  if ! curl -fsSL "${url}/gpg" | $SUDO gpg --batch --yes --dearmor -o "$keyring" 2>/dev/null; then
+    return 1
+  fi
+  $SUDO chmod a+r "$keyring" || true
+
+  arch="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
+  printf 'deb [arch=%s signed-by=%s] %s %s stable\n' "$arch" "$keyring" "$url" "$codename" \
+    | $SUDO tee "$list" >/dev/null || return 1
+
+  if ! $SUDO apt-get update -y >/dev/null 2>&1; then
+    # Bad/empty repo for this codename: drop the source so a later apt-get on the
+    # host is not left broken, then signal fallback.
+    $SUDO rm -f "$list"
+    return 1
+  fi
+  if ! $SUDO apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1; then
+    return 1
+  fi
+  return 0
+}
+
+# Legacy fallback: the official convenience script. Kept only for hosts where the
+# apt repository path is unavailable (e.g. a Debian codename Docker has not yet
+# published). We download first, then run, so the script is not piped straight
+# from curl into a root shell.
+docker_install_engine_convenience() {
+  require_sudo
+  warn "Falling back to the Docker convenience script (get.docker.com)."
+  warn "This is less hardened than the signed apt repository; used only because the repository path was unavailable."
+  local tmp
+  tmp="$(mktemp /tmp/erpnext-dev-get-docker.XXXXXX.sh)" || return 1
+  if ! curl -fsSL https://get.docker.com -o "$tmp"; then
+    rm -f "$tmp"
+    err "Could not download the Docker installation script. Check internet access and retry."
+    return 1
+  fi
+  if ! $SUDO sh "$tmp"; then
+    rm -f "$tmp"
+    err "Docker Engine installation failed. Install Docker manually, then re-run."
+    return 1
+  fi
+  rm -f "$tmp"
+  return 0
+}
+
 docker_install_engine() {
   require_sudo
 
@@ -215,18 +305,14 @@ docker_install_engine() {
     fi
   fi
 
-  log "Installing Docker Engine using the official convenience script (get.docker.com)"
-  local tmp
-  tmp="$(mktemp /tmp/erpnext-dev-get-docker.XXXXXX.sh)" || return 1
-  if ! curl -fsSL https://get.docker.com -o "$tmp"; then
-    rm -f "$tmp"
-    fail "Could not download the Docker installation script. Check internet access and retry."
+  # Prefer the official signed apt repository; fall back to the convenience
+  # script only if that path is unavailable for this host.
+  if docker_install_engine_apt_repo; then
+    ok "Docker Engine installed from the official Docker apt repository."
+  else
+    warn "Official Docker apt repository unavailable for this host."
+    docker_install_engine_convenience || fail "Docker Engine installation failed. Install Docker manually, then re-run."
   fi
-  if ! $SUDO sh "$tmp"; then
-    rm -f "$tmp"
-    fail "Docker Engine installation failed. Install Docker manually, then re-run."
-  fi
-  rm -f "$tmp"
 
   $SUDO systemctl enable --now docker >/dev/null 2>&1 || true
 
@@ -264,6 +350,7 @@ docker_preflight() {
   status_line "Architecture" "INFO" "$(host_arch_label)"
   status_line "Docker compatibility" "$compat_status" "$compat_detail"
   status_line "ERPNext image" "INFO" "$DOCKER_ERPNEXT_IMAGE"
+  status_line "Upstream pin" "INFO" "frappe_docker @ ${FRAPPE_DOCKER_REF}"
   status_line "Published port" "INFO" "${DOCKER_PUBLISH_PORT} -> 8080 (container)"
   status_line "Site name" "INFO" "$(docker_site_name)"
   ui_box_end
@@ -303,7 +390,44 @@ docker_provision_workdir() {
   if [[ ! -f "$(docker_compose_base_file)" ]]; then
     fail "frappe_docker did not provide pwd.yml at $(docker_compose_base_file)."
   fi
-  ok "frappe_docker ready at ${clone}"
+
+  # Record the exact commit actually checked out so the provision is auditable /
+  # reproducible even when FRAPPE_DOCKER_REF is a moving branch like main.
+  DOCKER_FRAPPE_DOCKER_SHA="$($SUDO git -C "$clone" rev-parse HEAD 2>/dev/null || echo unknown)"
+  ok "frappe_docker ready at ${clone} (commit ${DOCKER_FRAPPE_DOCKER_SHA})"
+}
+
+# Best-effort: record the immutable RepoDigest of the pulled ERPNext image so the
+# exact bits can be reproduced/audited later. No-op when docker or the image is
+# not available yet.
+docker_record_image_digest() {
+  local digest
+  docker_binary_present || return 0
+  digest="$(${SUDO:-} docker inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "$DOCKER_ERPNEXT_IMAGE" 2>/dev/null || true)"
+  [[ -n "$digest" ]] && DOCKER_ERPNEXT_IMAGE_DIGEST="$digest"
+  return 0
+}
+
+# Persist immutable identifiers for the provisioned stack (audit / reproducibility).
+# Written after images are pulled so the digest can be resolved.
+docker_write_pins() {
+  require_sudo
+  docker_record_image_digest
+  $SUDO mkdir -p "$DOCKER_WORKDIR"
+  $SUDO tee "$DOCKER_PINS_FILE" >/dev/null <<EOF_DOCKER_PINS
+# ERPNext Developer Toolkit - Docker immutable pins (audit / reproducibility)
+# Generated $(date -u +%Y-%m-%dT%H:%M:%SZ)
+# To reproduce this exact stack, set these in the environment before install:
+#   FRAPPE_DOCKER_REF=<FRAPPE_DOCKER_SHA below>
+#   DOCKER_ERPNEXT_IMAGE=<DOCKER_ERPNEXT_IMAGE_DIGEST below, if recorded>
+FRAPPE_DOCKER_REPO=${FRAPPE_DOCKER_REPO}
+FRAPPE_DOCKER_REF=${FRAPPE_DOCKER_REF}
+FRAPPE_DOCKER_SHA=${DOCKER_FRAPPE_DOCKER_SHA:-unknown}
+DOCKER_ERPNEXT_IMAGE=${DOCKER_ERPNEXT_IMAGE}
+DOCKER_ERPNEXT_IMAGE_DIGEST=${DOCKER_ERPNEXT_IMAGE_DIGEST:-unrecorded}
+EOF_DOCKER_PINS
+  $SUDO chmod 644 "$DOCKER_PINS_FILE" 2>/dev/null || true
+  ok "Recorded immutable pins to ${DOCKER_PINS_FILE}"
 }
 
 # Generate the env file consumed by compose interpolation. Admin/db passwords are
@@ -814,6 +938,7 @@ docker_guided_install() {
   docker_compose_up || fail "docker compose up failed. Inspect with: $(toolkit_cmd logs)"
   docker_wait_for_site_creation || fail "Site creation failed. See the create-site logs above, or run: $(toolkit_cmd logs)"
   docker_ready || warn "Stack started but readiness check timed out; it may still be initializing."
+  docker_write_pins || warn "Could not record immutable pins."
   ok "Docker deployment engine setup complete."
   docker_guided_followups
 }
