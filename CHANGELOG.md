@@ -20,6 +20,19 @@ integration CI job is promoted to a hard release gate.
   are recorded to `erpnext-dev.pins` at provision time, shown in the Docker
   preflight and `engine-status`, and can be pinned explicitly via
   `FRAPPE_DOCKER_REF=<sha>` and `DOCKER_ERPNEXT_IMAGE=frappe/erpnext@sha256:<digest>`.
+- **Production Compose architecture (P1).** A new **production** Docker mode
+  (`DOCKER_MODE=production`, or the `docker-production-setup` command) wraps the
+  official upstream **`compose.yaml`** production base composed with the shipped
+  `overrides/compose.mariadb.yaml` + `overrides/compose.redis.yaml`, a
+  toolkit-generated image-pin override, and (for now) `overrides/compose.noproxy.yaml`
+  for HTTP on the published port. The compose wrapper is now mode-aware, so every
+  lifecycle/backup/exec command targets the right stack. Production site creation
+  is an explicit `bench new-site` exec into the `backend` container after the
+  `configurator` job completes (there is no `create-site` container in the
+  production base). The disposable local-dev `pwd.yml` flow remains the
+  one-keystroke default and is unchanged; `DOCKER_MODE` is persisted and shown in
+  the preflight, `engine-status`, and `site-config`. Trusted production HTTPS
+  (Traefik + Let's Encrypt) lands in the next phase.
 
 ## v1.10.4 - Debian mkcert host hint fix (trusted local HTTPS works on Debian)
 

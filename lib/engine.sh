@@ -123,6 +123,7 @@ show_engine_status() {
   status_line "Engine" "INFO" "$(deployment_engine_label)"
   status_line "Configured value" "INFO" "${DEPLOYMENT_ENGINE:-<unset; default native>}"
   if deployment_engine_is_docker; then
+    status_line "Docker mode" "INFO" "$(docker_mode_label 2>/dev/null || echo development)"
     status_line "Compose project" "INFO" "${DOCKER_PROJECT_NAME:-erpnext-dev}"
     status_line "Published port" "INFO" "${DOCKER_PUBLISH_PORT:-8080}"
     status_line "ERPNext image" "INFO" "${DOCKER_ERPNEXT_IMAGE:-frappe/erpnext}"

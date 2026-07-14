@@ -56,6 +56,15 @@ stop / status / logs / health / backup / apps). Production runtime, SSL, and
 Debian-native support are on the [roadmap](ROADMAP.md). Native remains the
 release-gated, fully validated path.
 
+The Docker engine has two modes. **Development** (default, one keystroke) runs
+the disposable upstream `pwd.yml` stack. **Production** (`sudo erpnext-dev
+docker-production-setup`, or `DOCKER_MODE=production`) wraps the official
+upstream `compose.yaml` production base with the shipped MariaDB/Redis overrides,
+a toolkit-generated image pin, and an HTTP proxy override; the Docker Engine
+itself installs from Docker's official signed apt repository, and the exact
+`frappe_docker` commit SHA + image digest are recorded for reproducibility.
+Trusted production HTTPS (Traefik + Let's Encrypt) is being added next.
+
 The guided Docker install now finishes with the same post-install flow as
 native: it verifies access, prints a host-mapping checkpoint, offers optional
 apps and a first backup, and opens the main menu. Access output shows three
