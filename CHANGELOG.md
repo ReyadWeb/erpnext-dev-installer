@@ -113,6 +113,23 @@ integration CI leg to a hard release gate.
   green, then its gate can be promoted the same way the Ubuntu 26.04 preview leg
   is promoted.
 
+### Fixed (caught by the new Docker gate before release)
+
+- **Docker restore rehearsal / restore now works.** The new hard Docker gate
+  correctly failed the first v1.11.0 tag and surfaced two real bugs in the
+  restore path: (1) `bench restore` was invoked with `--force` before the
+  subcommand (a `restore` option, not a bench-group option → immediate failure),
+  and (2) `docker compose cp` stages the backup as `root`, but bench runs as the
+  unprivileged `frappe` user, so the staged file was unreadable
+  (`PermissionError`). Restore/rehearsal now place `--force` after `restore`, use
+  absolute in-container paths, make the staged artifact readable, and print the
+  `bench restore` output tail on failure for diagnosability.
+- **Release-gate reliability: dispatcher consistency check.** `check-module-consistency.sh`
+  could, under CPU load, spuriously report a defined dispatcher function as
+  missing (a SIGPIPE/timing race on a per-iteration `printf | grep -q`). It now
+  builds a defined-function set once and does associative-array lookups,
+  removing the flaky pipe so the release gate can't fail spuriously.
+
 ## v1.10.4 - Debian mkcert host hint fix (trusted local HTTPS works on Debian)
 
 ### Fixed

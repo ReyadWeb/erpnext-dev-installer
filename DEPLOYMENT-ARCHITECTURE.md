@@ -104,7 +104,7 @@ see the coupling note below.
 | Engine | Status | Description |
 |--------|--------|-------------|
 | `native` | shipped (default) | ERPNext/Frappe installed directly on the host: Supervisor/Gunicorn/workers/scheduler + host MariaDB/Redis/Nginx. |
-| `docker` | shipped (v1.10.0); production runtime in progress | Containerized stack wrapping the official [`frappe_docker`](https://github.com/frappe/frappe_docker). Local-dev wraps `pwd.yml` + a generated override; **production** (`DOCKER_MODE=production`) wraps upstream `compose.yaml` + mariadb/redis overrides + a toolkit image-pin override, with immutable pins, durable off-volume host-artifact backups, an automated restore rehearsal, off-site shipment (checksum-verified rsync off-VM + rclone object storage), Traefik production HTTPS (Let's Encrypt or Cloudflare Origin CA) with an exposure guardrail, and durable custom-app images (immutable layered build + recreate-based deploy). |
+| `docker` | shipped (v1.10.0); production runtime shipped (v1.11.0) | Containerized stack wrapping the official [`frappe_docker`](https://github.com/frappe/frappe_docker). Local-dev wraps `pwd.yml` + a generated override; **production** (`DOCKER_MODE=production`) wraps upstream `compose.yaml` + mariadb/redis overrides + a toolkit image-pin override, with immutable pins, durable off-volume host-artifact backups, an automated restore rehearsal, off-site shipment (checksum-verified rsync off-VM + rclone object storage), Traefik production HTTPS (Let's Encrypt or Cloudflare Origin CA) with an exposure guardrail, and durable custom-app images (immutable layered build + recreate-based deploy). The containerized dev leg is a hard release gate; the production compose leg runs non-blocking pending promotion. |
 | `orchestrator` | **documented future** | Wraps Frappe's official [Helm chart](https://github.com/frappe/helm) on Kubernetes. See §6. |
 
 ### Platform — *where* it runs
@@ -181,7 +181,7 @@ verb set is also the future control-plane/agent command surface (§8).
 | `bench` | Run a bench command in the right context. | `engine_bench` |
 | `backup` | Take a site backup. | `engine_backup` |
 | `site-url` | Resolve the site's access URL. | `engine_site_url` |
-| `restore` | Restore a site from backup. | **gap** — command exists, not engine-dispatched |
+| `restore` | Restore a site from backup. | **partial** — native + docker restore/rehearsal exist as commands (docker adds `docker-restore` / `docker-restore-rehearsal`); not yet a first-class `engine_restore` verb |
 | `upgrade` | Upgrade bench/apps/stack. | **gap** — not a first-class engine verb |
 | `rollback` | Revert a failed upgrade. | **gap** |
 | `diagnostics` | Structured doctor/support bundle. | **gap** — `doctor` is engine-aware but not a contract verb |

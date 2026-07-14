@@ -1,6 +1,6 @@
 # ERPNext Developer Toolkit — Roadmap
 
-**Current release:** v1.10.0 (July 2026) — Multi-engine architecture: Docker as a first-class engine (wraps `frappe_docker`), alongside the native VM engine  
+**Current release:** v1.11.0 (July 2026) — Docker **production runtime**: production `compose.yaml` mode, immutable upstream pins, durable off-volume backups with off-VM + object-storage shipment and restore rehearsal, durable custom-app images, Traefik production HTTPS, and a release-gating containerized Docker CI leg — alongside the native VM engine  
 **External review (July 2026):** enterprise-candidate for single-admin Ubuntu VM ops — **9.4 / 10** (**9.6–9.7** after v1.8.2 + v1.9.0 + v1.9.1 + VPS pass)  
 **Full history:** [`CHANGELOG.md`](CHANGELOG.md) · **Security:** [`SECURITY.md`](SECURITY.md) · **Testing:** [`TESTING.md`](TESTING.md)
 
@@ -38,8 +38,9 @@ record for this dimension.
 | Phase | Scope | Status |
 |-------|-------|--------|
 | **v1.10.0** | Engine contract + Docker **local-dev MVP**: install/start/stop/status/logs/health/backup/apps via `docker compose`, wrapping upstream `frappe_docker` `pwd.yml`. Hermetic engine-selection test + non-blocking `docker-install-smoke` CI leg. **Native Debian 13 (trixie)** accepted via the shared Debian-family apt/systemd install path; Debian 11/12/13 accepted as Docker hosts. | **implemented** |
-| **v1.11.0** | Docker **production runtime** + SSL / reverse-proxy parity; backups of Docker volumes and off-VM push; durable app installs via custom image build. | planned |
-| **v1.12.0** | Debian **native CI coverage** (GitHub provides no Debian runner today, so v1.10.0 native Debian is field-validated) + broader distro/runtime testing. | planned |
+| **v1.11.0** | Docker **production runtime**: production mode wrapping upstream `compose.yaml` + mariadb/redis/image-pin overrides; immutable pins (`frappe_docker` SHA + ERPNext image digest); durable off-volume host-artifact backups + verify + automated restore rehearsal; off-site shipment (checksum-verified rsync off-VM + rclone object storage); durable custom-app images (immutable layered build + recreate deploy); Traefik production HTTPS (Let's Encrypt / Cloudflare Origin CA) + exposure guardrail; containerized Docker integration CI leg promoted to a **hard release gate** (production compose leg runs non-blocking pending promotion). | **implemented** |
+| **v1.12.0** | Debian **native CI coverage** (GitHub provides no Debian runner today, so v1.10.0 native Debian is field-validated) + broader distro/runtime testing; promote the Docker **production** compose CI leg to a hard gate. | planned |
+| **v1.13.0** | Community polish: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue/PR templates, docs consolidation. | planned |
 
 Native engine matrix: Ubuntu 24.04 / 26.04, Debian 13. Docker engine host matrix:
 Ubuntu 24.04 / 26.04, Debian 11 / 12 / 13.
@@ -116,13 +117,16 @@ cannot be produced by repository write access alone. Setup + key-rotation runboo
 - Fixes latent macOS bug (`sed -i` → BSD `sed -i ''`); WSL2 maps to `127.0.0.1`
 - New hermetic `scripts/test-host-os-output.sh` wired into `validate-release.sh` + `run-shellcheck.sh`
 
-### P2 — v1.10.0: Object-storage backups
+### P2 — Object-storage backups — **Docker engine shipped (v1.11.0); native planned**
 
-S3-compatible off-site target (AWS S3, Backblaze B2, MinIO) — after v1.9.3.
+rclone-based object storage (S3 / Cloudflare R2 / B2 / GCS / Azure / MinIO) with
+remote checksum verification shipped for the **Docker** engine in v1.11.0 (P6). The
+equivalent native rclone target is still planned.
 
-### P2 — v1.11.0: Community polish
+### P2 — v1.13.0: Community polish
 
-CONTRIBUTING, CODE_OF_CONDUCT, issue/PR templates, docs consolidation.
+CONTRIBUTING, CODE_OF_CONDUCT, issue/PR templates, docs consolidation. (Renumbered
+from v1.11.0, which shipped as the Docker production runtime.)
 
 ---
 
@@ -194,23 +198,25 @@ GitHub-hosted `ubuntu-26.04` image reaches general availability.
 
 **Rating after v1.9.1:** **9.6–9.7** (pending VPS validation).
 
-### Phase 2 — v1.10.0: Object-storage off-site backups (~1–2 weeks) **P2**
+### Phase 2 — Object-storage off-site backups (~1–2 weeks) **P2** — Docker shipped (v1.11.0)
 
 **Goal:** Backups not tied to rsync/SSH alone. Ops **~8.5 → 9.2**.
 
-**Scope:** S3-compatible target (AWS S3, Backblaze B2, MinIO) alongside rsync; wizard wiring; restore docs; MinIO CI smoke.
+**Scope:** S3-compatible target (AWS S3, Cloudflare R2, Backblaze B2, GCS, Azure, MinIO) alongside rsync; wizard wiring; restore docs.
 
-**Deliverables:** extend [`lib/backup.sh`](lib/backup.sh) + menus; README + SECURITY credential guidance.
+**Shipped (Docker, v1.11.0 / P6):** rclone object storage with remote SHA256SUMS verification for the Docker engine, chained after the durable host artifact and off-VM rsync.
 
-**Rating after v1.10.0:** **9.75**
+**Remaining:** the equivalent native rclone target in [`lib/backup.sh`](lib/backup.sh) + menus; README + SECURITY credential guidance; MinIO CI smoke.
 
-### Phase 3 — v1.11.0: Community polish + docs consolidation (~3–5 days) **P2**
+**Rating after Docker object storage:** **9.75**
+
+### Phase 3 — v1.13.0: Community polish + docs consolidation (~3–5 days) **P2**
 
 **Goal:** Market/readiness **8.0 → 9.0**. Can overlap with Phase 2.
 
 **Scope:** `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue/PR templates; trim stale TESTING.md blocks.
 
-**Rating after v1.11.0:** **9.8+**
+**Rating after v1.13.0:** **9.8+** (renumbered from v1.11.0, which shipped as the Docker production runtime).
 
 ### Phase 4 (optional) — v1.11.x: Extended CI confidence (~3–5 days)
 
@@ -221,8 +227,8 @@ Post-install `update-toolkit` smoke against real GitHub release assets; document
 ## Near-term priority order
 
 1. **VPS production validation** — confirms enterprise-candidate rating is real-world, not CI-only
-2. **v1.10.0** — object-storage backups **(P2)**
-3. **v1.11.0** — community + docs polish → **9.8+**
+2. **v1.12.0** — Debian native CI coverage + promote the Docker production compose CI leg to a hard gate **(P1)**
+3. **v1.13.0** — community + docs polish → **9.8+ (P2)**
 
 ---
 

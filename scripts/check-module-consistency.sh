@@ -72,11 +72,20 @@ dispatcher="$(sed -n '/case "${ACTION:-menu}" in/,/^  esac/p' erpnext-dev.sh)"
 if [[ -z "$dispatcher" ]]; then
   note_fail "could not locate the command dispatcher in erpnext-dev.sh"
 else
+  # Build a set of defined function names once, so membership tests are a plain
+  # associative-array lookup. (An earlier `printf | grep -q` per iteration could
+  # spuriously report a defined function as missing under load — a SIGPIPE/timing
+  # race on the inner pipe — which risked flaky release-gate failures.)
+  declare -A defined_set=()
+  while IFS= read -r def_fn; do
+    [[ -n "$def_fn" ]] && defined_set["$def_fn"]=1
+  done <<< "$defined_functions"
+
   missing=""
   while IFS= read -r fn; do
     [[ -n "$fn" ]] || continue
     [[ "$builtin_allow" == *" $fn "* ]] && continue
-    printf '%s\n' "$defined_functions" | grep -qx "$fn" && continue
+    [[ -n "${defined_set[$fn]:-}" ]] && continue
     missing="${missing} ${fn}"
   done < <(printf '%s\n' "$dispatcher" \
     | sed -nE "s/^[[:space:]]*[A-Za-z0-9|_\"'*.-]+\)[[:space:]]+([a-z_][A-Za-z0-9_]*).*/\1/p" | sort -u)

@@ -771,6 +771,13 @@ docker_bench() {
 # ------------------------------------------------------------
 # Absolute bench dir inside the frappe/erpnext image (WORKDIR of every service).
 docker_container_bench_dir() { printf '/home/frappe/frappe-bench\n'; }
+# `docker compose cp` preserves the host file's (root) ownership, but bench runs
+# as the unprivileged `frappe` user inside the container, so a staged backup
+# lands unreadable. Make it world-readable so `bench restore` can open it.
+docker_make_container_readable() {
+  local path="$1"
+  docker_compose exec -T -u root backend chmod 0644 "$path" >/dev/null 2>&1 || true
+}
 # Per-site root for exported host artifacts: <DOCKER_BACKUP_DIR>/<site>/<prefix>/.
 docker_backup_site_root() { printf '%s/%s\n' "$DOCKER_BACKUP_DIR" "$(docker_site_name)"; }
 
@@ -1065,6 +1072,7 @@ docker_restore() {
   # Copy the chosen artifact into the container backups dir so bench can read it.
   docker_compose cp "${dir}/${db_base}" "backend:${bench}/sites/${site}/private/backups/${db_base}" >/dev/null 2>&1 \
     || { err "Could not copy the database backup into the container."; return 1; }
+  docker_make_container_readable "${bench}/sites/${site}/private/backups/${db_base}"
 
   # --force is a `restore` subcommand option (not a bench-group option), so it
   # must follow the subcommand; an absolute path avoids any exec-CWD ambiguity.
@@ -1075,15 +1083,19 @@ docker_restore() {
   if [[ "$kind" == "full" ]]; then
     for f in "${prefix}-files.tar" "${prefix}-files.tar.gz"; do
       if $SUDO test -f "${dir}/${f}"; then
-        docker_compose cp "${dir}/${f}" "backend:${bench}/sites/${site}/private/backups/${f}" >/dev/null 2>&1 \
-          && restore_args+=(--with-public-files "sites/${site}/private/backups/${f}")
+        if docker_compose cp "${dir}/${f}" "backend:${bench}/sites/${site}/private/backups/${f}" >/dev/null 2>&1; then
+          docker_make_container_readable "${bench}/sites/${site}/private/backups/${f}"
+          restore_args+=(--with-public-files "${bench}/sites/${site}/private/backups/${f}")
+        fi
         break
       fi
     done
     for f in "${prefix}-private-files.tar" "${prefix}-private-files.tar.gz"; do
       if $SUDO test -f "${dir}/${f}"; then
-        docker_compose cp "${dir}/${f}" "backend:${bench}/sites/${site}/private/backups/${f}" >/dev/null 2>&1 \
-          && restore_args+=(--with-private-files "sites/${site}/private/backups/${f}")
+        if docker_compose cp "${dir}/${f}" "backend:${bench}/sites/${site}/private/backups/${f}" >/dev/null 2>&1; then
+          docker_make_container_readable "${bench}/sites/${site}/private/backups/${f}"
+          restore_args+=(--with-private-files "${bench}/sites/${site}/private/backups/${f}")
+        fi
         break
       fi
     done
@@ -1167,6 +1179,7 @@ docker_restore_rehearsal() {
     ui_box_end
     return 1
   fi
+  docker_make_container_readable "${bench}/sites/${site}/private/backups/${db_base}"
 
   log "Creating throwaway site ${temp_site}"
   if ! docker_compose exec -T backend bench new-site \
