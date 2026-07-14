@@ -243,6 +243,23 @@ load_future_domain_config_if_available() {
     fi
   fi
 
+  # Load the saved Docker published port unless it was provided via the
+  # environment this run, so status/logs/access output use the real port
+  # (e.g. an auto-picked one) instead of the 8080 default.
+  if [[ "${DOCKER_PUBLISH_PORT_ENV_PROVIDED:-0}" -ne 1 ]]; then
+    if saved="$(read_saved_config_value DOCKER_PUBLISH_PORT 2>/dev/null)" && [[ "$saved" =~ ^[0-9]+$ ]]; then
+      DOCKER_PUBLISH_PORT="$saved"
+    fi
+  fi
+
+  # Load the saved Docker site name if present (docker_site_name falls back to
+  # SITE_NAME when this is empty).
+  if [[ -z "${DOCKER_SITE_NAME:-}" ]]; then
+    if saved="$(read_saved_config_value DOCKER_SITE_NAME 2>/dev/null)" && [[ -n "$saved" ]]; then
+      DOCKER_SITE_NAME="$saved"
+    fi
+  fi
+
   # Load the saved host OS unless it was provided via the environment this run.
   if [[ "${HOST_OS_ENV_PROVIDED:-0}" -ne 1 ]] && ! validate_host_os_value "${HOST_OS:-}"; then
     if saved="$(read_saved_config_value HOST_OS 2>/dev/null)" && [[ -n "$saved" ]]; then
@@ -592,6 +609,8 @@ PRODUCTION_SSL_MODE=${PRODUCTION_SSL_MODE}
 RUNTIME_MODE=$(runtime_mode)
 HOST_OS=${HOST_OS}
 DEPLOYMENT_ENGINE=$(effective_deployment_engine)
+DOCKER_PUBLISH_PORT=${DOCKER_PUBLISH_PORT}
+DOCKER_SITE_NAME=${DOCKER_SITE_NAME:-}
 FRAPPE_USER=${FRAPPE_USER}
 BENCH_PARENT=${BENCH_PARENT}
 BENCH_NAME=${BENCH_NAME}
@@ -613,6 +632,8 @@ PRODUCTION_SSL_MODE=${PRODUCTION_SSL_MODE}
 RUNTIME_MODE=$(runtime_mode)
 HOST_OS=${HOST_OS}
 DEPLOYMENT_ENGINE=$(effective_deployment_engine)
+DOCKER_PUBLISH_PORT=${DOCKER_PUBLISH_PORT}
+DOCKER_SITE_NAME=${DOCKER_SITE_NAME:-}
 FRAPPE_USER=${FRAPPE_USER}
 BENCH_PARENT=${BENCH_PARENT}
 BENCH_NAME=${BENCH_NAME}
@@ -651,6 +672,9 @@ show_site_config() {
   status_line "Site source" "INFO" "$SITE_NAME_SOURCE"
   status_line "Host OS" "INFO" "$(host_os_label)$(host_os_is_unset && printf ' (not set; run %s)' "$(toolkit_cmd set-host-os)")"
   status_line "Deployment engine" "INFO" "$(deployment_engine_label)"
+  if deployment_engine_is_docker; then
+    status_line "Docker port" "INFO" "${DOCKER_PUBLISH_PORT} -> 8080 (container)"
+  fi
   status_line "Config file" "INFO" "${CONFIG_FILE} (${saved})"
   status_line "Legacy config" "INFO" "${LEGACY_CONFIG_FILE} (${legacy_saved})"
   status_line "Expected bench" "INFO" "$BENCH_DIR"

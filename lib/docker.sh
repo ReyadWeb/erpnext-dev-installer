@@ -89,6 +89,70 @@ host_arch_label() {
   esac
 }
 
+# ------------------------------------------------------------
+# Published-port conflict handling
+# ------------------------------------------------------------
+# True (returns 0) when nothing is listening on the given host TCP port.
+# Uses ss, then netstat, then a bash /dev/tcp connect probe -- dependency-light
+# and works before Docker itself has published anything.
+docker_port_available() {
+  local port="${1:-}"
+  [[ "$port" =~ ^[0-9]+$ ]] || return 1
+  if command -v ss >/dev/null 2>&1; then
+    ! ${SUDO:-} ss -Hltn "sport = :${port}" 2>/dev/null | grep -q .
+    return
+  fi
+  if command -v netstat >/dev/null 2>&1; then
+    ! ${SUDO:-} netstat -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${port}\$"
+    return
+  fi
+  # Last resort: if a TCP connection opens, something is already listening.
+  if (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null; then
+    exec 3>&- 2>/dev/null || true
+    return 1
+  fi
+  return 0
+}
+
+# Ensure DOCKER_PUBLISH_PORT is free before we publish it. Interactive sessions
+# are prompted for a replacement; non-interactive / -y runs auto-pick the next
+# free port scanning upward. Sets DOCKER_PUBLISH_PORT to the resolved value.
+docker_ensure_publish_port() {
+  local port="${DOCKER_PUBLISH_PORT:-8080}" reply candidate tries=0
+  if docker_port_available "$port"; then
+    return 0
+  fi
+  warn "Host port ${port} is already in use by another process."
+  if [[ -t 0 && "${ASSUME_YES:-0}" -ne 1 ]]; then
+    while :; do
+      read -r -p "Choose a different host port for ERPNext [1024-65535]: " reply
+      if [[ ! "$reply" =~ ^[0-9]+$ ]] || (( reply < 1 || reply > 65535 )); then
+        echo "Please enter a valid port number (1-65535)."
+        continue
+      fi
+      if ! docker_port_available "$reply"; then
+        echo "Port ${reply} is also in use; pick another."
+        continue
+      fi
+      DOCKER_PUBLISH_PORT="$reply"
+      ok "Using host port ${DOCKER_PUBLISH_PORT}."
+      return 0
+    done
+  fi
+  candidate="$port"
+  while (( tries < 200 )); do
+    candidate=$(( candidate + 1 ))
+    (( candidate > 65535 )) && candidate=1024
+    if docker_port_available "$candidate"; then
+      DOCKER_PUBLISH_PORT="$candidate"
+      warn "Auto-selected free host port ${DOCKER_PUBLISH_PORT} (was ${port})."
+      return 0
+    fi
+    tries=$(( tries + 1 ))
+  done
+  fail "Could not find a free host port near ${port}. Set DOCKER_PUBLISH_PORT to an open port and retry."
+}
+
 # Read /etc/os-release and classify Docker-host support. Prints "STATUS|Pretty".
 # Docker is OS-agnostic for the workload, so the officially supported Docker
 # Engine hosts we track -- Ubuntu 24.04/26.04 and Debian 11/12/13 -- are OK;
@@ -265,8 +329,9 @@ EOF_DOCKER_ENV
 
   $SUDO tee "$DOCKER_CREDENTIALS_FILE" >/dev/null <<EOF_DOCKER_CREDS
 # ERPNext Developer Toolkit - Docker engine credentials
-# Site:  $(docker_site_name)
-# URL:   http://localhost:${DOCKER_PUBLISH_PORT}
+# Site:      $(docker_site_name)
+# Local URL: http://localhost:${DOCKER_PUBLISH_PORT}
+# Friendly:  http://$(docker_site_name):${DOCKER_PUBLISH_PORT} (after host mapping)
 Administrator password: ${admin_pw}
 MariaDB root password:  ${db_pw}
 EOF_DOCKER_CREDS
@@ -505,21 +570,194 @@ docker_install_app() {
 }
 
 docker_print_access() {
-  local site
+  local site vm_ip
   site="$(docker_site_name)"
+  vm_ip="$(get_vm_ip 2>/dev/null || echo unknown)"
   ui_box_start "ERPNext (Docker) Access"
   status_line "Site" "OK" "$site"
-  status_line "URL" "INFO" "http://localhost:${DOCKER_PUBLISH_PORT}"
+  status_line "Local URL" "INFO" "http://localhost:${DOCKER_PUBLISH_PORT}"
+  if [[ "$vm_ip" != "unknown" && -n "$vm_ip" ]]; then
+    status_line "Network URL" "INFO" "http://${vm_ip}:${DOCKER_PUBLISH_PORT}"
+  fi
+  status_line "Friendly URL" "INFO" "http://${site}:${DOCKER_PUBLISH_PORT}"
   status_line "Login" "INFO" "Administrator"
   status_line "Credentials" "INFO" "$DOCKER_CREDENTIALS_FILE"
   status_line "Compose project" "INFO" "$DOCKER_PROJECT_NAME"
   ui_box_end
-  echo "To reach it via ${site} in a browser, map it to 127.0.0.1 on your host:"
-  echo "  echo '127.0.0.1 ${site}' | sudo tee -a /etc/hosts"
-  echo "then open: http://${site}:${DOCKER_PUBLISH_PORT}"
+  echo "Local URL works on this machine. Network URL works from your host / LAN."
+  echo "The Friendly URL (${site}) works only after your HOST maps it to this machine:"
+  print_host_dns_commands_for_site "$site" "$vm_ip"
+  echo "Then open: http://${site}:${DOCKER_PUBLISH_PORT}"
 }
 
-docker_site_url() { printf 'http://localhost:%s\n' "$DOCKER_PUBLISH_PORT"; }
+# Single programmatic URL (doctor / engine_site_url). Prefer the network IP so
+# it is reachable from the host; fall back to loopback when the IP is unknown.
+docker_site_url() {
+  local vm_ip
+  vm_ip="$(get_vm_ip 2>/dev/null || echo unknown)"
+  if [[ "$vm_ip" != "unknown" && -n "$vm_ip" ]]; then
+    printf 'http://%s:%s\n' "$vm_ip" "$DOCKER_PUBLISH_PORT"
+  else
+    printf 'http://localhost:%s\n' "$DOCKER_PUBLISH_PORT"
+  fi
+}
+
+# Docker-specific host-mapping checkpoint. Reuses the accurate, port-agnostic
+# host DNS command generator (maps the domain to this machine's IP) but prints
+# guidance for the Docker published port rather than the native 8000.
+docker_host_mapping_checkpoint() {
+  require_sudo
+  local site vm_ip
+  site="$(docker_site_name)"
+  vm_ip="$(get_vm_ip 2>/dev/null || echo unknown)"
+  echo
+  echo "============================================================"
+  echo "Host Mapping Checkpoint (friendly domain)"
+  echo "============================================================"
+  echo
+  echo "To open ERPNext as ${site} in a browser, your HOST machine must map the"
+  echo "domain to this machine. The Docker stack serves HTTP on port ${DOCKER_PUBLISH_PORT}."
+  echo
+  status_line "Local domain" "INFO" "$site"
+  status_line "Detected host IP" "$([[ "$vm_ip" != unknown ]] && echo OK || echo WARN)" "$vm_ip"
+  status_line "Host OS" "INFO" "$(host_os_label)"
+  if host_os_is_unset; then
+    echo
+    echo "Host OS not chosen yet; showing $(host_os_label) commands by default."
+    echo "If your host is macOS or Windows, run: $(toolkit_cmd set-host-os)"
+  fi
+  echo
+  echo "Run this on your $(host_os_label) HOST machine (not inside the VM)."
+  echo "It is safe to repeat; it backs up the hosts file and refreshes the mapping:"
+  print_host_dns_commands_for_site "$site" "$vm_ip"
+  echo
+  echo "Then open: http://${site}:${DOCKER_PUBLISH_PORT}"
+  echo "============================================================"
+}
+
+# Docker engine access verification (parity with native verify_access).
+docker_verify_access() {
+  require_sudo
+  local site code url
+  site="$(docker_site_name)"
+  url="http://localhost:${DOCKER_PUBLISH_PORT}/api/method/ping"
+
+  echo
+  echo "============================================================"
+  echo "Access Verification (Docker)"
+  echo "============================================================"
+
+  if docker_compose ps 2>/dev/null | grep -qiE 'running|up'; then
+    status_line "Containers" "OK" "compose services running"
+  else
+    status_line "Containers" "WARN" "no running services (try: $(toolkit_cmd start))"
+  fi
+
+  # Send the site Host header so Frappe resolves the target site.
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 -H "Host: ${site}" "$url" 2>/dev/null || true)"
+  case "$code" in
+    200|401|403) status_line "Published port" "OK" "http://localhost:${DOCKER_PUBLISH_PORT} (HTTP ${code})" ;;
+    "") status_line "Published port" "WARN" "no response on http://localhost:${DOCKER_PUBLISH_PORT}" ;;
+    *) status_line "Published port" "WARN" "HTTP ${code} on http://localhost:${DOCKER_PUBLISH_PORT}" ;;
+  esac
+
+  docker_print_access
+}
+
+# Docker engine "what now" summary printed at the end of the guided install.
+docker_show_next_steps() {
+  echo
+  echo "============================================================"
+  echo "Docker Engine - Next Steps"
+  echo "============================================================"
+  echo "  Open ERPNext:        http://localhost:${DOCKER_PUBLISH_PORT}  (Administrator)"
+  echo "  Friendly domain:     see the host mapping checkpoint above"
+  echo "  Verify access:       $(toolkit_cmd verify-access)"
+  echo "  Start / stop:        $(toolkit_cmd start) / $(toolkit_cmd stop)"
+  echo "  Status / logs:       $(toolkit_cmd status) / $(toolkit_cmd logs)"
+  echo "  Backups:             $(toolkit_cmd backup) / $(toolkit_cmd list-backups)"
+  echo "  Optional apps:       $(toolkit_cmd app-install-wizard)"
+  echo "  Engine status:       $(toolkit_cmd engine-status)"
+  echo
+  echo "Trusted local HTTPS for the Docker engine is planned for the reverse-proxy"
+  echo "phase (v1.11.0). For now the stack serves over HTTP on the published port."
+  echo "============================================================"
+}
+
+# Compact, Docker-safe app installer. The native run_app_install_wizard requires
+# a host bench dir (require_site_environment), which does not exist for the
+# Docker engine; install_app_profile -> install_frappe_app routes to
+# docker_install_app (the container path) so we drive that directly here.
+docker_app_install_wizard() {
+  require_sudo
+  local choice
+  while true; do
+    echo
+    echo "============================================================"
+    echo "Docker App Installation"
+    echo "============================================================"
+    echo "Apps install into the running container (ideal for evaluation)."
+    echo "For durable deployments, build a custom image (planned: docker-custom-image)."
+    echo
+    echo "  1) CRM               6) Webshop / E-Commerce"
+    echo "  2) HR / HRMS         7) Builder"
+    echo "  3) Helpdesk          8) Insights"
+    echo "  4) Payments          9) Print Designer"
+    echo "  5) Learning / LMS   10) Wiki"
+    echo "  b) Back"
+    echo "============================================================"
+    read -r -p "Choose an app to install [b]: " choice
+    case "$choice" in
+      1) install_app_profile crm ;;
+      2) install_app_profile hrms ;;
+      3) install_app_profile helpdesk ;;
+      4) install_app_profile payments ;;
+      5) install_app_profile lms ;;
+      6) install_app_profile webshop ;;
+      7) install_app_profile builder ;;
+      8) install_app_profile insights ;;
+      9) install_app_profile print_designer ;;
+      10) install_app_profile wiki ;;
+      b|B|"") return 0 ;;
+      q|Q) exit 0 ;;
+      *) warn "Invalid option" ;;
+    esac
+  done
+}
+
+docker_prompt_open_main_menu() {
+  local reply
+  [[ -t 0 ]] || return 0
+  echo
+  read -r -p "Open the main toolkit menu now? [Y/n]: " reply
+  reply="${reply:-Y}"
+  if [[ "$reply" =~ ^[Yy]$ ]]; then
+    show_menu
+  else
+    echo "Open it later with: $(toolkit_cmd menu)"
+  fi
+}
+
+# Post-install continuation for the Docker engine, mirroring the native
+# run_guided_setup tail but engine-appropriate. Interactive steps are skipped
+# under -y / non-TTY (matching native local_guided_followups) so automation and
+# CI stay non-interactive.
+docker_guided_followups() {
+  docker_verify_access
+  docker_host_mapping_checkpoint
+
+  if [[ -t 0 && "${ASSUME_YES:-0}" -ne 1 ]]; then
+    if confirm "Install optional Frappe apps now?"; then
+      docker_app_install_wizard
+    fi
+    if confirm "Take an initial database backup now?"; then
+      docker_backup false || warn "Backup did not complete."
+    fi
+  fi
+
+  docker_show_next_steps
+  docker_prompt_open_main_menu
+}
 
 # doctor rows for the Docker engine.
 docker_doctor_detail() {
@@ -545,6 +783,10 @@ docker_doctor_detail() {
 docker_guided_install() {
   require_sudo
   install_self_for_reuse || fail "Could not install the toolkit to ${INSTALLER_CANONICAL_PATH:-/opt/erpnext-dev/erpnext-dev.sh}"
+
+  # Resolve any published-port conflict before the preflight so the summary and
+  # all downstream output reflect the port we will actually publish.
+  docker_ensure_publish_port
 
   docker_preflight
 
@@ -572,6 +814,6 @@ docker_guided_install() {
   docker_compose_up || fail "docker compose up failed. Inspect with: $(toolkit_cmd logs)"
   docker_wait_for_site_creation || fail "Site creation failed. See the create-site logs above, or run: $(toolkit_cmd logs)"
   docker_ready || warn "Stack started but readiness check timed out; it may still be initializing."
-  docker_print_access
   ok "Docker deployment engine setup complete."
+  docker_guided_followups
 }

@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.10.2"
+SCRIPT_VERSION="1.10.3"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -52,6 +52,12 @@ FRAPPE_DOCKER_REPO="${FRAPPE_DOCKER_REPO:-https://github.com/frappe/frappe_docke
 FRAPPE_DOCKER_REF="${FRAPPE_DOCKER_REF:-main}"
 DOCKER_ERPNEXT_IMAGE="${DOCKER_ERPNEXT_IMAGE:-frappe/erpnext:v16.26.2}"
 DOCKER_PROJECT_NAME="${DOCKER_PROJECT_NAME:-erpnext-dev}"
+# Track whether the published port was set via the environment this run, so the
+# saved config value only overrides the default (not an explicit env choice).
+DOCKER_PUBLISH_PORT_ENV_PROVIDED=0
+if [[ -n "${DOCKER_PUBLISH_PORT+x}" ]]; then
+  DOCKER_PUBLISH_PORT_ENV_PROVIDED=1
+fi
 DOCKER_PUBLISH_PORT="${DOCKER_PUBLISH_PORT:-8080}"
 AUTO_START="${AUTO_START:-prompt}"
 ENABLE_AUTOSTART="${ENABLE_AUTOSTART:-prompt}"

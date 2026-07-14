@@ -1,3 +1,50 @@
+## v1.10.3 - Docker guided wizard parity (post-install flow, IP/domain access, port conflicts)
+
+### Added
+
+- **Docker post-install continuation.** The guided Docker install no longer ends
+  right after printing access. It now runs an engine-appropriate follow-up flow
+  mirroring the native installer: access verification, a host-mapping
+  checkpoint, an optional-apps prompt, an optional first backup, a Docker
+  next-steps block, and the main-menu prompt (all interactive steps are skipped
+  under `-y` / non-TTY so CI and automation stay non-interactive).
+- **IP/domain-aware access output.** `docker_print_access` now shows a **Local
+  URL** (`http://localhost:PORT`), a **Network URL** (`http://VM_IP:PORT`, from
+  the host/LAN), and a **Friendly URL** (`http://SITE:PORT`), plus the exact,
+  host-OS-tailored `/etc/hosts` mapping command (reusing the shared
+  `print_host_dns_commands_for_site` generator) instead of a bare
+  `127.0.0.1` hint.
+- **Published-port conflict handling.** Before publishing, the installer checks
+  the chosen host port (`ss`/`netstat`/`/dev/tcp` probe). If it is taken, an
+  interactive session is prompted for a replacement; under `-y`/non-TTY it
+  auto-picks the next free port and reports it. The resolved port is reflected
+  in the preflight summary.
+- **Docker access verification.** `verify-access` now works under the Docker
+  engine (container health via `compose ps` + a `Host`-header curl of the
+  published port), routed through a `deployment_engine_is_docker` branch like
+  the other lifecycle commands.
+- **Docker app installer.** A compact, container-safe app picker drives
+  `install_app_profile` -> `docker_install_app` for the optional-apps step
+  (the native wizard requires a host bench dir that does not exist under
+  Docker).
+
+### Changed
+
+- **The published port and site are now persisted** (`DOCKER_PUBLISH_PORT`,
+  `DOCKER_SITE_NAME`) and reloaded, so later `status`/`logs`/`verify-access`
+  use the port that was actually published (e.g. an auto-picked one) rather
+  than the `8080` default. `site-config` shows the Docker port mapping when the
+  Docker engine is active.
+- `docker_site_url` now prefers the reachable network IP (falling back to
+  loopback), and the Docker credentials file records both the local and
+  friendly URLs.
+
+### Deferred
+
+- Docker trusted local HTTPS / reverse proxy, and Docker-specific
+  firewall/hardening/backup scheduling, remain scheduled for the v1.11.0
+  reverse-proxy phase.
+
 ## v1.10.2 - Docker create-site fix (site now provisions; no more silent 404)
 
 ### Fixed

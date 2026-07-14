@@ -18,7 +18,7 @@ It supports two setup paths:
 > the path to **9.8+** are in [`ROADMAP.md`](ROADMAP.md). This README focuses on
 > installation, operations, and usage.
 
-**Current release:** v1.10.2 · **Readiness:** ~9.5/10 for single-admin local/public VM
+**Current release:** v1.10.3 · **Readiness:** ~9.5/10 for single-admin local/public VM
 (after VPS production validation). v1.10.0 turns the toolkit into a **multi-engine**
 platform: choose a **native** VM install (default, unchanged) or a **Docker**
 engine that wraps the official `frappe_docker`, behind the same `erpnext-dev` CLI.
@@ -55,6 +55,18 @@ The Docker engine in this release targets local development (install / start /
 stop / status / logs / health / backup / apps). Production runtime, SSL, and
 Debian-native support are on the [roadmap](ROADMAP.md). Native remains the
 release-gated, fully validated path.
+
+The guided Docker install now finishes with the same post-install flow as
+native: it verifies access, prints a host-mapping checkpoint, offers optional
+apps and a first backup, and opens the main menu. Access output shows three
+URLs — a **Local URL** (`http://localhost:PORT` on this machine), a **Network
+URL** (`http://VM_IP:PORT` from your host/LAN), and a **Friendly URL**
+(`http://SITE:PORT`, after you map the domain on your host). If the chosen
+published port is already in use, the installer prompts for a free one (or
+auto-picks the next free port under `-y`), persists it, and reuses it for
+`status`/`logs`/`verify-access`. Trusted local HTTPS for the Docker engine
+arrives with the reverse-proxy phase (v1.11.0); until then the stack serves
+over HTTP on the published port.
 
 ---
 
@@ -93,7 +105,7 @@ release-gated, fully validated path.
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar && \
-VERSION="v1.10.2" && \
+VERSION="v1.10.3" && \
 BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}" && \
 cd ~ && \
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz" && \
@@ -112,7 +124,7 @@ Or install step by step ([details below](#install-and-verify)):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
-VERSION="v1.10.2"
+VERSION="v1.10.3"
 BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz"

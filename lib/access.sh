@@ -439,6 +439,11 @@ show_access_instructions() {
 verify_access() {
   require_sudo
 
+  if deployment_engine_is_docker; then
+    docker_verify_access
+    return
+  fi
+
   local vm_ip escaped_site direct_head friendly_head ip_head https_head
   vm_ip="$(get_vm_ip)"
   escaped_site="${SITE_NAME//./\\.}"
