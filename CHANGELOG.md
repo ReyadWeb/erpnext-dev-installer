@@ -82,6 +82,22 @@ integration CI job is promoted to a hard release gate.
   gunicorn ports are never publicly exposed. HTTPS is opt-in and fully reversible;
   the local-dev flow is unaffected. (Live ACME issuance requires a real public
   domain and open 80/443, so it is validated out-of-band rather than in CI.)
+- **Durable custom-app images (P4).** Instead of `get-app` into a running
+  container (lost on the next image pull), the Docker engine can now bake
+  selected apps into an **immutable image** built from upstream's layered
+  `images/layered/Containerfile`. `docker-custom-image-config` picks apps from
+  the existing app library and generates an `apps.json` (ERPNext is always
+  included; app URLs/branches come from the same profiles the native installer
+  uses, resolving default branches via `git ls-remote` when a profile pins
+  none). `docker-build-custom-image` builds a uniquely tagged image with
+  BuildKit (`--secret id=apps_json`) and records the image + image ID + app set.
+  `docker-deploy-custom-image` performs an **immutable deploy**: it recreates
+  the stack on the new image (`--force-recreate`, never mutating a running
+  container), installs the baked apps onto the site (data-only `bench
+  install-app`, idempotent), migrates, and re-records the pins.
+  `docker-custom-image-status` shows the configured apps and built image. The
+  container `get-app` path remains available for evaluation and now points
+  operators to the durable image build for production.
 
 ## v1.10.4 - Debian mkcert host hint fix (trusted local HTTPS works on Debian)
 
