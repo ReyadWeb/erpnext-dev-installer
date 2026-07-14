@@ -65,6 +65,23 @@ integration CI job is promoted to a hard release gate.
   GCS, Azure, MinIO, ...) with checksum-based copy and `rclone check` verification;
   rclone credentials stay in the rclone config, and only the non-secret remote/
   bucket/prefix are persisted (root-owned, `600`).
+- **Production HTTPS / reverse proxy (P5).** The production Docker stack can now
+  terminate TLS with upstream **Traefik** in front of the frontend. HTTPS mode
+  (`http` | `letsencrypt` | `cloudflare-origin`) is persisted and drives a
+  mode-aware compose proxy override: `docker-enable-letsencrypt` uses upstream's
+  `overrides/compose.https.yaml` (ACME HTTP-01, ports 80/443, HTTP->HTTPS
+  redirect) after a preflight that checks the domain is a public FQDN and 80/443
+  are bindable; `docker-configure-cloudflare-origin` installs an operator-provided
+  Cloudflare Origin CA cert/key (validated as a matching pair, root-owned) and
+  generates a Traefik file-provider override that serves it. `docker-https-wizard`
+  is the guided chooser, `docker-https-status` shows the mode, proxy state, the
+  live certificate issuer/dates (via `openssl s_client`), and the HTTP->HTTPS
+  redirect, and `docker-https-rollback` reverts to plain HTTP on the published
+  port and removes the proxy (via `--remove-orphans`). `docker-production-exposure`
+  validates that only web ports (80/443) are published and that database/redis/
+  gunicorn ports are never publicly exposed. HTTPS is opt-in and fully reversible;
+  the local-dev flow is unaffected. (Live ACME issuance requires a real public
+  domain and open 80/443, so it is validated out-of-band rather than in CI.)
 
 ## v1.10.4 - Debian mkcert host hint fix (trusted local HTTPS works on Debian)
 

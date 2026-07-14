@@ -53,6 +53,13 @@ DOCKER_RESTORE_REHEARSAL_FILE="${DOCKER_RESTORE_REHEARSAL_FILE:-/etc/erpnext-dev
 DOCKER_OBJECT_BACKUP_CONFIG_FILE="${DOCKER_OBJECT_BACKUP_CONFIG_FILE:-/etc/erpnext-dev/docker-object-backup.env}"
 DOCKER_OBJECT_BACKUP_STATE_FILE="${DOCKER_OBJECT_BACKUP_STATE_FILE:-/etc/erpnext-dev/docker-object-backup.state}"
 
+# Production HTTPS / reverse proxy (P5): the production stack fronts the frontend
+# with upstream Traefik. HTTPS mode (http|letsencrypt|cloudflare-origin) is kept
+# in a small state file so the mode-aware compose file list picks the right proxy
+# override on every invocation. Cloudflare Origin CA material lives root-owned.
+DOCKER_HTTPS_STATE_FILE="${DOCKER_HTTPS_STATE_FILE:-${DOCKER_WORKDIR}/erpnext-dev.https.env}"
+DOCKER_CF_ORIGIN_DIR="${DOCKER_CF_ORIGIN_DIR:-${DOCKER_WORKDIR}/cloudflare-origin}"
+
 docker_clone_dir() { printf '%s/frappe_docker\n' "$DOCKER_WORKDIR"; }
 docker_overrides_dir() { printf '%s/frappe_docker/overrides\n' "$DOCKER_WORKDIR"; }
 docker_compose_base_file() { printf '%s/frappe_docker/pwd.yml\n' "$DOCKER_WORKDIR"; }
@@ -242,11 +249,25 @@ docker_compose_file_list() {
     printf '%s\n' "${overrides}/compose.mariadb.yaml"
     printf '%s\n' "${overrides}/compose.redis.yaml"
     printf '%s\n' "$(docker_prod_image_override_file)"
-    printf '%s\n' "${overrides}/compose.noproxy.yaml"
+    printf '%s\n' "$(docker_prod_proxy_override)"
   else
     printf '%s\n' "$(docker_compose_base_file)"
     printf '%s\n' "$(docker_override_file)"
   fi
+}
+
+# Which reverse-proxy override the production stack composes, by HTTPS mode:
+#   http               -> upstream noproxy (frontend published on HTTP_PUBLISH_PORT)
+#   letsencrypt        -> upstream Traefik HTTP-01 override (compose.https.yaml)
+#   cloudflare-origin  -> toolkit Traefik override serving the provided origin cert
+docker_prod_proxy_override() {
+  local overrides
+  overrides="$(docker_overrides_dir)"
+  case "$(docker_https_mode)" in
+    letsencrypt) printf '%s\n' "${overrides}/compose.https.yaml" ;;
+    cloudflare-origin) printf '%s\n' "$(docker_prod_https_cf_override_file)" ;;
+    *) printf '%s\n' "${overrides}/compose.noproxy.yaml" ;;
+  esac
 }
 
 docker_active_env_file() {
@@ -417,7 +438,11 @@ docker_preflight() {
   local mode base_label
   mode="$(docker_mode_label)"
   if docker_is_production; then
-    base_label="compose.yaml + mariadb/redis + HTTP (noproxy)"
+    case "$(docker_https_mode)" in
+      letsencrypt) base_label="compose.yaml + mariadb/redis + Traefik HTTPS (Let's Encrypt)" ;;
+      cloudflare-origin) base_label="compose.yaml + mariadb/redis + Traefik HTTPS (Cloudflare Origin CA)" ;;
+      *) base_label="compose.yaml + mariadb/redis + HTTP (noproxy)" ;;
+    esac
   else
     base_label="pwd.yml (disposable dev stack)"
   fi
@@ -478,6 +503,7 @@ docker_provision_workdir() {
     [[ -f "${overrides}/compose.mariadb.yaml" ]] || missing+=("overrides/compose.mariadb.yaml")
     [[ -f "${overrides}/compose.redis.yaml" ]] || missing+=("overrides/compose.redis.yaml")
     [[ -f "${overrides}/compose.noproxy.yaml" ]] || missing+=("overrides/compose.noproxy.yaml")
+    [[ -f "${overrides}/compose.https.yaml" ]] || missing+=("overrides/compose.https.yaml")
     if [[ ${#missing[@]} -gt 0 ]]; then
       fail "frappe_docker checkout is missing production files: ${missing[*]}. Try a different FRAPPE_DOCKER_REF."
     fi
@@ -1588,6 +1614,459 @@ show_docker_object_backup_status() {
   ui_box_end
 }
 
+# ------------------------------------------------------------
+# Production HTTPS / reverse proxy (P5): Traefik in front of the frontend
+# ------------------------------------------------------------
+docker_prod_https_cf_override_file() { printf '%s/erpnext-dev.prod.https.cloudflare.yml\n' "$DOCKER_WORKDIR"; }
+docker_prod_https_cf_dynamic_file() { printf '%s/erpnext-dev.prod.traefik-dynamic.yml\n' "$DOCKER_WORKDIR"; }
+docker_cf_origin_cert_path() { printf '%s/origin.crt\n' "$DOCKER_CF_ORIGIN_DIR"; }
+docker_cf_origin_key_path() { printf '%s/origin.key\n' "$DOCKER_CF_ORIGIN_DIR"; }
+
+# Resolved HTTPS mode (env override wins, else the persisted state, else http).
+docker_https_mode() {
+  local m="${DOCKER_HTTPS_MODE:-}"
+  [[ -n "$m" ]] || m="$(docker_env_value "$DOCKER_HTTPS_STATE_FILE" DOCKER_HTTPS_MODE)"
+  case "$(printf '%s' "${m:-http}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
+    letsencrypt|le|lets-encrypt|acme) printf 'letsencrypt\n' ;;
+    cloudflare-origin|cloudflare|cf|origin) printf 'cloudflare-origin\n' ;;
+    *) printf 'http\n' ;;
+  esac
+}
+docker_https_enabled() { [[ "$(docker_https_mode)" != "http" ]]; }
+
+# Traefik Host(...) router rule for the configured production site.
+docker_https_sites_rule() {
+  local domain
+  domain="$(docker_site_name)"
+  printf 'Host(`%s`)\n' "$domain"
+}
+
+docker_https_write_state() {
+  require_sudo
+  local mode="$1" domain="$2" email="$3"
+  $SUDO mkdir -p "$DOCKER_WORKDIR"
+  $SUDO tee "$DOCKER_HTTPS_STATE_FILE" >/dev/null <<EOF_DOCKER_HTTPS_STATE
+# ERPNext Developer Toolkit - Docker production HTTPS state
+DOCKER_HTTPS_MODE=${mode}
+DOCKER_HTTPS_DOMAIN=${domain}
+DOCKER_HTTPS_EMAIL=${email}
+DOCKER_HTTPS_UPDATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+EOF_DOCKER_HTTPS_STATE
+  $SUDO chown root:root "$DOCKER_HTTPS_STATE_FILE" 2>/dev/null || true
+  $SUDO chmod 600 "$DOCKER_HTTPS_STATE_FILE" 2>/dev/null || true
+}
+
+# Record the default (http) state on first production setup so the mode is
+# explicit and surfaced everywhere; never clobbers an existing state.
+docker_write_https_state_if_absent() {
+  $SUDO test -f "$DOCKER_HTTPS_STATE_FILE" && return 0
+  docker_https_write_state http "$(docker_site_name)" ""
+}
+
+# Set (update or append) a KEY=value in the production env file without touching
+# the other (secret) values. Avoids sed so backticks in values are never
+# re-evaluated by the shell.
+docker_prod_env_set() {
+  require_sudo
+  local key="$1" val="$2" envf tmp
+  envf="$(docker_prod_env_file)"
+  $SUDO test -f "$envf" || fail "Production env file not found: ${envf}. Run $(toolkit_cmd docker-production-setup) first."
+  tmp="$(mktemp)" || return 1
+  $SUDO grep -v "^${key}=" "$envf" 2>/dev/null > "$tmp" || true
+  printf '%s=%s\n' "$key" "$val" >> "$tmp"
+  $SUDO cp "$tmp" "$envf"
+  rm -f "$tmp"
+  $SUDO chown root:root "$envf" 2>/dev/null || true
+  $SUDO chmod 600 "$envf" 2>/dev/null || true
+}
+
+# Sanity checks before switching a production stack to HTTPS.
+docker_https_preflight() {
+  local domain="$1" mode="$2" issues=0
+  ui_box_start "Docker HTTPS Preflight"
+  status_line "Mode" "INFO" "$mode"
+  status_line "Domain" "INFO" "$domain"
+
+  if ! docker_is_production; then
+    status_line "Engine mode" "FAIL" "HTTPS applies to the production stack; run $(toolkit_cmd docker-production-setup)"
+    issues=$((issues+1))
+  fi
+
+  case "$domain" in
+    *.*)
+      case "$domain" in
+        *.test|*.localhost|*.local|localhost)
+          status_line "Domain" "WARN" "${domain} is not a public FQDN; Let's Encrypt will fail for it"
+          [[ "$mode" == "letsencrypt" ]] && issues=$((issues+1)) ;;
+        *) status_line "Public FQDN" "OK" "$domain" ;;
+      esac ;;
+    *)
+      status_line "Domain" "WARN" "${domain} has no dot; not a valid public domain"
+      [[ "$mode" == "letsencrypt" ]] && issues=$((issues+1)) ;;
+  esac
+
+  local p
+  for p in 80 443; do
+    if docker_port_available "$p"; then
+      status_line "Host port ${p}" "OK" "free to publish"
+    else
+      # The running noproxy stack may already hold 80/443 if HTTPS was on; that
+      # is fine. Only warn so a genuinely conflicting service is visible.
+      status_line "Host port ${p}" "WARN" "in use (ok if it is this stack's proxy)"
+    fi
+  done
+
+  if [[ "$mode" == "letsencrypt" ]]; then
+    local pub
+    pub="$(detect_outbound_public_ipv4 2>/dev/null || true)"
+    status_line "Outbound public IP" "INFO" "${pub:-unknown} (point ${domain} A/AAAA here)"
+    echo
+    echo "Let's Encrypt HTTP-01 requires ${domain} to resolve to THIS host and ports"
+    echo "80/443 reachable from the internet. Cloud/provider firewalls must allow them."
+  fi
+  ui_box_end
+  [[ "$issues" -eq 0 ]]
+}
+
+# Toolkit-generated Traefik override for Cloudflare Origin CA: Traefik terminates
+# TLS with the operator-provided origin certificate (no ACME) and redirects HTTP
+# to HTTPS. Cloudflare proxies the public domain and trusts this origin cert.
+docker_write_prod_https_cf_override() {
+  require_sudo
+  local f dyn cert key
+  f="$(docker_prod_https_cf_override_file)"
+  dyn="$(docker_prod_https_cf_dynamic_file)"
+  cert="$(docker_cf_origin_cert_path)"
+  key="$(docker_cf_origin_key_path)"
+
+  $SUDO mkdir -p "$DOCKER_WORKDIR"
+  $SUDO tee "$dyn" >/dev/null <<'EOF_DOCKER_TRAEFIK_DYNAMIC'
+tls:
+  certificates:
+    - certFile: /etc/traefik/certs/origin.crt
+      keyFile: /etc/traefik/certs/origin.key
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/origin.crt
+        keyFile: /etc/traefik/certs/origin.key
+EOF_DOCKER_TRAEFIK_DYNAMIC
+  $SUDO chmod 644 "$dyn" 2>/dev/null || true
+
+  # Unquoted heredoc: host paths (${cert}/${key}/${dyn}) expand now; compose
+  # interpolation tokens are escaped so they stay literal for `docker compose`.
+  $SUDO tee "$f" >/dev/null <<EOF_DOCKER_CF_OVERRIDE
+services:
+  frontend:
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.frontend.loadbalancer.server.port=8080
+      - traefik.http.routers.frontend-http.entrypoints=websecure
+      - traefik.http.routers.frontend-http.tls=true
+      - "traefik.http.routers.frontend-http.rule=\${SITES_RULE:?SITES_RULE not set}"
+  proxy:
+    image: traefik:v3.6
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+    ports:
+      - \${HTTP_PUBLISH_PORT:-80}:80
+      - \${HTTPS_PUBLISH_PORT:-443}:443
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${cert}:/etc/traefik/certs/origin.crt:ro
+      - ${key}:/etc/traefik/certs/origin.key:ro
+      - ${dyn}:/etc/traefik/dynamic.yml:ro
+EOF_DOCKER_CF_OVERRIDE
+  $SUDO chown root:root "$f" 2>/dev/null || true
+  $SUDO chmod 644 "$f" 2>/dev/null || true
+}
+
+# Install the Cloudflare Origin CA certificate + private key. Reads from
+# CF_ORIGIN_CERT/CF_ORIGIN_KEY paths (default /tmp/cloudflare-origin.{crt,key}),
+# or interactively pastes PEM blocks. Validated as a matching pair.
+docker_install_cloudflare_origin_material() {
+  require_sudo
+  local cert_src="${CF_ORIGIN_CERT:-/tmp/cloudflare-origin.crt}"
+  local key_src="${CF_ORIGIN_KEY:-/tmp/cloudflare-origin.key}"
+  local cert_dst key_dst
+  cert_dst="$(docker_cf_origin_cert_path)"
+  key_dst="$(docker_cf_origin_key_path)"
+
+  $SUDO mkdir -p "$DOCKER_CF_ORIGIN_DIR"
+  $SUDO chmod 700 "$DOCKER_CF_ORIGIN_DIR" 2>/dev/null || true
+
+  if $SUDO test -r "$cert_src" && $SUDO test -r "$key_src"; then
+    log "Installing Cloudflare Origin certificate from ${cert_src} / ${key_src}"
+    $SUDO cp "$cert_src" "$cert_dst"
+    $SUDO cp "$key_src" "$key_dst"
+  elif [[ -t 0 && "${ASSUME_YES:-0}" -ne 1 ]]; then
+    read_pem_block_to_file "Cloudflare Origin certificate" \
+      "BEGIN CERTIFICATE" "END CERTIFICATE" "$cert_dst" \
+      "-----BEGIN CERTIFICATE-----" "-----END CERTIFICATE-----"
+    read_pem_block_to_file "Cloudflare Origin private key" \
+      "BEGIN( RSA| EC| PRIVATE)? PRIVATE KEY" "END( RSA| EC| PRIVATE)? PRIVATE KEY" "$key_dst" \
+      "-----BEGIN PRIVATE KEY-----" "-----END PRIVATE KEY-----"
+  else
+    fail "Cloudflare Origin cert/key not found. Place PEM at ${cert_src} and ${key_src}, or set CF_ORIGIN_CERT/CF_ORIGIN_KEY."
+  fi
+
+  if ! validate_certificate_and_key_pair "$cert_dst" "$key_dst"; then
+    $SUDO rm -f "$cert_dst" "$key_dst"
+    fail "Certificate and key do not match, or are not valid PEM. Nothing was installed."
+  fi
+  $SUDO chown root:root "$cert_dst" "$key_dst" 2>/dev/null || true
+  $SUDO chmod 644 "$cert_dst" 2>/dev/null || true
+  $SUDO chmod 600 "$key_dst" 2>/dev/null || true
+  ok "Cloudflare Origin certificate installed and validated."
+}
+
+# Bring the stack up with the current (this-process) HTTPS mode applied.
+docker_https_apply() {
+  require_sudo
+  # Recreate so the proxy service is added and stale proxies (from a previous
+  # mode) are removed as orphans.
+  docker_compose up -d --remove-orphans
+}
+
+docker_enable_letsencrypt() {
+  require_sudo
+  docker_is_production || fail "HTTPS applies to the production stack. Run $(toolkit_cmd docker-production-setup) first."
+  local domain email
+  domain="$(docker_site_name)"
+  email="${LETSENCRYPT_EMAIL:-$(docker_env_value "$DOCKER_HTTPS_STATE_FILE" DOCKER_HTTPS_EMAIL)}"
+  if [[ -z "$email" && -t 0 && "${ASSUME_YES:-0}" -ne 1 ]]; then
+    read -r -p "Let's Encrypt contact email: " email
+  fi
+  [[ -n "$email" ]] || fail "A contact email is required for Let's Encrypt. Set LETSENCRYPT_EMAIL or run interactively."
+
+  docker_https_preflight "$domain" letsencrypt || fail "HTTPS preflight failed. Resolve the issues above and retry."
+
+  if [[ -t 0 && "${ASSUME_YES:-0}" -ne 1 ]]; then
+    confirm "Switch ${domain} to Traefik + Let's Encrypt HTTPS on ports 80/443 now?" || { warn "Cancelled."; return 0; }
+  fi
+
+  docker_prod_env_set SITES_RULE "$(docker_https_sites_rule)"
+  docker_prod_env_set LETSENCRYPT_EMAIL "$email"
+  docker_prod_env_set HTTP_PUBLISH_PORT 80
+  docker_prod_env_set HTTPS_PUBLISH_PORT 443
+  docker_https_write_state letsencrypt "$domain" "$email"
+  DOCKER_HTTPS_MODE="letsencrypt"
+
+  log "Applying Let's Encrypt HTTPS (Traefik will request a certificate for ${domain})"
+  docker_https_apply || fail "docker compose up failed. Inspect with: $(toolkit_cmd logs)"
+  ok "HTTPS (Let's Encrypt) applied. First issuance can take up to ~1 minute."
+  docker_https_status
+}
+
+docker_configure_cloudflare_origin() {
+  require_sudo
+  docker_is_production || fail "HTTPS applies to the production stack. Run $(toolkit_cmd docker-production-setup) first."
+  local domain
+  domain="$(docker_site_name)"
+
+  docker_install_cloudflare_origin_material
+  docker_write_prod_https_cf_override
+  docker_https_preflight "$domain" cloudflare-origin || warn "Preflight reported warnings; continuing (Cloudflare fronts the public domain)."
+
+  if [[ -t 0 && "${ASSUME_YES:-0}" -ne 1 ]]; then
+    confirm "Switch ${domain} to Traefik + Cloudflare Origin CA HTTPS on ports 80/443 now?" || { warn "Cancelled."; return 0; }
+  fi
+
+  docker_prod_env_set SITES_RULE "$(docker_https_sites_rule)"
+  docker_prod_env_set HTTP_PUBLISH_PORT 80
+  docker_prod_env_set HTTPS_PUBLISH_PORT 443
+  docker_https_write_state cloudflare-origin "$domain" ""
+  DOCKER_HTTPS_MODE="cloudflare-origin"
+
+  log "Applying Cloudflare Origin CA HTTPS"
+  docker_https_apply || fail "docker compose up failed. Inspect with: $(toolkit_cmd logs)"
+  ok "HTTPS (Cloudflare Origin CA) applied."
+  echo "Set the Cloudflare SSL/TLS mode for ${domain} to 'Full (strict)' and proxy the DNS record."
+  docker_https_status
+}
+
+# Revert to plain HTTP on the published port (removes the Traefik proxy).
+docker_https_rollback() {
+  require_sudo
+  docker_is_production || fail "HTTPS applies to the production stack."
+  local domain
+  domain="$(docker_site_name)"
+  if [[ "$(docker_https_mode)" == "http" ]]; then
+    warn "HTTPS is already disabled (mode: http)."
+  fi
+  if [[ -t 0 && "${ASSUME_YES:-0}" -ne 1 ]]; then
+    confirm "Roll back to HTTP on port ${DOCKER_PUBLISH_PORT} and remove the Traefik proxy?" || { warn "Cancelled."; return 0; }
+  fi
+  docker_prod_env_set HTTP_PUBLISH_PORT "$DOCKER_PUBLISH_PORT"
+  docker_https_write_state http "$domain" ""
+  DOCKER_HTTPS_MODE="http"
+  log "Rolling back to HTTP (noproxy)"
+  docker_https_apply || fail "docker compose up failed. Inspect with: $(toolkit_cmd logs)"
+  ok "Rolled back to HTTP on port ${DOCKER_PUBLISH_PORT}."
+  docker_https_status
+}
+
+docker_https_status() {
+  require_sudo
+  local mode domain email proxy_state cert_line issuer dates redirect
+  mode="$(docker_https_mode)"
+  domain="$(docker_env_value "$DOCKER_HTTPS_STATE_FILE" DOCKER_HTTPS_DOMAIN)"
+  [[ -n "$domain" ]] || domain="$(docker_site_name)"
+  email="$(docker_env_value "$DOCKER_HTTPS_STATE_FILE" DOCKER_HTTPS_EMAIL)"
+
+  ui_box_start "Docker Production HTTPS Status"
+  status_line "Engine mode" "$(docker_is_production && echo OK || echo WARN)" "Docker $(docker_mode_label)"
+  case "$mode" in
+    letsencrypt) status_line "HTTPS mode" "OK" "Traefik + Let's Encrypt" ;;
+    cloudflare-origin) status_line "HTTPS mode" "OK" "Traefik + Cloudflare Origin CA" ;;
+    *) status_line "HTTPS mode" "WARN" "disabled (HTTP on port ${DOCKER_PUBLISH_PORT})" ;;
+  esac
+  status_line "Domain" "INFO" "$domain"
+  [[ "$mode" == "letsencrypt" && -n "$email" ]] && status_line "ACME email" "INFO" "$email"
+
+  if [[ "$mode" == "http" ]]; then
+    echo
+    echo "Enable HTTPS with: $(toolkit_cmd docker-https-wizard)"
+    ui_box_end
+    return 0
+  fi
+
+  proxy_state="$(docker_compose ps -q proxy 2>/dev/null | tail -n1)"
+  if [[ -n "$proxy_state" ]]; then
+    proxy_state="$(${SUDO:-} docker inspect -f '{{.State.Status}}' "$proxy_state" 2>/dev/null || echo unknown)"
+    status_line "Traefik proxy" "$([[ "$proxy_state" == running ]] && echo OK || echo WARN)" "$proxy_state"
+  else
+    status_line "Traefik proxy" "WARN" "not running (try: $(toolkit_cmd start))"
+  fi
+
+  # Inspect the live certificate presented on 443 for the site's SNI.
+  if command -v openssl >/dev/null 2>&1; then
+    cert_line="$(echo | ${SUDO:-} openssl s_client -connect 127.0.0.1:443 -servername "$domain" 2>/dev/null | openssl x509 -noout -issuer -dates 2>/dev/null || true)"
+    if [[ -n "$cert_line" ]]; then
+      issuer="$(printf '%s\n' "$cert_line" | sed -n 's/^issuer=//p')"
+      dates="$(printf '%s\n' "$cert_line" | grep -E '^(notBefore|notAfter)=' | tr '\n' ' ')"
+      status_line "Certificate issuer" "OK" "${issuer:-unknown}"
+      status_line "Certificate validity" "INFO" "${dates:-unknown}"
+    else
+      status_line "Certificate" "WARN" "no TLS answer on 127.0.0.1:443 yet (issuance may be pending)"
+    fi
+  fi
+
+  # HTTP should redirect to HTTPS.
+  redirect="$(curl -s -o /dev/null -w '%{http_code}' --max-time 6 -H "Host: ${domain}" "http://127.0.0.1:80/" 2>/dev/null || true)"
+  case "$redirect" in
+    30[0-9]) status_line "HTTP->HTTPS redirect" "OK" "HTTP ${redirect}" ;;
+    "") status_line "HTTP->HTTPS redirect" "WARN" "no response on port 80" ;;
+    *) status_line "HTTP->HTTPS redirect" "WARN" "HTTP ${redirect} (expected 3xx redirect)" ;;
+  esac
+
+  echo
+  echo "From the internet, browse: https://${domain}"
+  ui_next "$(toolkit_cmd docker-production-exposure)" "$(toolkit_cmd docker-https-rollback)"
+  ui_box_end
+}
+
+docker_https_wizard() {
+  require_sudo
+  docker_is_production || fail "HTTPS applies to the production stack. Run $(toolkit_cmd docker-production-setup) first."
+  local choice
+  ui_box_start "Docker Production HTTPS"
+  status_line "Site" "INFO" "$(docker_site_name)"
+  status_line "Current mode" "INFO" "$(docker_https_mode)"
+  echo "Choose how the production stack terminates TLS (Traefik reverse proxy):"
+  echo "  1) Let's Encrypt (automatic, public DNS + ports 80/443 must reach this host)"
+  echo "  2) Cloudflare Origin CA (you provide the origin cert; Cloudflare proxies DNS)"
+  echo "  3) Disable HTTPS (roll back to HTTP)"
+  echo "  b) Back"
+  ui_box_end
+  if [[ ! -t 0 || "${ASSUME_YES:-0}" -eq 1 ]]; then
+    echo "Non-interactive: use $(toolkit_cmd docker-enable-letsencrypt), $(toolkit_cmd docker-configure-cloudflare-origin), or $(toolkit_cmd docker-https-rollback)."
+    return 0
+  fi
+  read -r -p "Select [b]: " choice
+  case "$choice" in
+    1) docker_enable_letsencrypt ;;
+    2) docker_configure_cloudflare_origin ;;
+    3) docker_https_rollback ;;
+    b|B|"") return 0 ;;
+    q|Q) exit 0 ;;
+    *) warn "Invalid option" ;;
+  esac
+}
+
+# Validate that only the intended web ports are published to the host, and that
+# backend/data ports are NOT publicly exposed. A production-exposure guardrail.
+docker_production_exposure() {
+  require_sudo
+  local ports_raw domain problems=0
+  domain="$(docker_site_name)"
+
+  ui_box_start "Docker Production Exposure Check"
+  status_line "Engine mode" "$(docker_is_production && echo OK || echo WARN)" "Docker $(docker_mode_label)"
+  status_line "HTTPS mode" "$([[ "$(docker_https_mode)" != http ]] && echo OK || echo WARN)" "$(docker_https_mode)"
+
+  ports_raw="$(${SUDO:-} docker ps --filter "label=com.docker.compose.project=${DOCKER_PROJECT_NAME}" --format '{{.Names}} {{.Ports}}' 2>/dev/null || true)"
+  if [[ -z "$ports_raw" ]]; then
+    status_line "Published ports" "WARN" "no running containers for project ${DOCKER_PROJECT_NAME}"
+    ui_box_end
+    return 1
+  fi
+
+  # Host-published ports (host:container) that listen on all interfaces.
+  local published
+  published="$(printf '%s\n' "$ports_raw" | grep -oE '0\.0\.0\.0:[0-9]+|\[::\]:[0-9]+|:::[0-9]+' | grep -oE '[0-9]+$' | sort -un | tr '\n' ' ')"
+  status_line "Public host ports" "INFO" "${published:-none}"
+
+  # Data/backend ports must never be published publicly.
+  local p bad=""
+  for p in 3306 5432 6379 8000 9000 11000 13000; do
+    if printf ' %s ' "$published" | grep -q " ${p} "; then
+      bad="${bad}${p} "
+      problems=$((problems+1))
+    fi
+  done
+  if [[ -n "$bad" ]]; then
+    status_line "Backend/data ports" "FAIL" "publicly published: ${bad}(must be internal only)"
+  else
+    status_line "Backend/data ports" "OK" "no database/redis/gunicorn ports published"
+  fi
+
+  if docker_https_enabled; then
+    local pp
+    for pp in 80 443; do
+      if printf ' %s ' "$published" | grep -q " ${pp} "; then
+        status_line "Web port ${pp}" "OK" "published"
+      else
+        status_line "Web port ${pp}" "WARN" "not published (proxy may be down)"
+        problems=$((problems+1))
+      fi
+    done
+  else
+    if printf ' %s ' "$published" | grep -q " ${DOCKER_PUBLISH_PORT} "; then
+      status_line "Web port ${DOCKER_PUBLISH_PORT}" "OK" "published (HTTP)"
+    fi
+    status_line "HTTPS" "WARN" "disabled; enable before production ($(toolkit_cmd docker-https-wizard))"
+  fi
+
+  echo
+  if [[ "$problems" -eq 0 ]] && docker_https_enabled; then
+    status_line "Exposure" "OK" "only web ports are public; backend ports are internal"
+  else
+    status_line "Exposure" "WARN" "${problems} issue(s); review above before exposing to the internet"
+  fi
+  echo "Also confirm your cloud/provider firewall allows 80/443 and blocks everything else."
+  ui_next "$(toolkit_cmd docker-https-status)" "$(toolkit_cmd production-checklist)"
+  ui_box_end
+  [[ "$problems" -eq 0 ]]
+}
+
 # Install an app inside the running container. Container app installs are not
 # persisted across image upgrades (the recommended path is a custom image); we
 # warn accordingly. args: app_name display repo branch notes
@@ -1726,8 +2205,10 @@ docker_show_next_steps() {
   echo "  Optional apps:       $(toolkit_cmd app-install-wizard)"
   echo "  Engine status:       $(toolkit_cmd engine-status)"
   echo
-  echo "Trusted local HTTPS for the Docker engine is planned for the reverse-proxy"
-  echo "phase (v1.11.0). For now the stack serves over HTTP on the published port."
+  echo "Production HTTPS (Traefik + Let's Encrypt or Cloudflare Origin CA):"
+  echo "  Guided setup:   $(toolkit_cmd docker-https-wizard)"
+  echo "  Status:         $(toolkit_cmd docker-https-status)"
+  echo "  Exposure check: $(toolkit_cmd docker-production-exposure)"
   echo "============================================================"
 }
 
@@ -2001,10 +2482,15 @@ docker_prod_guided_install() {
   docker_prod_create_site || fail "Site creation failed. See the logs above, or run: $(toolkit_cmd logs)"
   docker_ready || warn "Stack started but readiness check timed out; it may still be initializing."
   docker_write_pins || warn "Could not record immutable pins."
+  docker_write_https_state_if_absent
   ok "Docker production stack setup complete."
   echo
-  echo "NOTE: This stack currently serves over HTTP on the published port."
-  echo "Trusted production HTTPS (Traefik + Let's Encrypt) arrives in the next phase (P5)."
+  if docker_https_enabled; then
+    echo "HTTPS mode: $(docker_https_mode). Verify with: $(toolkit_cmd docker-https-status)"
+  else
+    echo "This stack currently serves over HTTP on the published port."
+    echo "Enable trusted production HTTPS with: $(toolkit_cmd docker-https-wizard)"
+  fi
   docker_guided_followups
 }
 
