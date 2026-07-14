@@ -1066,8 +1066,11 @@ docker_restore() {
   docker_compose cp "${dir}/${db_base}" "backend:${bench}/sites/${site}/private/backups/${db_base}" >/dev/null 2>&1 \
     || { err "Could not copy the database backup into the container."; return 1; }
 
-  local -a restore_args=(--site "$site" --force restore "sites/${site}/private/backups/${db_base}"
-                         --db-root-username root --db-root-password "$pw")
+  # --force is a `restore` subcommand option (not a bench-group option), so it
+  # must follow the subcommand; an absolute path avoids any exec-CWD ambiguity.
+  local -a restore_args=(--site "$site" restore
+                         --db-root-username root --db-root-password "$pw" --force
+                         "$(docker_container_bench_dir)/sites/${site}/private/backups/${db_base}")
 
   if [[ "$kind" == "full" ]]; then
     for f in "${prefix}-files.tar" "${prefix}-files.tar.gz"; do
@@ -1184,9 +1187,14 @@ docker_restore_rehearsal() {
 
   if [[ "$rc" -eq 0 ]]; then
     log "Restoring ${prefix} into ${temp_site}"
-    if docker_compose exec -T backend bench --site "$temp_site" --force restore \
-        "sites/${site}/private/backups/${db_base}" \
-        --db-root-username root --db-root-password "$pw" >/dev/null 2>&1; then
+    local restore_log restore_path
+    restore_log="$(mktemp)" || restore_log=""
+    # Use an absolute path so the restore never depends on the exec CWD, and put
+    # --force after the subcommand where the restore command defines it.
+    restore_path="${bench}/sites/${site}/private/backups/${db_base}"
+    if docker_compose exec -T backend bench --site "$temp_site" restore \
+        --db-root-username root --db-root-password "$pw" --force \
+        "$restore_path" >"${restore_log:-/dev/null}" 2>&1; then
       apps="$(docker_compose exec -T backend bench --site "$temp_site" list-apps 2>/dev/null | tr -d '\r' | tr '\n' ' ' | sed -E 's/ +/ /g; s/^ +| +$//g')"
       if printf '%s' "$apps" | grep -qi 'erpnext'; then
         status_line "Restore into clean site" "OK" "erpnext present after restore"
@@ -1196,8 +1204,14 @@ docker_restore_rehearsal() {
       fi
     else
       status_line "Restore into clean site" "FAIL" "bench restore failed on the rehearsal site"
+      if [[ -n "$restore_log" ]] && $SUDO test -s "$restore_log"; then
+        echo "---- bench restore output (tail) ----"
+        tail -n 30 "$restore_log" | sed 's/^/  /'
+        echo "-------------------------------------"
+      fi
       rc=1
     fi
+    [[ -n "$restore_log" ]] && rm -f "$restore_log"
   else
     status_line "Rehearsal site" "FAIL" "could not create the throwaway site"
   fi
