@@ -1,10 +1,13 @@
-## Unreleased - Docker production runtime (in progress)
+## v1.11.0 - Docker production runtime (multi-engine production parity)
 
-The Docker engine is being extended from a local-dev MVP into a production-grade
-runtime. Work lands in phases behind the existing engine contract; the native
-path and the one-keystroke local-dev Docker flow (`pwd.yml`) are unchanged. A
-release (v1.11.0) will be cut once the phases below are complete and the Docker
-integration CI job is promoted to a hard release gate.
+The Docker engine graduates from a local-dev MVP into a production-grade runtime.
+Every change lands behind the existing engine contract: the native install path
+and the one-keystroke local-dev Docker flow (`pwd.yml`) are unchanged and remain
+the defaults. This release adds a distinct Docker production mode (wrapping
+upstream `compose.yaml`), immutable upstream pins, durable off-volume backups
+with off-VM/object-storage shipment and restore rehearsal, durable custom-app
+images, Traefik production HTTPS, and promotes the containerized Docker
+integration CI leg to a hard release gate.
 
 ### Added (foundation)
 
