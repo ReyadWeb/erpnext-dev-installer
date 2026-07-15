@@ -1,0 +1,169 @@
+name: Compatibility report
+description: Report an install/validation result on a provider, OS, or engine.
+title: "[compat]: "
+labels: ["type: testing", "area: docs", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share a **field validation** result (native or Docker). Prefer Discussions
+        → [Show and tell](https://github.com/ReyadWeb/erpnext-dev-toolkit/discussions/new?category=show-and-tell)
+        for open narrative; use this form when you want a tracked, structured record.
+
+        **Remove all secrets** before submitting.
+
+  - type: input
+    id: provider
+    attributes:
+      label: Provider / hypervisor
+      description: e.g. Hetzner, DigitalOcean, AWS, Azure, GCP, Linode, Vultr, Proxmox, KVM, VMware, Hyper-V, local laptop.
+      placeholder: "Hetzner Cloud"
+    validations:
+      required: true
+
+  - type: input
+    id: vm_type
+    attributes:
+      label: VM type / size
+      placeholder: "cx22 / 2 vCPU / 4 GB"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Ubuntu 24.04
+        - Ubuntu 26.04
+        - Debian 13
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: arch
+    attributes:
+      label: Architecture
+      placeholder: "amd64 / arm64"
+      value: "amd64"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Deployment engine
+      options:
+        - Native
+        - Docker development (pwd.yml)
+        - Docker production (compose.yaml)
+    validations:
+      required: true
+
+  - type: input
+    id: toolkit_version
+    attributes:
+      label: Toolkit version
+      placeholder: "v1.12.0"
+    validations:
+      required: true
+
+  - type: input
+    id: erpnext_version
+    attributes:
+      label: ERPNext / Frappe version (if known)
+      placeholder: "ERPNext v16.x"
+
+  - type: textarea
+    id: apps
+    attributes:
+      label: Apps installed (optional)
+      placeholder: "erpnext + hrms, or none beyond defaults"
+
+  - type: dropdown
+    id: install_result
+    attributes:
+      label: Install result
+      options:
+        - Pass
+        - Pass with warnings
+        - Fail
+        - Not attempted
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backup_result
+    attributes:
+      label: Backup / backup-verify result
+      options:
+        - Pass
+        - Pass with warnings
+        - Fail
+        - Not attempted
+    validations:
+      required: true
+
+  - type: dropdown
+    id: restore_result
+    attributes:
+      label: Restore / restore-rehearsal result
+      options:
+        - Pass
+        - Pass with warnings
+        - Fail
+        - Not attempted
+    validations:
+      required: true
+
+  - type: dropdown
+    id: https_result
+    attributes:
+      label: HTTPS result
+      options:
+        - Pass
+        - Pass with warnings
+        - Fail
+        - Not attempted / HTTP only
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reboot_result
+    attributes:
+      label: Reboot persistence
+      description: After reboot, does the site still come up as expected?
+      options:
+        - Pass
+        - Fail
+        - Not attempted
+    validations:
+      required: true
+
+  - type: dropdown
+    id: final_qa
+    attributes:
+      label: Final QA / go-live checklist
+      options:
+        - Pass
+        - Partial
+        - Fail
+        - Not attempted
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / caveats
+      description: Firewall gotchas, DNS delay, disk size, etc. Redacted only.
+      render: markdown
+
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Secrets confirmation
+      options:
+        - label: I confirm that I removed passwords, API keys, private keys, database credentials, tokens, and other secrets from this report.
+          required: true

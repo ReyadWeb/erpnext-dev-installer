@@ -1,0 +1,53 @@
+name: Documentation improvement
+description: Typos, clarity, missing steps, or diagram fixes — great first contribution.
+title: "[docs]: "
+labels: ["type: documentation", "area: docs", "good first issue", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you — docs PRs are welcome and often the best first contribution.
+        See [CONTRIBUTING.md](https://github.com/ReyadWeb/erpnext-dev-toolkit/blob/main/CONTRIBUTING.md).
+
+  - type: dropdown
+    id: doc_area
+    attributes:
+      label: Which docs?
+      options:
+        - README.md
+        - CONTRIBUTING.md / SUPPORT.md
+        - TESTING.md / VALIDATION.md
+        - SECURITY.md
+        - ROADMAP.md / DEPLOYMENT-ARCHITECTURE.md
+        - Help text / CLI messages
+        - Diagrams / assets
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is unclear or wrong?
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested improvement
+      description: Optional rewrite, link, or screenshot idea (no secrets).
+
+  - type: input
+    id: page_url
+    attributes:
+      label: Link or path
+      placeholder: "https://github.com/ReyadWeb/erpnext-dev-toolkit/blob/main/README.md#..."
+
+  - type: checkboxes
+    id: willing
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to open a PR for this change
+        - label: I only want to report it for a maintainer/volunteer

@@ -48,7 +48,12 @@ lib/update.sh
 .github/ISSUE_TEMPLATE/config.yml
 .github/ISSUE_TEMPLATE/bug-report.yml
 .github/ISSUE_TEMPLATE/feature-request.yml
+.github/ISSUE_TEMPLATE/compatibility-report.yml
+.github/ISSUE_TEMPLATE/docs-improvement.yml
 docs/erpnext-dev-signing-key.asc
+docs/DEVELOPMENT.md
+docs/RELEASE-PROCESS.md
+docs/COMMUNITY-BOARD.md
 docs/assets/erpnext_dev_toolkit_banner.png
 docs/assets/multi_engine_architecture_diagram.png
 docs/assets/toolkit_lifecycle_flow_diagram.png

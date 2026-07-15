@@ -7,8 +7,10 @@ fixes are as valuable as deep engine work.
 This repository is **`ReyadWeb/erpnext-dev-toolkit`**. The day-to-day CLI remains
 `erpnext-dev`; only the GitHub repo name was rebranded.
 
-Please read [`SUPPORT.md`](SUPPORT.md) so bugs, questions, and security reports go
-to the right channel.
+For workflow, PR expectations, and contribution types, start with this file.
+For day-to-day local setup and validation details, see
+[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md). Maintainers cutting tags should
+read [`docs/RELEASE-PROCESS.md`](docs/RELEASE-PROCESS.md).
 
 ---
 

@@ -882,6 +882,9 @@ whether you deploy natively or with Docker.
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute (docs, tests, engines) |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Community standards |
 | [`SUPPORT.md`](SUPPORT.md) | Where to ask for help vs file bugs |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Local development and validation |
+| [`docs/RELEASE-PROCESS.md`](docs/RELEASE-PROCESS.md) | How maintainers cut signed releases |
+| [`docs/COMMUNITY-BOARD.md`](docs/COMMUNITY-BOARD.md) | Community project board setup + seed issues |
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history and release notes |
 | [`SECURITY.md`](SECURITY.md) | Threat model, credential handling, release signing |
 | [`TESTING.md`](TESTING.md) | Validation scenarios and QA commands |

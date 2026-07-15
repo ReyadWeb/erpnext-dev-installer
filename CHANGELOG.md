@@ -9,6 +9,11 @@
   + security/release paths).
 - **SECURITY.md** now prefers GitHub private vulnerability reporting and points
   reporters away from public Issues for vulns.
+- **Phase 2 contributor docs + forms:** compatibility-report and documentation-
+  improvement Issue Forms; `docs/DEVELOPMENT.md` (local gate and layout);
+  `docs/RELEASE-PROCESS.md` (tag → validate → integrate → sign/publish);
+  `docs/COMMUNITY-BOARD.md` (how to create/link the community project board;
+  seed `good first issue` list).
 
 ## v1.12.0 - Rebrand to erpnext-dev-toolkit + multi-engine parity, UX, docs, and security polish
 

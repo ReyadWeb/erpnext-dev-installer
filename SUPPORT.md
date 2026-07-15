@@ -14,11 +14,12 @@ private support channel** at this time.
 | --- | --- |
 | **Bug** — something does not behave as documented | [GitHub Issues](https://github.com/ReyadWeb/erpnext-dev-toolkit/issues/new/choose) (Bug report form) |
 | **Feature** — you want behavior that does not exist yet | [GitHub Issues](https://github.com/ReyadWeb/erpnext-dev-toolkit/issues/new/choose) (Feature request form) |
+| **Compatibility / field validation result** | [Compatibility report](https://github.com/ReyadWeb/erpnext-dev-toolkit/issues/new?template=compatibility-report.yml) form (or Discussions → Show and tell) |
+| **Docs typo / clarity** | [Documentation improvement](https://github.com/ReyadWeb/erpnext-dev-toolkit/issues/new?template=docs-improvement.yml) form (or a small PR) |
 | **Question** — how do I use X? | [GitHub Discussions → Q&A](https://github.com/ReyadWeb/erpnext-dev-toolkit/discussions/new?category=q-a) |
 | **Idea / architecture** — open-ended design talk | [Discussions → Ideas](https://github.com/ReyadWeb/erpnext-dev-toolkit/discussions/new?category=ideas) |
 | **Installation experience** — “it worked on provider Y” | [Discussions → Show and tell](https://github.com/ReyadWeb/erpnext-dev-toolkit/discussions/new?category=show-and-tell) (prefix the title with `Installation report:`) |
 | **Security vulnerability** | **Private only** — see [`SECURITY.md`](SECURITY.md). Do **not** open a public issue. |
-| **Docs typo / clarity** | Issue (or a small PR — see [`CONTRIBUTING.md`](CONTRIBUTING.md)) |
 
 ---
 
