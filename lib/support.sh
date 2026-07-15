@@ -760,7 +760,7 @@ support_bundle_audit_archive() {
   fi
 
   if tar -xzf "$archive" -C "$tmpdir" 2>"${tmpdir}/tar-extract.stderr"; then
-    if grep -RInE '(-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|Bearer[[:space:]]+[A-Za-z0-9._~+/=-]+|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|sk_(live|test)_[A-Za-z0-9]{10,}|AKIA[0-9A-Z]{16}|aws_secret_access_key[[:space:]]*=[[:space:]]*[^[:space:]"'"'"';]+|("?(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|authorization|cookie|db_password|admin_password|mysql_password|redis_password)"?[[:space:]]*[:=][[:space:]]*[^[:space:],;]"'"'"'`]+))'       --exclude='archive-list.txt'       --exclude='audit-hits.txt'       "$tmpdir" > "$hit_file" 2>/dev/null; then
+    if grep -RInE '(-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|Bearer[[:space:]]+[A-Za-z0-9._~+/=-]+|gh[posur]_[A-Za-z0-9._-]{36,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|sk_(live|test)_[A-Za-z0-9]{10,}|AKIA[0-9A-Z]{16}|aws_secret_access_key[[:space:]]*=[[:space:]]*[^[:space:]"'"'"';]+|("?(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|authorization|cookie|db_password|admin_password|mysql_password|redis_password)"?[[:space:]]*[:=][[:space:]]*[^[:space:],;]"'"'"'`]+))'       --exclude='archive-list.txt'       --exclude='audit-hits.txt'       "$tmpdir" > "$hit_file" 2>/dev/null; then
       status_line "Secret pattern scan" "FAIL" "possible unredacted secret pattern found"
       sed -n '1,80p' "$hit_file"
       rc=1

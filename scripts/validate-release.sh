@@ -181,6 +181,10 @@ kw_tok="tok""en"
 {
   printf '%s=hunter2hunter2\n' "$kw_pw"
   printf '%s=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\n' "$kw_tok"
+  # New stateless GitHub App / Actions token format: ghs_-prefixed JWT (~520
+  # chars, contains dots). The scanner must catch this too, not just the classic
+  # opaque ghp_ shape. See github.blog/changelog 2026-05-15 (per-request override).
+  printf '%s=ghs_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbb.cccccccccccccccccccc\n' "$kw_tok"
 } > "${bad_root}/notes.txt"
 : > "${bad_root}/database.sql.gz"
 tar -C "$bad_dir" -czf "$bad_archive" erpnext-dev-support-bundle-badfixture
