@@ -1,5 +1,15 @@
 ## Unreleased
 
+### Security
+
+- **Support-bundle secret scanner now detects the new stateless GitHub token
+  format.** GitHub App installation / Actions tokens are moving to a `ghs_`-prefixed
+  JWT (~520 chars, containing dots); the scanner previously only matched the
+  classic opaque `ghp_` shape. The pattern is broadened to `gh[posur]_[A-Za-z0-9._-]{36,}`
+  (covers `ghp_`/`ghs_`/`gho_`/`ghu_`/`ghr_`), and the release negative fixture
+  now asserts a `ghs_` JWT sample is caught. The toolkit itself does not mint or
+  parse GitHub App tokens, so nothing else was affected by the format change.
+
 ### Fixed / improved (guided setup UX)
 
 - **Deployment engine no longer prompted twice.** The engine picker now runs once
