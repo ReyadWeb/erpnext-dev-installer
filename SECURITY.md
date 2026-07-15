@@ -102,7 +102,7 @@ v1.1.75 extracts shared helpers into `lib/common.sh` and adds `scripts/run-shell
 
 ## Scope
 
-This document describes the security posture, assumptions, and improvement plan for the ERPNext Developer Toolkit. The toolkit is a Bash-based installer and operations toolkit for ERPNext/Frappe on Ubuntu 24.04 and Ubuntu 26.04 VMs.
+This document describes the security posture, assumptions, and improvement plan for the ERPNext Developer Toolkit. The toolkit is a Bash-based installation and operations toolkit for ERPNext/Frappe on Ubuntu 24.04 / 26.04 LTS and Debian 13, deployed natively or via Docker.
 
 The current validated production path includes:
 
@@ -190,7 +190,7 @@ Once `GPG_PRIVATE_KEY` is available to the `publish` job, `release.yml` signs `S
 ```bash
 # Download the artifacts from the release (tag-pinned):
 VERSION="vX.Y.Z"
-base="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+base="https://github.com/ReyadWeb/erpnext-dev-toolkit/releases/download/${VERSION}"
 curl -fsSLO "${base}/erpnext-dev.sh"
 curl -fsSLO "${base}/SHA256SUMS"
 curl -fsSLO "${base}/SHA256SUMS.asc"
@@ -242,6 +242,26 @@ sudo erpnext-dev credentials-delete
 ```
 
 The toolkit tees its stdout to a log file. To avoid persisting secrets there, `credentials-show` writes the credential block directly to the controlling terminal (`/dev/tty`), never to the logged stream; in a non-interactive session with no terminal it refuses to print and points to the file instead. Generated passwords are otherwise only written to the mode-`600` credentials file and passed to `bench`/`mariadb` as arguments/stdin (no `set -x`), so they do not reach the install log.
+
+### Backup transport config keeps secrets out of the toolkit's files
+
+Off-VM and object-storage backups deliberately keep credentials **outside** the
+toolkit's own config. The toolkit persists only non-secret coordinates, each in a
+root-owned, mode-`600` file under `/etc/erpnext-dev/`:
+
+- Off-VM (rsync/SSH): `off-vm-backup.env` / `.state` store the target
+  `user@host:/path` and the SSH **identity path** — authentication is the SSH
+  key, managed by you, not a stored password.
+- Object storage (rclone): `object-backup.env` / `.state` (native) and
+  `docker-object-backup.env` / `.state` (Docker) store only the rclone **remote
+  name**, bucket, and prefix. The actual cloud credentials (access keys, tokens)
+  live in the standard rclone config (`rclone config`, typically
+  `~/.config/rclone/rclone.conf` for the running user), which the toolkit never
+  reads, copies, or logs.
+
+This means the object-storage config files are safe to inspect and are not
+long-term secret storage. Rotate cloud keys in rclone, and protect the rclone
+config with normal filesystem permissions.
 
 ### P1: Redacted support bundles are defensive, not perfect
 
@@ -313,7 +333,7 @@ pinned toolchain. Full detail: [`ROADMAP.md`](ROADMAP.md#external-security-revie
 
 ```bash
 VERSION="v1.8.2"
-BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+BASE="https://github.com/ReyadWeb/erpnext-dev-toolkit/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz" && cd "erpnext-dev-${VERSION}"
 sha256sum -c SHA256SUMS

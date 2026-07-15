@@ -29,7 +29,7 @@ Key-Type: EDDSA
 Key-Curve: Ed25519
 Key-Usage: sign
 Name-Real: ERPNext Dev Toolkit Test Signer
-Name-Email: test-signer@erpnext-dev-installer.local
+Name-Email: test-signer@erpnext-dev-toolkit.local
 Expire-Date: 0
 %no-protection
 %commit
@@ -38,7 +38,7 @@ EOF
 GNUPGHOME="$TEST_GNUPG_HOME" gpg --batch --generate-key "${TEST_GNUPG_HOME}/batch.genkey" >/dev/null 2>&1 \
   || fail "could not generate ephemeral test signing key"
 
-TEST_SIGNER="test-signer@erpnext-dev-installer.local"
+TEST_SIGNER="test-signer@erpnext-dev-toolkit.local"
 TEST_PUBKEY="${work}/test-signing-key.asc"
 GNUPGHOME="$TEST_GNUPG_HOME" gpg --armor --export "$TEST_SIGNER" >"$TEST_PUBKEY"
 TEST_FINGERPRINT="$(GNUPGHOME="$TEST_GNUPG_HOME" gpg --with-colons --fingerprint "$TEST_SIGNER" \

@@ -291,7 +291,7 @@ if find . -maxdepth 2 -type f -name 'GITHUB-UPDATE-v*.md' | grep -q .; then
 fi
 pass "no GITHUB-UPDATE-v*.md files"
 
-if grep -RInE '(password|secret|token|private[-_ ]?key)=' \
+if grep -RInE '(password|secret|token|private[-_ ]?key|api[-_]?key|access[-_]?key|secret[-_]?access[-_]?key|client[-_]?secret|aws[-_]?secret)=' \
   --exclude-dir=.git \
   --exclude-dir=lib \
   --exclude='*.zip' \

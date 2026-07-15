@@ -37,8 +37,8 @@ its evidence, then tear it down before Phase B, since both bind `:80/:443`.
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
-VERSION="v1.11.0"
-BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+VERSION="v1.12.0"
+BASE="https://github.com/ReyadWeb/erpnext-dev-toolkit/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz" && cd "erpnext-dev-${VERSION}"
 sha256sum -c SHA256SUMS

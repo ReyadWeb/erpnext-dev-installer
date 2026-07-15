@@ -41,7 +41,7 @@ mimicking production. Install from the signed bundle:
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
 VERSION="v1.9.0"
-BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+BASE="https://github.com/ReyadWeb/erpnext-dev-toolkit/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz" && cd "erpnext-dev-${VERSION}"
 sha256sum -c SHA256SUMS
@@ -484,7 +484,7 @@ scripts/validate-release.sh
 
 printf '10\n11\n\nb\nq\n' | sudo ./erpnext-dev.sh production-ops-wizard
 
-unzip -l erpnext-dev-installer-v1.1.73.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+unzip -l erpnext-dev-toolkit-v1.1.73.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
 ```
 
 Expected results:
@@ -517,7 +517,7 @@ grep -n "v1.1.72" CHANGELOG.md TESTING.md ROADMAP.md PRODUCTION-VALIDATION.md
 grep -n "validate-release.sh" README.md SECURITY.md RELIABILITY-PLAN.md TESTING.md CHANGELOG.md
 grep -n "Release validation" .github/workflows/ci.yml
 
-unzip -l erpnext-dev-installer-v1.1.72.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+unzip -l erpnext-dev-toolkit-v1.1.72.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
 ```
 
 Expected results:
@@ -551,7 +551,7 @@ grep -n 'VERSION="v1.1.71"' README.md SECURITY.md
 
 printf '10\n10\n\nb\nq\n' | sudo ./erpnext-dev.sh production-ops-wizard
 
-unzip -l erpnext-dev-installer-v1.1.71.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+unzip -l erpnext-dev-toolkit-v1.1.71.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
 ```
 
 Expected:
@@ -588,7 +588,7 @@ ls -1 SECURITY.md RELIABILITY-PLAN.md SHA256SUMS
 grep -n "v1.1.70" CHANGELOG.md TESTING.md ROADMAP.md PRODUCTION-VALIDATION.md
 grep -n "sha256sum -c SHA256SUMS" README.md SECURITY.md TESTING.md
 grep -n 'VERSION="v1.1.70"' README.md SECURITY.md
-unzip -l erpnext-dev-installer-v1.1.70.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+unzip -l erpnext-dev-toolkit-v1.1.70.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
 ```
 
 Expected:
@@ -627,7 +627,7 @@ grep -n "Reliability roadmap" RELIABILITY-PLAN.md
 grep -n "SECURITY.md" README.md CHANGELOG.md
 grep -n "RELIABILITY-PLAN.md" README.md CHANGELOG.md
 
-unzip -l erpnext-dev-installer-v1.1.69.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+unzip -l erpnext-dev-toolkit-v1.1.69.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
 ```
 
 Expected:
@@ -663,7 +663,7 @@ bash -n erpnext-dev.sh
 grep -n "v1.1.68" CHANGELOG.md TESTING.md ROADMAP.md PRODUCTION-VALIDATION.md
 grep -n "20260709-071549" README.md PRODUCTION-VALIDATION.md CHANGELOG.md
 grep -n "ERPNext Production Operations > Support and Diagnostics" README.md TESTING.md PRODUCTION-VALIDATION.md CHANGELOG.md
-unzip -l erpnext-dev-installer-v1.1.68.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+unzip -l erpnext-dev-toolkit-v1.1.68.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
 ```
 
 Expected:
@@ -700,7 +700,7 @@ bash -n erpnext-dev.sh
 printf 'q\n' | sudo ./erpnext-dev.sh production-ops-wizard
 printf '6\nb\nq\n' | sudo ./erpnext-dev.sh production-ops-wizard
 printf '10\nb\nq\n' | sudo ./erpnext-dev.sh production-ops-wizard
-unzip -l erpnext-dev-installer-v1.1.67.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+unzip -l erpnext-dev-toolkit-v1.1.67.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
 ```
 
 Expected:
@@ -745,7 +745,7 @@ bash -n erpnext-dev.sh
 ./erpnext-dev.sh --help | grep -n "production-ops-dashboard"
 printf 'q\n' | sudo ./erpnext-dev.sh production-ops-wizard
 printf 'q\n' | sudo ./erpnext-dev.sh operations-dashboard
-unzip -l erpnext-dev-installer-v1.1.66.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+unzip -l erpnext-dev-toolkit-v1.1.66.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
 ```
 
 Expected:
@@ -788,7 +788,7 @@ bash -n erpnext-dev.sh
 grep -n "v1.1.65" CHANGELOG.md TESTING.md ROADMAP.md PRODUCTION-VALIDATION.md
 grep -n "Validated production state" README.md
 grep -n "erp-flowmaya-v1.1.64-final-validated-20260709" README.md PRODUCTION-VALIDATION.md CHANGELOG.md
-unzip -l erpnext-dev-installer-v1.1.65.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+unzip -l erpnext-dev-toolkit-v1.1.65.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
 ```
 
 Expected:
@@ -847,7 +847,7 @@ bash -n erpnext-dev.sh
 ./erpnext-dev.sh --help | grep -n "cloudflare-checklist"
 printf 'q
 ' | sudo ./erpnext-dev.sh final-qa
-unzip -l erpnext-dev-installer-v1.1.64.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+unzip -l erpnext-dev-toolkit-v1.1.64.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
 ```
 
 Expected:
@@ -893,7 +893,7 @@ printf 'q
 ' | sudo ./erpnext-dev.sh health-monitoring-wizard
 printf 'q
 ' | sudo ./erpnext-dev.sh final-qa
-unzip -l erpnext-dev-installer-v1.1.63.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+unzip -l erpnext-dev-toolkit-v1.1.63.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
 ```
 
 Expected:
@@ -935,7 +935,7 @@ bash -n erpnext-dev.sh
 ./erpnext-dev.sh --help | grep -n "restore-rehearsal-report"
 grep -n "Validated production state" README.md
 grep -n "v1.1.62" CHANGELOG.md TESTING.md ROADMAP.md PRODUCTION-VALIDATION.md
-unzip -l erpnext-dev-installer-v1.1.62.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
+unzip -l erpnext-dev-toolkit-v1.1.62.zip | grep "GITHUB-UPDATE" && echo "BAD" || echo "OK"
 ```
 
 Expected:
@@ -1878,7 +1878,7 @@ The lock file is private (dir mode 0700, symlink refused): root uses /run/lock/e
 The release package should contain the canonical toolkit file `erpnext-dev.sh`.
 
 ```bash
-unzip -l erpnext-dev-installer-v1.1.32.zip | grep "erpnext-dev.sh"
+unzip -l erpnext-dev-toolkit-v1.1.32.zip | grep "erpnext-dev.sh"
 ```
 
 Expected:
@@ -1893,8 +1893,8 @@ Run on a VM or disposable test machine:
 
 ```bash
 VERSION="v1.1.70"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-toolkit/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-toolkit/${VERSION}/SHA256SUMS"
 sha256sum -c SHA256SUMS
 chmod +x erpnext-dev.sh
 sudo ./erpnext-dev.sh install-cli
@@ -1925,8 +1925,8 @@ Run inside a fresh Ubuntu 24.04 or 26.04 LTS VM (the only supported targets):
 ```bash
 sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
 VERSION="v1.1.70"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-toolkit/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-toolkit/${VERSION}/SHA256SUMS"
 sha256sum -c SHA256SUMS
 chmod +x erpnext-dev.sh
 sudo ./erpnext-dev.sh install-preflight
@@ -1946,8 +1946,8 @@ Run inside a fresh local VM:
 ```bash
 sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y curl ca-certificates
 VERSION="v1.1.70"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"
-curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-toolkit/${VERSION}/erpnext-dev.sh"
+curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-toolkit/${VERSION}/SHA256SUMS"
 sha256sum -c SHA256SUMS
 chmod +x erpnext-dev.sh
 sudo ./erpnext-dev.sh local-dev-quickstart

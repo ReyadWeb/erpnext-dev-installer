@@ -1,12 +1,30 @@
-## Unreleased - Multi-engine parity toward combined go-live
+## v1.12.0 - Rebrand to erpnext-dev-toolkit + multi-engine parity, UX, docs, and security polish
 
-Post-v1.11.0 work that closes the remaining single-node (Tier A) gaps so a
-combined native + Docker-production go-live validation exercises both engines
-through the same lifecycle contract. The native path and the default local-dev
-Docker flow are unchanged.
+Renames the project to **erpnext-dev-toolkit** to match the product name, closes
+the remaining single-node (Tier A) engine-contract gaps so a combined native +
+Docker-production go-live exercises both engines through the same lifecycle
+contract, and adds a UX/wording pass, a documentation redesign with new
+illustrations, and security hardening. No runtime identifiers changed: the
+`erpnext-dev` command, `/opt/erpnext-dev`, `/etc/erpnext-dev`, `/var/log/erpnext-dev`,
+and all service/timer names are unchanged, so existing installs keep working and
+no migration is required. GitHub's repository-rename redirects keep prior release
+URLs and tags resolving.
 
 ### Changed
 
+- **Repository renamed to `ReyadWeb/erpnext-dev-toolkit`.** All in-repo URLs
+  (release download bases, `raw.githubusercontent.com` bootstrap one-liners, and
+  the self-update source `TOOLKIT_RELEASE_REPO` / `TOOLKIT_RELEASE_GITHUB` in
+  `lib/security.sh`) now point at the new name. The `erpnext-dev` CLI and all
+  on-disk paths are intentionally unchanged.
+- **Documentation redesign.** Refreshed the README banner and added new
+  illustrations: a "one CLI, two deployment engines" architecture diagram and a
+  "fresh host to validated go-live" lifecycle diagram (in `docs/assets/`), plus a
+  mermaid backup-chain diagram. The stale installer-era banner was removed.
+- **Clearer, Debian-inclusive wording.** The script header and SECURITY.md now
+  state supported hosts as "Ubuntu 24.04 / 26.04 LTS and Debian 13 (native or
+  Docker)", and user-facing prose refers to the product as the toolkit rather
+  than an installer.
 - **Docker production CI is now a hard release gate (P8 complete).** The
   `docker-production-smoke` integration leg (production `compose.yaml`: explicit
   site creation, HTTP exposure guardrail, durable backup + verify, restore
@@ -42,6 +60,21 @@ Docker flow are unchanged.
   off-site shipment, Docker production `compose.yaml` + Traefik HTTPS + restore
   rehearsal + exposure guardrail, cross-engine contract parity, an evidence
   bundle, and a go-live sign-off table. Added to `RELEASE-MANIFEST.txt`.
+- **README "Additional resources" + closing note.** Links to the official
+  ERPNext and Frappe Framework docs, Awesome Frappe, and the upstream GitHub
+  repositories, plus a short closing note for readers.
+
+### Security
+
+- **Backup transport credential guidance (SECURITY.md).** Documents that off-VM
+  and object-storage backups keep secrets out of the toolkit's own config: only
+  non-secret coordinates are persisted in root-owned mode-`600` files, while SSH
+  keys and rclone credentials remain in their standard stores. The toolkit never
+  reads, copies, or logs the rclone config.
+- **Stronger release secret scan.** `scripts/validate-release.sh` now also flags
+  `api_key` / `access_key` / `secret_access_key` / `client_secret` / `aws_secret`
+  style literal assignments in the packaged tree.
+- Confirmed all GitHub Actions remain pinned by commit SHA.
 
 ## v1.11.0 - Docker production runtime (multi-engine production parity)
 

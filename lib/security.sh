@@ -5,7 +5,7 @@
 [[ -n "${_ERPNEXT_DEV_SECURITY_LOADED:-}" ]] && return 0
 _ERPNEXT_DEV_SECURITY_LOADED=1
 
-TOOLKIT_RELEASE_REPO="${TOOLKIT_RELEASE_REPO:-https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer}"
+TOOLKIT_RELEASE_REPO="${TOOLKIT_RELEASE_REPO:-https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-toolkit}"
 
 # Fingerprint of the maintainer release-signing key. Trust anchor for verify-signature
 # and for stable tag-channel update-toolkit (must match VALIDSIG from bundled pubkey).
@@ -228,8 +228,8 @@ verify_toolkit_integrity() {
   echo "Manual verified download:"
   echo "  VERSION=\"v${SCRIPT_VERSION}\""
   echo '  workdir="$(mktemp -d /tmp/erpnext-dev-update.XXXXXX)"; cd "$workdir" || exit 1'
-  echo '  curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/erpnext-dev.sh"'
-  echo '  curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/${VERSION}/SHA256SUMS"'
+  echo '  curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-toolkit/${VERSION}/erpnext-dev.sh"'
+  echo '  curl -fsSLO "https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-toolkit/${VERSION}/SHA256SUMS"'
   echo "  sha256sum -c SHA256SUMS"
   echo "  sudo mkdir -p /opt/erpnext-dev"
   echo "  sudo install -m 0755 erpnext-dev.sh /opt/erpnext-dev/erpnext-dev.sh"
@@ -252,7 +252,7 @@ verify_toolkit_integrity() {
 # rename, so a crash mid-update can never leave a half-written live tree, and the
 # previous release stays on disk for rollback.
 
-TOOLKIT_RELEASE_GITHUB="${TOOLKIT_RELEASE_GITHUB:-https://github.com/ReyadWeb/erpnext-dev-installer}"
+TOOLKIT_RELEASE_GITHUB="${TOOLKIT_RELEASE_GITHUB:-https://github.com/ReyadWeb/erpnext-dev-toolkit}"
 TOOLKIT_RELEASES_KEEP="${TOOLKIT_RELEASES_KEEP:-3}"
 
 toolkit_stable_root() {

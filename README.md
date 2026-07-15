@@ -1,9 +1,9 @@
 # ERPNext Developer Toolkit
 
-![ERPNext Toolkit Banner](docs/assets/erp_installer_readme_banner.png)
+![ERPNext Developer Toolkit](docs/assets/erpnext_dev_toolkit_banner.png)
 
-A guided installer and operations toolkit for **ERPNext / Frappe** on a fresh
-**Ubuntu 24.04 / 26.04 LTS or Debian 13** VM. One command installs the full stack; a single
+A guided installation and operations toolkit for **ERPNext / Frappe** on a fresh
+**Ubuntu 24.04 / 26.04 LTS or Debian 13** host (native or Docker). One command installs the full stack; a single
 `erpnext-dev` command then handles day-to-day operations: HTTPS, firewall
 hardening, scheduled and off-VM backups, restore rehearsals, health checks,
 optional apps, guarded upgrades, diagnostics, and redacted support bundles.
@@ -18,7 +18,7 @@ It supports two setup paths:
 > the path to **9.8+** are in [`ROADMAP.md`](ROADMAP.md). This README focuses on
 > installation, operations, and usage.
 
-**Current release:** v1.11.0 · **Readiness:** ~9.5/10 for single-admin local/public VM
+**Current release:** v1.12.0 · **Readiness:** ~9.5/10 for single-admin local/public VM
 (after VPS production validation). v1.10.0 turns the toolkit into a **multi-engine**
 platform: choose a **native** VM install (default, unchanged) or a **Docker**
 engine that wraps the official `frappe_docker`, behind the same `erpnext-dev` CLI.
@@ -31,6 +31,8 @@ engine that wraps the official `frappe_docker`, behind the same `erpnext-dev` CL
 > reaches general availability. Debian 13 uses the same Debian-family apt/systemd
 > install path (GitHub provides no Debian runner, so it is field-validated rather
 > than gated in CI).
+
+![From fresh host to validated go-live](docs/assets/toolkit_lifecycle_flow_diagram.png)
 
 ---
 
@@ -71,7 +73,7 @@ apps and a first backup, and opens the main menu. Access output shows three
 URLs — a **Local URL** (`http://localhost:PORT` on this machine), a **Network
 URL** (`http://VM_IP:PORT` from your host/LAN), and a **Friendly URL**
 (`http://SITE:PORT`, after you map the domain on your host). If the chosen
-published port is already in use, the installer prompts for a free one (or
+published port is already in use, the toolkit prompts for a free one (or
 auto-picks the next free port under `-y`), persists it, and reuses it for
 `status`/`logs`/`verify-access`. Trusted local HTTPS for the Docker engine
 arrives with the reverse-proxy phase (v1.11.0); until then the stack serves
@@ -114,8 +116,8 @@ over HTTP on the published port.
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar && \
-VERSION="v1.11.0" && \
-BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}" && \
+VERSION="v1.12.0" && \
+BASE="https://github.com/ReyadWeb/erpnext-dev-toolkit/releases/download/${VERSION}" && \
 cd ~ && \
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz" && \
 tar -xzf "erpnext-dev-${VERSION}.tar.gz" && \
@@ -133,8 +135,8 @@ Or install step by step ([details below](#install-and-verify)):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
-VERSION="v1.11.0"
-BASE="https://github.com/ReyadWeb/erpnext-dev-installer/releases/download/${VERSION}"
+VERSION="v1.12.0"
+BASE="https://github.com/ReyadWeb/erpnext-dev-toolkit/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz"
 cd "erpnext-dev-${VERSION}"
@@ -223,7 +225,7 @@ the pinned fingerprint is in [`SECURITY.md`](SECURITY.md).
 
 ## Requirements and preflight
 
-The installer runs a **blocking preflight** so unsafe environments never reach
+The toolkit runs a **blocking preflight** so unsafe environments never reach
 package installation, bench creation, or database changes.
 
 ```bash
@@ -241,7 +243,7 @@ sudo erpnext-dev install-preflight
 | `/tmp` free space below 4 GB | blocks |
 | RAM 4096–8191 MB, CPU 2–3 cores, or disk 30–59 GB | warning |
 
-Recommended: 4 vCPU, 8 GB RAM, 60–80 GB SSD. If a VM is unsafe, the installer
+Recommended: 4 vCPU, 8 GB RAM, 60–80 GB SSD. If a VM is unsafe, the toolkit
 prints a red `INSTALL BLOCKED` summary explaining what to fix. An expert-only
 override (`ERPNEXT_ALLOW_UNSAFE_INSTALL=true`) exists for disposable test VMs and
 should not be used otherwise.
@@ -439,7 +441,7 @@ sudo erpnext-dev install-cli    # or: repair-cli
 
 ## Credentials
 
-The installer saves the generated ERPNext Administrator password and database
+The toolkit saves the generated ERPNext Administrator password and database
 credentials on the VM. The safe overview does **not** print passwords:
 
 ```bash
@@ -458,6 +460,19 @@ bundles, and logs — never paste credentials into tickets, issues, or screensho
 ---
 
 ## Backups and restore safety
+
+The backup chain moves a verified copy of your data progressively further from
+the VM, so a disk, VM, or account loss never means data loss:
+
+```mermaid
+graph LR
+  site["ERPNext site"] --> local["Local backup + verify"]
+  local --> offvm["Off-VM (rsync/SSH)"]
+  local --> object["Object storage (rclone)"]
+  local --> rehearsal["Restore rehearsal"]
+  offvm --> remoteverify["Remote checksum verify"]
+  object --> remoteverify
+```
 
 ```bash
 sudo erpnext-dev backup-files      # database + files backup
@@ -841,6 +856,14 @@ manual review.
 
 ## Architecture diagrams
 
+### One CLI, two deployment engines
+
+![One CLI, two deployment engines](docs/assets/multi_engine_architecture_diagram.png)
+
+The same `erpnext-dev` command drives both engines through one lifecycle
+contract, so install, HTTPS, backup, restore, and diagnostics work the same way
+whether you deploy natively or with Docker.
+
 ### Production backup architecture
 
 ![Production Backup Architecture](docs/assets/production_backup_architecture_diagram.png)
@@ -867,9 +890,41 @@ manual review.
 
 ## Production caution
 
-This installer can prepare a production-candidate VM. After v1.9.0 the core path is
+This toolkit can prepare a production-candidate VM. After v1.9.0 the core path is
 CI-proven (install, backup/restore, production runtime, signed releases), but
 production readiness still requires **your** validation on a real VPS: domain/DNS,
 cloud firewall, off-VM backup target, restore rehearsal, snapshot policy,
 monitoring expectations, and an update process. Use the checklist in
 [`TESTING.md`](TESTING.md#vps-production-validation-v190) before calling the site live.
+
+---
+
+## Additional resources
+
+Learn more about ERPNext and the Frappe Framework that power this stack:
+
+- ERPNext Documentation: https://docs.erpnext.com
+- Frappe Framework Documentation: https://frappeframework.com/docs
+- Awesome Frappe (curated apps and tools): https://github.com/gavindsouza/awesome-frappe
+- ERPNext on GitHub: https://github.com/frappe/erpnext
+- Frappe Framework on GitHub: https://github.com/frappe/frappe
+
+This toolkit wraps and complements those upstream projects; it does not replace
+them. For application-level questions (accounting, HR, manufacturing, custom apps,
+the Frappe ORM and APIs), the official docs above are the source of truth.
+
+---
+
+## A note to you
+
+Thank you for using the ERPNext Developer Toolkit. It exists to take the friction
+out of standing up ERPNext the right way — safely, repeatably, and with a clear
+path from a fresh VM to a validated, backed-up, HTTPS-secured deployment on either
+a native host or Docker.
+
+If it saved you time, consider starring the repository, opening an issue with
+ideas or rough edges, or sharing it with someone wrestling with their first
+ERPNext install. Every bug report and suggestion makes the next person's setup
+smoother.
+
+Happy building, and may your migrations always be reversible.

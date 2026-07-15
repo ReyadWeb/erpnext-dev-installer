@@ -1254,10 +1254,10 @@ show_setup_effort_guide() {
   printf '  %-28s %-12s %-18s %s\n' "Existing install" "1" "1-3" "Use production-ops-wizard/status"
   ui_box_end
   echo "Verified release public VM entry point:"
-  echo "  VERSION=\"v${SCRIPT_VERSION}\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/erpnext-dev.sh\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/SHA256SUMS\"; sha256sum -c SHA256SUMS; chmod +x erpnext-dev.sh; sudo ./erpnext-dev.sh public-vm-quickstart"
+  echo "  VERSION=\"v${SCRIPT_VERSION}\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-toolkit/\${VERSION}/erpnext-dev.sh\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-toolkit/\${VERSION}/SHA256SUMS\"; sha256sum -c SHA256SUMS; chmod +x erpnext-dev.sh; sudo ./erpnext-dev.sh public-vm-quickstart"
   echo
   echo "Verified release local VM entry point:"
-  echo "  VERSION=\"v${SCRIPT_VERSION}\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/erpnext-dev.sh\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-installer/\${VERSION}/SHA256SUMS\"; sha256sum -c SHA256SUMS; chmod +x erpnext-dev.sh; sudo ./erpnext-dev.sh local-dev-quickstart"
+  echo "  VERSION=\"v${SCRIPT_VERSION}\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-toolkit/\${VERSION}/erpnext-dev.sh\"; curl -fsSLO \"https://raw.githubusercontent.com/ReyadWeb/erpnext-dev-toolkit/\${VERSION}/SHA256SUMS\"; sha256sum -c SHA256SUMS; chmod +x erpnext-dev.sh; sudo ./erpnext-dev.sh local-dev-quickstart"
   echo
   echo "Interpretation: commands are shell commands typed by the user. Inputs are menu choices, confirmations, domain/email, and certificate paste steps."
 }

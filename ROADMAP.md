@@ -1,6 +1,6 @@
 # ERPNext Developer Toolkit — Roadmap
 
-**Current release:** v1.11.0 (July 2026) — Docker **production runtime**: production `compose.yaml` mode, immutable upstream pins, durable off-volume backups with off-VM + object-storage shipment and restore rehearsal, durable custom-app images, Traefik production HTTPS, and a release-gating containerized Docker CI leg — alongside the native VM engine  
+**Current release:** v1.12.0 (July 2026) — **rebrand to erpnext-dev-toolkit** (runtime identifiers unchanged) plus multi-engine parity: single-node engine contract closed (`engine-restore`/`upgrade`/`rollback`/`diagnostics`), native object-storage backups at parity with Docker, Docker production CI promoted to a hard release gate, a combined go-live runbook, a documentation redesign with new illustrations, and security hardening. Builds on v1.11.0's Docker production runtime  
 **External review (July 2026):** enterprise-candidate for single-admin Ubuntu VM ops — **9.4 / 10** (**9.6–9.7** after v1.8.2 + v1.9.0 + v1.9.1 + VPS pass)  
 **Full history:** [`CHANGELOG.md`](CHANGELOG.md) · **Security:** [`SECURITY.md`](SECURITY.md) · **Testing:** [`TESTING.md`](TESTING.md)
 
@@ -39,8 +39,9 @@ record for this dimension.
 |-------|-------|--------|
 | **v1.10.0** | Engine contract + Docker **local-dev MVP**: install/start/stop/status/logs/health/backup/apps via `docker compose`, wrapping upstream `frappe_docker` `pwd.yml`. Hermetic engine-selection test + non-blocking `docker-install-smoke` CI leg. **Native Debian 13 (trixie)** accepted via the shared Debian-family apt/systemd install path; Debian 11/12/13 accepted as Docker hosts. | **implemented** |
 | **v1.11.0** | Docker **production runtime**: production mode wrapping upstream `compose.yaml` + mariadb/redis/image-pin overrides; immutable pins (`frappe_docker` SHA + ERPNext image digest); durable off-volume host-artifact backups + verify + automated restore rehearsal; off-site shipment (checksum-verified rsync off-VM + rclone object storage); durable custom-app images (immutable layered build + recreate deploy); Traefik production HTTPS (Let's Encrypt / Cloudflare Origin CA) + exposure guardrail; containerized Docker integration CI leg promoted to a **hard release gate** (production compose leg runs non-blocking pending promotion). | **implemented** |
-| **v1.12.0** | Debian **native CI coverage** (GitHub provides no Debian runner today, so v1.10.0 native Debian is field-validated) + broader distro/runtime testing. (The Docker **production** compose CI leg was promoted to a hard release gate.) | planned |
-| **v1.13.0** | Community polish: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue/PR templates, docs consolidation. | planned |
+| **v1.12.0** | **Rebrand to erpnext-dev-toolkit** (runtime identifiers unchanged); single-node engine contract closed (`engine-restore`/`upgrade`/`rollback`/`diagnostics`); native object-storage backup parity with Docker; Docker **production** compose CI leg promoted to a **hard release gate**; combined native + Docker-production go-live runbook (`VALIDATION.md`); documentation redesign with new illustrations; security hardening. | **implemented** |
+| **v1.13.0** | Debian **native CI coverage** (GitHub provides no Debian runner today, so v1.10.0 native Debian is field-validated) + broader distro/runtime testing. | planned |
+| **v1.14.0** | Community polish: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue/PR templates, docs consolidation. | planned |
 
 Native engine matrix: Ubuntu 24.04 / 26.04, Debian 13. Docker engine host matrix:
 Ubuntu 24.04 / 26.04, Debian 11 / 12 / 13.
@@ -126,10 +127,10 @@ and for the **native** engine post-v1.11.0 via the engine-agnostic
 ([`lib/backup.sh`](lib/backup.sh)). Both engines now upload local/durable backup
 artifacts to an rclone remote and verify with `rclone check`.
 
-### P2 — v1.13.0: Community polish
+### P2 — v1.14.0: Community polish
 
 CONTRIBUTING, CODE_OF_CONDUCT, issue/PR templates, docs consolidation. (Renumbered
-from v1.11.0, which shipped as the Docker production runtime.)
+after v1.12.0 shipped the rebrand + multi-engine parity + docs/security polish.)
 
 ---
 
@@ -215,13 +216,13 @@ GitHub-hosted `ubuntu-26.04` image reaches general availability.
 
 **Rating after native object storage:** **9.8**
 
-### Phase 3 — v1.13.0: Community polish + docs consolidation (~3–5 days) **P2**
+### Phase 3 — v1.14.0: Community polish + docs consolidation (~3–5 days) **P2**
 
 **Goal:** Market/readiness **8.0 → 9.0**. Can overlap with Phase 2.
 
 **Scope:** `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue/PR templates; trim stale TESTING.md blocks.
 
-**Rating after v1.13.0:** **9.8+** (renumbered from v1.11.0, which shipped as the Docker production runtime).
+**Rating after v1.14.0:** **9.8+** (renumbered after v1.12.0 shipped the rebrand + multi-engine parity + docs/security polish).
 
 ### Phase 4 (optional) — v1.11.x: Extended CI confidence (~3–5 days)
 
@@ -232,8 +233,8 @@ Post-install `update-toolkit` smoke against real GitHub release assets; document
 ## Near-term priority order
 
 1. **VPS production validation** — confirms enterprise-candidate rating is real-world, not CI-only
-2. **v1.12.0** — Debian native CI coverage **(P1)** (Docker production compose CI leg is now a hard release gate)
-3. **v1.13.0** — community + docs polish → **9.8+ (P2)**
+2. **v1.13.0** — Debian native CI coverage **(P1)** (Docker production compose CI leg is now a hard release gate)
+3. **v1.14.0** — community + docs polish → **9.8+ (P2)**
 
 ---
 
@@ -259,7 +260,7 @@ Post-install `update-toolkit` smoke against real GitHub release assets; document
 | 1 | **Signing authority separation (Phase 1)** | **v1.9.0** ✅ |
 | 2 | Actions SHA pinning; Ubuntu 26.04 integration | **v1.9.1** ✅ |
 | 3–4 | S3-compatible backups + MinIO CI (Phase 2) | **v1.10.0** |
-| 5 | CONTRIBUTING, templates, docs trim (Phase 3) | **v1.11.0** → **9.8+** |
+| 5 | CONTRIBUTING, templates, docs trim (Phase 3) | **v1.14.0** → **9.8+** |
 
 ---
 
