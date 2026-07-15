@@ -375,7 +375,7 @@ jobs:
     # install-smoke leg. It exercises install -> serve -> engine-status/doctor ->
     # durable backup + verify (P3) -> restore rehearsal (P3). The heavier
     # production compose.yaml path is exercised by the separate
-    # docker-production-smoke leg, which stays non-blocking until it is proven.
+    # docker-production-smoke leg, which is now also a hard release gate.
     env:
       SITE_NAME: "erp.test"
       # Force the Docker deployment engine (non-interactive install would default
@@ -477,13 +477,12 @@ jobs:
     name: Docker production compose + smoke
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    # NON-BLOCKING (staged promotion): exercises the PRODUCTION compose.yaml path
+    # RELEASE-GATING (P8 complete): exercises the PRODUCTION compose.yaml path
     # (P1) end to end -- explicit site creation, HTTP (noproxy) exposure guardrail
-    # (P5), durable backup + verify and restore rehearsal (P3). It runs and
-    # reports on every release but must not block yet; flip continue-on-error to
-    # false to make production a hard gate once this leg is proven green, exactly
-    # as the ubuntu-26.04 preview leg is promoted.
-    continue-on-error: true
+    # (P5), durable backup + verify and restore rehearsal (P3). Promoted from the
+    # non-blocking staged leg to a hard release gate after the production DR chain
+    # was proven green, so a production regression now blocks a release just like
+    # the native install-smoke and Docker dev legs.
     env:
       SITE_NAME: "erp.test"
       DEPLOYMENT_ENGINE: "docker"

@@ -859,6 +859,7 @@ manual review.
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history and release notes |
 | [`SECURITY.md`](SECURITY.md) | Threat model, credential handling, release signing |
 | [`TESTING.md`](TESTING.md) | Validation scenarios and QA commands |
+| [`VALIDATION.md`](VALIDATION.md) | Combined go-live runbook (native + Docker production) for a real VPS + domain |
 | [`ROADMAP.md`](ROADMAP.md) | Current plan (9.5 → 9.8+) and historical milestones |
 | [`RELEASE-MANIFEST.txt`](RELEASE-MANIFEST.txt) | Files expected in each release (validated in CI) |
 

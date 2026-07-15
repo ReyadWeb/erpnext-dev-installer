@@ -2856,3 +2856,41 @@ docker_guided_install() {
   ok "Docker deployment engine setup complete."
   docker_guided_followups
 }
+
+# ------------------------------------------------------------
+# Contract verbs: upgrade / rollback (container-native guidance)
+# ------------------------------------------------------------
+# A Docker upgrade is an immutable re-deploy (move the pinned image forward, then
+# recreate + migrate) rather than an in-place `bench update` on a running
+# container. This surfaces the supported path; it does not mutate the stack.
+docker_upgrade() {
+  require_sudo
+  ui_box_start "Docker Upgrade (container-native)"
+  status_line "Engine" "INFO" "Docker ($(docker_mode_label 2>/dev/null || echo development))"
+  status_line "Current image" "INFO" "${DOCKER_ERPNEXT_IMAGE:-frappe/erpnext}"
+  echo "Docker upgrades are immutable re-deploys, not in-place bench updates:"
+  echo "  1. Back up first:               $(toolkit_cmd backup-files)"
+  echo "  2. Choose the new pinned image (tag or @sha256 digest) via DOCKER_ERPNEXT_IMAGE,"
+  echo "     or rebuild a custom image:    $(toolkit_cmd docker-build-custom-image)"
+  echo "  3. Re-deploy (recreate on the new image): $(toolkit_cmd docker-deploy-custom-image)"
+  echo "     or re-run production setup:   $(toolkit_cmd docker-production-setup)"
+  echo "  4. The deploy runs 'bench migrate' and re-records immutable pins automatically."
+  ui_next "$(toolkit_cmd backup-files)" "$(toolkit_cmd docker-deploy-custom-image)"
+  ui_box_end
+}
+
+# Roll a Docker deployment back by re-deploying the previous immutable image
+# and/or restoring data. Read-only guidance (no mutation).
+docker_rollback() {
+  require_sudo
+  ui_box_start "Docker Rollback (container-native)"
+  status_line "Engine" "INFO" "Docker ($(docker_mode_label 2>/dev/null || echo development))"
+  status_line "Recorded pins" "INFO" "${DOCKER_PINS_FILE:-<pins file>}"
+  echo "Roll back by re-deploying a known-good immutable image and/or restoring data:"
+  echo "  - Previous image pin is recorded in: ${DOCKER_PINS_FILE:-<pins file>}"
+  echo "  - Redeploy a known-good image: set DOCKER_ERPNEXT_IMAGE=<previous> then $(toolkit_cmd docker-deploy-custom-image)"
+  echo "  - Restore site data from a backup:   $(toolkit_cmd docker-restore)"
+  echo "  - Roll back HTTPS/proxy only:        $(toolkit_cmd docker-https-rollback)"
+  ui_next "$(toolkit_cmd docker-restore)" "$(toolkit_cmd docker-https-rollback)"
+  ui_box_end
+}

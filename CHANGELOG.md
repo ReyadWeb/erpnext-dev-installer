@@ -1,3 +1,48 @@
+## Unreleased - Multi-engine parity toward combined go-live
+
+Post-v1.11.0 work that closes the remaining single-node (Tier A) gaps so a
+combined native + Docker-production go-live validation exercises both engines
+through the same lifecycle contract. The native path and the default local-dev
+Docker flow are unchanged.
+
+### Changed
+
+- **Docker production CI is now a hard release gate (P8 complete).** The
+  `docker-production-smoke` integration leg (production `compose.yaml`: explicit
+  site creation, HTTP exposure guardrail, durable backup + verify, restore
+  rehearsal) drops `continue-on-error` and now blocks a release on failure,
+  alongside the native `install-smoke` and Docker dev legs. Promotion followed
+  the production DR chain proving green after the v1.11.0 restore fixes.
+
+### Added
+
+- **Engine contract closed for single-node (restore/upgrade/rollback/diagnostics).**
+  `lib/engine.sh` gains first-class `engine_restore`, `engine_upgrade`,
+  `engine_rollback`, and `engine_diagnostics` verbs so both shipped engines
+  answer the full lifecycle contract uniformly (see DEPLOYMENT-ARCHITECTURE.md
+  section 5). New engine-agnostic commands `engine-restore`, `engine-upgrade`,
+  `engine-rollback`, and `engine-diagnostics` route to the existing native
+  implementations (`restore_site_full`, `run_safe_update_wizard`,
+  `run_update_rollback`, `run_doctor_plain`/`run_doctor_json`) and the Docker
+  ones. For Docker, `upgrade`/`rollback` route to container-native guidance
+  (immutable re-deploy of a pinned image + data restore) rather than mutating a
+  running container in place. Existing per-engine commands are unchanged.
+- **Native object-storage backups (rclone) reach parity with Docker.** New
+  engine-agnostic commands `configure-object-backup`, `object-backup`
+  (with `--dry-run`), and `object-status` ship local ERPNext backup artifacts to
+  an rclone remote (S3, Cloudflare R2, Backblaze B2, GCS, Azure, MinIO, ...) and
+  verify the upload with `rclone check`. Credentials stay in the rclone config;
+  only non-secret coordinates are persisted (`/etc/erpnext-dev/object-backup.env`
+  and `.state`). The commands route to the existing Docker implementation when
+  the Docker engine is active, so both engines answer the same object-storage
+  backup verbs. Native remains rsync-capable for off-VM shipment as before.
+- **Combined go-live validation runbook (`VALIDATION.md`).** A single,
+  repeatable operator procedure that validates BOTH engines end to end on a real
+  VPS + domain: integrity/signature, native install + HTTPS + backup/restore +
+  off-site shipment, Docker production `compose.yaml` + Traefik HTTPS + restore
+  rehearsal + exposure guardrail, cross-engine contract parity, an evidence
+  bundle, and a go-live sign-off table. Added to `RELEASE-MANIFEST.txt`.
+
 ## v1.11.0 - Docker production runtime (multi-engine production parity)
 
 The Docker engine graduates from a local-dev MVP into a production-grade runtime.

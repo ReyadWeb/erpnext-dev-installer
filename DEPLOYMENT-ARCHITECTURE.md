@@ -104,7 +104,7 @@ see the coupling note below.
 | Engine | Status | Description |
 |--------|--------|-------------|
 | `native` | shipped (default) | ERPNext/Frappe installed directly on the host: Supervisor/Gunicorn/workers/scheduler + host MariaDB/Redis/Nginx. |
-| `docker` | shipped (v1.10.0); production runtime shipped (v1.11.0) | Containerized stack wrapping the official [`frappe_docker`](https://github.com/frappe/frappe_docker). Local-dev wraps `pwd.yml` + a generated override; **production** (`DOCKER_MODE=production`) wraps upstream `compose.yaml` + mariadb/redis overrides + a toolkit image-pin override, with immutable pins, durable off-volume host-artifact backups, an automated restore rehearsal, off-site shipment (checksum-verified rsync off-VM + rclone object storage), Traefik production HTTPS (Let's Encrypt or Cloudflare Origin CA) with an exposure guardrail, and durable custom-app images (immutable layered build + recreate-based deploy). The containerized dev leg is a hard release gate; the production compose leg runs non-blocking pending promotion. |
+| `docker` | shipped (v1.10.0); production runtime shipped (v1.11.0) | Containerized stack wrapping the official [`frappe_docker`](https://github.com/frappe/frappe_docker). Local-dev wraps `pwd.yml` + a generated override; **production** (`DOCKER_MODE=production`) wraps upstream `compose.yaml` + mariadb/redis overrides + a toolkit image-pin override, with immutable pins, durable off-volume host-artifact backups, an automated restore rehearsal, off-site shipment (checksum-verified rsync off-VM + rclone object storage), Traefik production HTTPS (Let's Encrypt or Cloudflare Origin CA) with an exposure guardrail, and durable custom-app images (immutable layered build + recreate-based deploy). Both the containerized dev leg and the production compose leg are hard release gates. |
 | `orchestrator` | **documented future** | Wraps Frappe's official [Helm chart](https://github.com/frappe/helm) on Kubernetes. See §6. |
 
 ### Platform — *where* it runs
@@ -181,16 +181,19 @@ verb set is also the future control-plane/agent command surface (§8).
 | `bench` | Run a bench command in the right context. | `engine_bench` |
 | `backup` | Take a site backup. | `engine_backup` |
 | `site-url` | Resolve the site's access URL. | `engine_site_url` |
-| `restore` | Restore a site from backup. | **partial** — native + docker restore/rehearsal exist as commands (docker adds `docker-restore` / `docker-restore-rehearsal`); not yet a first-class `engine_restore` verb |
-| `upgrade` | Upgrade bench/apps/stack. | **gap** — not a first-class engine verb |
-| `rollback` | Revert a failed upgrade. | **gap** |
-| `diagnostics` | Structured doctor/support bundle. | **gap** — `doctor` is engine-aware but not a contract verb |
+| `restore` | Restore a site from backup. | `engine_restore` (native `restore_site_full`; docker `docker_restore`) |
+| `upgrade` | Upgrade bench/apps/stack. | `engine_upgrade` (native `run_safe_update_wizard`; docker `docker_upgrade` = container-native immutable re-deploy guidance) |
+| `rollback` | Revert a failed upgrade. | `engine_rollback` (native `run_update_rollback`; docker `docker_rollback` = redeploy previous pin / restore) |
+| `diagnostics` | Structured doctor/support bundle. | `engine_diagnostics` (shared `run_doctor_plain` / `run_doctor_json`) |
 | `scale` | Adjust role replica counts. | **gap** — meaningful only for Tier C/D engines |
 
-The near-term, low-risk work is to **close the contract gaps for the two shipped
-engines** (native, docker) before adding any new engine or topology — i.e.
-promote `restore`/`upgrade`/`rollback`/`diagnostics` to first-class
-`engine_*` verbs so both engines answer the full contract uniformly. `scale`
+The single-node contract is now **closed for the two shipped engines**: `install`,
+runtime lifecycle, `bench`, `backup`, `site-url`, plus `restore`, `upgrade`,
+`rollback`, and `diagnostics` are all first-class `engine_*` verbs, and the
+engine-agnostic CLI exposes `engine-restore` / `engine-upgrade` /
+`engine-rollback` / `engine-diagnostics`. For the Docker engine, `upgrade` and
+`rollback` route to container-native guidance (immutable re-deploy of a pinned
+image + data restore) rather than mutating a running container in place. `scale`
 stays a no-op/`unsupported` on single-node engines until an orchestrator engine
 exists.
 

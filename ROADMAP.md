@@ -39,7 +39,7 @@ record for this dimension.
 |-------|-------|--------|
 | **v1.10.0** | Engine contract + Docker **local-dev MVP**: install/start/stop/status/logs/health/backup/apps via `docker compose`, wrapping upstream `frappe_docker` `pwd.yml`. Hermetic engine-selection test + non-blocking `docker-install-smoke` CI leg. **Native Debian 13 (trixie)** accepted via the shared Debian-family apt/systemd install path; Debian 11/12/13 accepted as Docker hosts. | **implemented** |
 | **v1.11.0** | Docker **production runtime**: production mode wrapping upstream `compose.yaml` + mariadb/redis/image-pin overrides; immutable pins (`frappe_docker` SHA + ERPNext image digest); durable off-volume host-artifact backups + verify + automated restore rehearsal; off-site shipment (checksum-verified rsync off-VM + rclone object storage); durable custom-app images (immutable layered build + recreate deploy); Traefik production HTTPS (Let's Encrypt / Cloudflare Origin CA) + exposure guardrail; containerized Docker integration CI leg promoted to a **hard release gate** (production compose leg runs non-blocking pending promotion). | **implemented** |
-| **v1.12.0** | Debian **native CI coverage** (GitHub provides no Debian runner today, so v1.10.0 native Debian is field-validated) + broader distro/runtime testing; promote the Docker **production** compose CI leg to a hard gate. | planned |
+| **v1.12.0** | Debian **native CI coverage** (GitHub provides no Debian runner today, so v1.10.0 native Debian is field-validated) + broader distro/runtime testing. (The Docker **production** compose CI leg was promoted to a hard release gate.) | planned |
 | **v1.13.0** | Community polish: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue/PR templates, docs consolidation. | planned |
 
 Native engine matrix: Ubuntu 24.04 / 26.04, Debian 13. Docker engine host matrix:
@@ -117,11 +117,14 @@ cannot be produced by repository write access alone. Setup + key-rotation runboo
 - Fixes latent macOS bug (`sed -i` → BSD `sed -i ''`); WSL2 maps to `127.0.0.1`
 - New hermetic `scripts/test-host-os-output.sh` wired into `validate-release.sh` + `run-shellcheck.sh`
 
-### P2 — Object-storage backups — **Docker engine shipped (v1.11.0); native planned**
+### P2 — Object-storage backups — **shipped for both engines**
 
 rclone-based object storage (S3 / Cloudflare R2 / B2 / GCS / Azure / MinIO) with
-remote checksum verification shipped for the **Docker** engine in v1.11.0 (P6). The
-equivalent native rclone target is still planned.
+remote checksum verification shipped for the **Docker** engine in v1.11.0 (P6),
+and for the **native** engine post-v1.11.0 via the engine-agnostic
+`configure-object-backup` / `object-backup` / `object-status` commands
+([`lib/backup.sh`](lib/backup.sh)). Both engines now upload local/durable backup
+artifacts to an rclone remote and verify with `rclone check`.
 
 ### P2 — v1.13.0: Community polish
 
@@ -204,11 +207,13 @@ GitHub-hosted `ubuntu-26.04` image reaches general availability.
 
 **Scope:** S3-compatible target (AWS S3, Cloudflare R2, Backblaze B2, GCS, Azure, MinIO) alongside rsync; wizard wiring; restore docs.
 
-**Shipped (Docker, v1.11.0 / P6):** rclone object storage with remote SHA256SUMS verification for the Docker engine, chained after the durable host artifact and off-VM rsync.
+**Shipped (Docker, v1.11.0 / P6):** rclone object storage with remote verification for the Docker engine, chained after the durable host artifact and off-VM rsync.
 
-**Remaining:** the equivalent native rclone target in [`lib/backup.sh`](lib/backup.sh) + menus; README + SECURITY credential guidance; MinIO CI smoke.
+**Shipped (native, post-v1.11.0):** the equivalent native rclone target in [`lib/backup.sh`](lib/backup.sh) via engine-agnostic `configure-object-backup` / `object-backup` / `object-status` commands, uploading the local backup set and verifying with `rclone check`.
 
-**Rating after Docker object storage:** **9.75**
+**Remaining:** README + SECURITY credential guidance; MinIO CI smoke.
+
+**Rating after native object storage:** **9.8**
 
 ### Phase 3 — v1.13.0: Community polish + docs consolidation (~3–5 days) **P2**
 
@@ -227,7 +232,7 @@ Post-install `update-toolkit` smoke against real GitHub release assets; document
 ## Near-term priority order
 
 1. **VPS production validation** — confirms enterprise-candidate rating is real-world, not CI-only
-2. **v1.12.0** — Debian native CI coverage + promote the Docker production compose CI leg to a hard gate **(P1)**
+2. **v1.12.0** — Debian native CI coverage **(P1)** (Docker production compose CI leg is now a hard release gate)
 3. **v1.13.0** — community + docs polish → **9.8+ (P2)**
 
 ---

@@ -231,3 +231,43 @@ engine_site_url() {
     printf 'http://%s:8000\n' "${SITE_NAME}"
   fi
 }
+
+# ------------------------------------------------------------
+# Contract closure: restore / upgrade / rollback / diagnostics.
+# These promote previously command-only operations to first-class engine verbs
+# so both engines answer the full lifecycle contract uniformly (see
+# DEPLOYMENT-ARCHITECTURE.md section 5). They route to existing implementations;
+# for the Docker engine, upgrade/rollback route to container-native guidance
+# (immutable re-deploy) rather than an unsafe in-place mutation.
+engine_restore() {
+  if deployment_engine_is_docker; then
+    docker_restore "${1:-full}"
+  else
+    restore_site_full
+  fi
+}
+
+engine_upgrade() {
+  if deployment_engine_is_docker; then
+    docker_upgrade
+  else
+    run_safe_update_wizard
+  fi
+}
+
+engine_rollback() {
+  if deployment_engine_is_docker; then
+    docker_rollback
+  else
+    run_update_rollback
+  fi
+}
+
+# Structured diagnostics. Shared across engines; doctor_collect is engine-aware.
+# Arg: plain (default), json, or human (treated as plain for the contract).
+engine_diagnostics() {
+  case "${1:-plain}" in
+    json) run_doctor_json ;;
+    *) run_doctor_plain ;;
+  esac
+}

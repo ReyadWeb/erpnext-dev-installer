@@ -2343,6 +2343,247 @@ run_off_vm_backup_rsync() {
   ui_box_end
 }
 
+# ------------------------------------------------------------
+# Object-storage backups (rclone) for the NATIVE engine.
+# Mirrors the Docker object-storage flow (lib/docker.sh) but ships local ERPNext
+# backup artifacts from the on-VM backup directory to an rclone remote (S3,
+# Cloudflare R2, Backblaze B2, GCS, Azure, MinIO, ...). Secrets stay in the
+# rclone config; only non-secret coordinates are persisted here.
+# ------------------------------------------------------------
+object_backup_load_config() {
+  local v
+  if [[ -z "${OBJECT_RCLONE_REMOTE:-}" ]]; then
+    v="$(read_config_key_from_file "$OBJECT_BACKUP_CONFIG_FILE" OBJECT_RCLONE_REMOTE 2>/dev/null || true)"; [[ -n "$v" ]] && OBJECT_RCLONE_REMOTE="$v"
+  fi
+  if [[ -z "${OBJECT_BUCKET:-}" ]]; then
+    v="$(read_config_key_from_file "$OBJECT_BACKUP_CONFIG_FILE" OBJECT_BUCKET 2>/dev/null || true)"; [[ -n "$v" ]] && OBJECT_BUCKET="$v"
+  fi
+  if [[ -z "${OBJECT_PREFIX:-}" ]]; then
+    v="$(read_config_key_from_file "$OBJECT_BACKUP_CONFIG_FILE" OBJECT_PREFIX 2>/dev/null || true)"; [[ -n "$v" ]] && OBJECT_PREFIX="$v"
+  fi
+}
+
+object_backup_configured() {
+  object_backup_load_config
+  [[ -n "${OBJECT_RCLONE_REMOTE:-}" && -n "${OBJECT_BUCKET:-}" ]]
+}
+
+# Full rclone destination: <remote>:<bucket>/<prefix>/<site>.
+object_backup_dest() {
+  object_backup_load_config
+  local prefix="${OBJECT_PREFIX:-}"
+  prefix="${prefix#/}"; prefix="${prefix%/}"
+  if [[ -n "$prefix" ]]; then
+    printf '%s:%s/%s/%s\n' "$OBJECT_RCLONE_REMOTE" "$OBJECT_BUCKET" "$prefix" "$SITE_NAME"
+  else
+    printf '%s:%s/%s\n' "$OBJECT_RCLONE_REMOTE" "$OBJECT_BUCKET" "$SITE_NAME"
+  fi
+}
+
+object_backup_ensure_rclone() {
+  command -v rclone >/dev/null 2>&1 && return 0
+  log "Installing rclone"
+  export DEBIAN_FRONTEND=noninteractive
+  $SUDO apt-get update -y >/dev/null 2>&1 || true
+  $SUDO apt-get install -y rclone >/dev/null 2>&1 || return 1
+  command -v rclone >/dev/null 2>&1
+}
+
+object_backup_write_state() {
+  require_sudo
+  local status="$1" detail="$2" now config_dir
+  now="$(date -Is 2>/dev/null || date)"
+  config_dir="$(dirname "$OBJECT_BACKUP_STATE_FILE")"
+  $SUDO mkdir -p "$config_dir"
+  $SUDO tee "$OBJECT_BACKUP_STATE_FILE" >/dev/null <<EOF_OBJ_STATE
+LAST_RUN_AT=${now}
+LAST_STATUS=${status}
+LAST_DETAIL=${detail}
+LAST_DEST=$(object_backup_dest 2>/dev/null || echo unknown)
+SITE_NAME=${SITE_NAME}
+EOF_OBJ_STATE
+  $SUDO chown root:root "$OBJECT_BACKUP_STATE_FILE" 2>/dev/null || true
+  $SUDO chmod 600 "$OBJECT_BACKUP_STATE_FILE" 2>/dev/null || true
+}
+
+# One-line object-storage summary (parallels docker_object_backup_status_line).
+object_backup_status_line() {
+  local last_status last_run
+  if object_backup_configured; then
+    last_status="$(read_config_key_from_file "$OBJECT_BACKUP_STATE_FILE" LAST_STATUS 2>/dev/null || true)"
+    last_run="$(read_config_key_from_file "$OBJECT_BACKUP_STATE_FILE" LAST_RUN_AT 2>/dev/null || true)"
+    case "${last_status:-none}" in
+      OK) status_line "Object storage" "OK" "$(object_backup_dest); last OK ${last_run:-?}" ;;
+      FAIL) status_line "Object storage" "WARN" "$(object_backup_dest); last run FAILED ${last_run:-?}" ;;
+      *) status_line "Object storage" "INFO" "$(object_backup_dest); no successful run yet" ;;
+    esac
+  else
+    status_line "Object storage" "WARN" "not configured; run $(toolkit_cmd configure-object-backup)"
+  fi
+}
+
+configure_object_backup() {
+  require_sudo
+  local remote bucket prefix config_dir
+  require_site_environment >/dev/null || return 1
+  object_backup_load_config
+
+  if ! object_backup_ensure_rclone; then
+    fail "rclone is required for object-storage backups but could not be installed. Install rclone, then retry."
+  fi
+
+  ui_box_start "Configure Object-Storage Backup (rclone)"
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "Tool" "INFO" "rclone $(rclone version 2>/dev/null | awk 'NR==1{print $2}')"
+  echo
+  echo "Uses an existing rclone remote. Create one first with:  rclone config"
+  echo "(supports S3, Cloudflare R2, Backblaze B2, GCS, Azure, MinIO, and more)."
+  echo
+  echo "Configured rclone remotes:"
+  rclone listremotes 2>/dev/null | sed 's/^/  /' || echo "  (none — run 'rclone config' first)"
+  echo
+
+  if [[ -t 0 && "${ASSUME_YES:-0}" -ne 1 ]]; then
+    read -r -p "rclone remote name (e.g. r2): " remote
+    remote="${remote%:}"
+    read -r -p "Bucket / container name: " bucket
+    read -r -p "Path prefix inside the bucket [erpnext-backups]: " prefix
+    prefix="${prefix:-erpnext-backups}"
+  else
+    remote="${OBJECT_RCLONE_REMOTE:-}"
+    bucket="${OBJECT_BUCKET:-}"
+    prefix="${OBJECT_PREFIX:-erpnext-backups}"
+    [[ -n "$remote" && -n "$bucket" ]] || fail "Set OBJECT_RCLONE_REMOTE and OBJECT_BUCKET before using --yes."
+  fi
+
+  [[ -n "$remote" && -n "$bucket" ]] || fail "Remote name and bucket are required."
+  if ! rclone listremotes 2>/dev/null | grep -qx "${remote}:"; then
+    warn "rclone remote '${remote}:' is not in 'rclone listremotes'. Save anyway; create it with 'rclone config'."
+  fi
+
+  config_dir="$(dirname "$OBJECT_BACKUP_CONFIG_FILE")"
+  $SUDO mkdir -p "$config_dir"
+  $SUDO tee "$OBJECT_BACKUP_CONFIG_FILE" >/dev/null <<EOF_OBJ_CONFIG
+# ERPNext Developer Toolkit - native object-storage backup (rclone) configuration
+# Non-secret only. rclone credentials live in the rclone config (rclone config).
+OBJECT_RCLONE_REMOTE=${remote}
+OBJECT_BUCKET=${bucket}
+OBJECT_PREFIX=${prefix}
+SITE_NAME=${SITE_NAME}
+EOF_OBJ_CONFIG
+  $SUDO chown root:root "$OBJECT_BACKUP_CONFIG_FILE" 2>/dev/null || true
+  $SUDO chmod 600 "$OBJECT_BACKUP_CONFIG_FILE" 2>/dev/null || true
+  OBJECT_RCLONE_REMOTE="$remote"
+  OBJECT_BUCKET="$bucket"
+  OBJECT_PREFIX="$prefix"
+
+  ui_box_start "Object-Storage Backup Configured"
+  status_line "Destination" "OK" "$(object_backup_dest)"
+  status_line "Config file" "OK" "$OBJECT_BACKUP_CONFIG_FILE"
+  ui_next "$(toolkit_cmd object-backup-dry-run)" "$(toolkit_cmd object-backup)"
+  ui_box_end
+}
+
+# Upload local ERPNext backup artifacts to object storage with rclone.
+# mode: dry-run|run. Uploads are checksum-based and verified with rclone check.
+run_object_backup() {
+  require_sudo
+  local mode="${1:-run}" src dest completeness latest_lines
+  local -a rclone_cmd=()
+
+  require_site_environment >/dev/null || return 1
+  object_backup_load_config
+  object_backup_configured || fail "Object storage not configured. Run: $(toolkit_cmd configure-object-backup)"
+  object_backup_ensure_rclone || fail "rclone is not available. Install rclone, then retry."
+  src="$(site_backup_dir)"
+  [[ -d "$src" ]] || fail "No local backup directory at ${src}. Run $(toolkit_cmd backup-files) first."
+  latest_lines="$(backup_latest_set_paths 2>/dev/null || true)"
+  completeness="$(printf '%s\n' "$latest_lines" | sed -n '6p')"
+  [[ "$completeness" == "complete" ]] || fail "Latest local backup set is not complete. Run $(toolkit_cmd backup-files) first."
+  dest="$(object_backup_dest)"
+
+  ui_box_start "$([[ "$mode" == "dry-run" ]] && echo "Object-Storage Backup Dry Run" || echo "Object-Storage Backup")"
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "Source" "INFO" "${src}/ (local backup artifacts)"
+  status_line "Destination" "INFO" "$dest"
+  echo
+
+  rclone_cmd=(rclone copy "$src" "$dest" --checksum --transfers 4 --stats-one-line)
+  [[ "$mode" == "dry-run" ]] && rclone_cmd+=(--dry-run)
+
+  if [[ "$mode" != "dry-run" && -t 0 && "${ASSUME_YES:-0}" -ne 1 ]]; then
+    if ! confirm "Upload local backups to ${dest} now?"; then
+      warn "Object-storage backup cancelled."
+      ui_box_end
+      return 0
+    fi
+  fi
+
+  log "Starting rclone ${mode}"
+  if ${SUDO:-} "${rclone_cmd[@]}"; then
+    if [[ "$mode" == "dry-run" ]]; then
+      status_line "Dry run" "OK" "rclone dry run completed"
+    elif ${SUDO:-} rclone check "$src" "$dest" --one-way --checksum >/dev/null 2>&1; then
+      status_line "Remote verify" "OK" "rclone check confirmed all files present"
+      object_backup_write_state "OK" "rclone copy + check verified"
+      status_line "Object storage" "OK" "uploaded and verified"
+    else
+      status_line "Remote verify" "WARN" "rclone check reported differences"
+      object_backup_write_state "OK" "rclone copy completed; check reported differences"
+      status_line "Object storage" "WARN" "uploaded (verify manually with rclone check)"
+    fi
+  else
+    [[ "$mode" != "dry-run" ]] && object_backup_write_state "FAIL" "rclone copy failed"
+    status_line "Object storage" "FAIL" "rclone command failed"
+  fi
+  ui_next "$(toolkit_cmd object-status)" "$(toolkit_cmd off-vm-backup-status)"
+  ui_box_end
+}
+
+show_object_backup_status() {
+  require_sudo
+  object_backup_load_config
+  ui_box_start "Object-Storage Backup Status"
+  status_line "Site" "INFO" "$SITE_NAME"
+  status_line "rclone" "$(command -v rclone >/dev/null 2>&1 && echo OK || echo WARN)" "$(command -v rclone >/dev/null 2>&1 && rclone version 2>/dev/null | awk 'NR==1{print $2}' || echo 'not installed')"
+  status_line "Config file" "$([[ -f "$OBJECT_BACKUP_CONFIG_FILE" ]] && echo OK || echo WARN)" "$OBJECT_BACKUP_CONFIG_FILE"
+  if object_backup_configured; then
+    status_line "Destination" "OK" "$(object_backup_dest)"
+  else
+    status_line "Destination" "WARN" "not configured"
+  fi
+  object_backup_status_line
+  ui_next "$(toolkit_cmd object-backup-dry-run)" "$(toolkit_cmd object-backup)"
+  ui_box_end
+}
+
+# ------------------------------------------------------------
+# Engine-agnostic object-storage entry points (native + docker).
+# ------------------------------------------------------------
+run_configure_object_backup() {
+  if deployment_engine_is_docker; then
+    configure_docker_object_backup
+  else
+    configure_object_backup
+  fi
+}
+
+run_engine_object_backup() {
+  if deployment_engine_is_docker; then
+    run_docker_object_backup "${1:-run}"
+  else
+    run_object_backup "${1:-run}"
+  fi
+}
+
+show_engine_object_backup_status() {
+  if deployment_engine_is_docker; then
+    show_docker_object_backup_status
+  else
+    show_object_backup_status
+  fi
+}
+
 show_off_vm_backup_plan() {
   require_sudo
 
