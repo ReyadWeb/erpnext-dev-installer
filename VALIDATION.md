@@ -233,3 +233,31 @@ are proven recoverable (restore or rehearsal must pass). Record the outcome with
 See [`TESTING.md`](TESTING.md) for the broader per-feature test matrix and
 hermetic checks, and [`DEPLOYMENT-ARCHITECTURE.md`](DEPLOYMENT-ARCHITECTURE.md)
 §5 for the engine contract these commands implement.
+
+---
+
+## 5. Example Provider Sign-off
+
+*This is a fictional, redacted example of a successful sign-off for a reference deployment.*
+
+- **Provider:** DigitalOcean
+- **Plan:** Basic Droplet (2 vCPU, 4GB RAM)
+- **OS:** Debian 13
+- **Engine:** Native
+- **Storage:** DO Spaces (Object Storage) for backups
+- **Date:** 2026-07-15
+- **Outcome:** **PASS**
+
+| # | Check | Result |
+|---|-------|:------:|
+| 1 | Integrity: `verify-signature` GOODSIG + `verify-toolkit` OK | ☑ PASS |
+| 2 | Install + runtime healthy | ☑ PASS |
+| 3 | Site reachable on hostname | ☑ PASS |
+| 4 | HTTPS valid + styled login | ☑ PASS |
+| 5 | `engine-diagnostics` clean | ☑ PASS |
+| 6 | Backup created + verified | ☑ PASS |
+| 7 | Restore / restore rehearsal succeeded | ☑ PASS |
+| 8 | Off-site (rsync and/or object storage) verified | ☑ PASS (DO Spaces verified via `object-status`) |
+| 9 | Exposure guardrail / firewall correct | ☑ PASS |
+| 10 | Upgrade/rollback contract verbs behave as documented | ☑ PASS |
+| 11 | Evidence bundle collected | ☑ PASS |

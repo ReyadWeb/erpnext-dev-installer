@@ -757,9 +757,9 @@ Local VM HTTPS / SSL:
   docker-restore-evidence  Docker: show the recorded restore-rehearsal evidence
   docker-offvm-backup      Docker: rsync durable host artifacts off-VM (checksum-verified)
   docker-offvm-status      Docker: show off-VM + object-storage shipment status
-  configure-object-backup  Configure object-storage backups (rclone remote; native or Docker)
-  object-backup            Upload backups to object storage (native or Docker); --dry-run available
-  object-status            Show object-storage backup status (native or Docker)
+  configure-object-backup  Engine-agnostic: configure object backups (toolkit stores non-secret rclone coords)
+  object-backup            Engine-agnostic: upload backups to object storage (rclone required); --dry-run available
+  object-status            Engine-agnostic: show object-storage backup status
   docker-object-config     Docker: configure object-storage backups (rclone remote)
   docker-object-backup     Docker: upload durable host artifacts to object storage
   docker-object-status     Docker: show object-storage backup status
@@ -936,6 +936,8 @@ Common environment overrides:
 
 Use $(toolkit_cmd advanced) for the complete command menu.
 After first run, use the short command: sudo erpnext-dev menu
+
+Need help or want to contribute? Check out SUPPORT.md or CONTRIBUTING.md on GitHub.
 EOF_HELP
 }
 

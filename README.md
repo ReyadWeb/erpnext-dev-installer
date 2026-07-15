@@ -902,6 +902,16 @@ monitoring expectations, and an update process. Use the checklist in
 
 ---
 
+## Debian 13 Troubleshooting (Native Engine)
+
+Debian 13 (trixie) is fully supported for the native engine. Most steps are identical to Ubuntu, but keep these in mind:
+
+- **mkcert and NSS:** The toolkit uses `apt install -y mkcert libnss3-tools` for local HTTPS. If your browser still warns, ensure `libnss3-tools` is installed before running the `local-ssl-wizard`.
+- **Field Validation:** Use `VALIDATION.md` to confirm Debian 13 settings, particularly for production cloud firewalls.
+- **Docker:** If you use the Docker engine on Debian 13, the native OS differences are abstracted away, but you should still ensure Docker is installed from the official repository (which the toolkit handles).
+
+---
+
 ## Additional resources
 
 Learn more about ERPNext and the Frappe Framework that power this stack:

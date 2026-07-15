@@ -753,6 +753,8 @@ docker_ready() {
     if [[ "$now" -ge "$deadline" ]]; then
       warn "ERPNext did not respond within ${DOCKER_READY_TIMEOUT}s."
       echo "Check container logs with: $(toolkit_cmd logs)"
+      echo "Check engine status with:  $(toolkit_cmd engine-status)"
+      echo "Run diagnostics with:      $(toolkit_cmd doctor)"
       return 1
     fi
     sleep 5
