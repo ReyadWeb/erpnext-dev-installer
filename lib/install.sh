@@ -986,10 +986,15 @@ local_guided_followups() {
 
   echo
   if confirm "Set up trusted local HTTPS now (local-ssl-wizard)?"; then
-    run_local_ssl_wizard main || true
+    # Use the "guided" back target so leaving the SSL wizard returns here and the
+    # chain continues (credentials -> security -> apps) instead of jumping to the
+    # main menu.
+    run_local_ssl_wizard guided || true
   else
     echo "Skipped. Run later with: $(toolkit_cmd local-ssl-wizard)"
   fi
+
+  local_guided_credentials_checkpoint
 
   echo
   if confirm "Apply the local security profile / firewall now (security-hardening-wizard)?"; then
@@ -1008,6 +1013,28 @@ local_guided_followups() {
   echo
   ok "Local guided follow-up steps complete."
   show_next_step || true
+}
+
+# Credentials checkpoint in the guided chain: after HTTPS is set up and before
+# security hardening, remind the operator where the login credentials live and
+# offer to reveal them once on this private console. credentials_show handles the
+# SHOW confirmation and writes secrets only to /dev/tty (never the log stream).
+local_guided_credentials_checkpoint() {
+  [[ -t 0 ]] || return 0
+  [[ "$ASSUME_YES" -eq 1 ]] && return 0
+
+  echo
+  ui_box_start "Local setup: login credentials"
+  echo "Your ERPNext Administrator login is ready. Save it before hardening the VM."
+  ui_box_end
+  show_credentials_info || true
+
+  echo
+  if confirm "Reveal the generated Administrator password now (private console only)?"; then
+    credentials_show || true
+  else
+    echo "Skipped. Reveal it later with: $(toolkit_cmd credentials-show)"
+  fi
 }
 
 

@@ -14,6 +14,10 @@
 [[ -n "${_ERPNEXT_DEV_ENGINE_LOADED:-}" ]] && return 0
 _ERPNEXT_DEV_ENGINE_LOADED=1
 
+# Set to 1 once the deployment engine has been chosen in this process, so a
+# single guided run does not prompt for the engine more than once.
+: "${DEPLOYMENT_ENGINE_SESSION_CHOSEN:=0}"
+
 # ------------------------------------------------------------
 # Selection / persistence helpers (mirror the HOST_OS helpers)
 # ------------------------------------------------------------
@@ -67,8 +71,19 @@ choose_deployment_engine_for_setup() {
   local persist="${1:-1}"
   local reply resolved current
 
+  # Ask only once per invocation. A single guided run can reach this picker from
+  # more than one caller (e.g. run_local_dev_quickstart -> run_guided_setup ->
+  # run_install), so without this guard the operator is prompted twice. The
+  # explicit `set-engine` command clears the guard so it can always re-prompt.
+  if [[ "${DEPLOYMENT_ENGINE_SESSION_CHOSEN:-0}" -eq 1 ]] && validate_deployment_engine_value "${DEPLOYMENT_ENGINE:-}"; then
+    DEPLOYMENT_ENGINE="$(normalize_deployment_engine "$DEPLOYMENT_ENGINE")"
+    echo "Using deployment engine: $(deployment_engine_label) (already selected)"
+    return 0
+  fi
+
   if [[ "${DEPLOYMENT_ENGINE_ENV_PROVIDED:-0}" -eq 1 ]] && validate_deployment_engine_value "${DEPLOYMENT_ENGINE:-}"; then
     DEPLOYMENT_ENGINE="$(normalize_deployment_engine "$DEPLOYMENT_ENGINE")"
+    DEPLOYMENT_ENGINE_SESSION_CHOSEN=1
     echo "Using deployment engine: $(deployment_engine_label)"
     return 0
   fi
@@ -104,6 +119,7 @@ choose_deployment_engine_for_setup() {
   fi
 
   DEPLOYMENT_ENGINE="$resolved"
+  DEPLOYMENT_ENGINE_SESSION_CHOSEN=1
   if [[ "$persist" == "1" ]]; then
     write_dev_config_file
   fi
@@ -115,6 +131,8 @@ choose_deployment_engine_for_setup() {
 run_set_engine() {
   require_sudo
   DEPLOYMENT_ENGINE_ENV_PROVIDED=0
+  # Force a fresh prompt even if the engine was already chosen this session.
+  DEPLOYMENT_ENGINE_SESSION_CHOSEN=0
   choose_deployment_engine_for_setup 1
 }
 

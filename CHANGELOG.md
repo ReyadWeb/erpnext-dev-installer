@@ -1,5 +1,25 @@
 ## Unreleased
 
+### Fixed / improved (guided setup UX)
+
+- **Deployment engine no longer prompted twice.** The engine picker now runs once
+  per invocation; a single guided run (`local-dev-quickstart` →
+  `run_guided_setup` → `run_install`, or the public-VM guided flow) previously
+  asked "Choose Deployment Engine" a second time. `set-engine` still re-prompts.
+- **Local guided follow-up chain no longer drops to the main menu after HTTPS.**
+  The SSL step in the guided chain now uses a dedicated "Continue guided setup"
+  back target, so leaving the Local SSL Wizard continues to credentials →
+  security profile → optional apps instead of jumping to the main menu.
+- **Credentials checkpoint added to the local guided chain.** After local HTTPS
+  and before security hardening, the guided flow now surfaces the login
+  credentials and offers to reveal the generated Administrator password once on
+  the private console (`credentials_show` still writes secrets only to
+  `/dev/tty`, never the log).
+- **Unstyled-login hard-refresh guidance.** The local HTTPS success screens now
+  explain that a plain/unstyled first load after enabling HTTPS is a browser
+  asset/service-worker cache artifact and is cleared by a hard refresh
+  (Ctrl/Cmd+Shift+R) — the assets are served correctly by the server.
+
 ### Fixed / improved (community issues #19–#23)
 
 - Debian 13 troubleshooting notes in README; preflight OS table corrected to include Debian 13.

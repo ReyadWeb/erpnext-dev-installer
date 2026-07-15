@@ -2006,7 +2006,23 @@ run_trusted_mkcert_setup() {
   echo "  https://${SITE_NAME}"
   echo "  https://${SITE_NAME}/app"
   echo "  https://${SITE_NAME}/login"
+  echo
+  print_local_https_cache_hint
   echo "============================================================"
+}
+
+# ERPNext caches CSS/JS aggressively and registers a service worker, so the first
+# load right after the origin changes to https://<site> can render unstyled
+# (e.g. a plain login page). This is a browser-cache artifact, not a server
+# problem — a hard refresh clears it. Surface that so operators do not think the
+# install is broken.
+print_local_https_cache_hint() {
+  echo "If the page looks unstyled or broken on first load, do a hard refresh:"
+  echo "  - Linux / Windows: Ctrl + Shift + R"
+  echo "  - macOS:           Cmd + Shift + R"
+  echo "The assets are served correctly; the browser is showing a cached copy from"
+  echo "before HTTPS was enabled. If a hard refresh is not enough, clear this site's"
+  echo "cached data / unregister its service worker in the browser dev tools, then reload."
 }
 
 create_self_signed_local_cert() {
@@ -2172,6 +2188,8 @@ print_local_https_success_next_steps() {
   echo
   echo "  3) Install optional apps only after the site remains healthy:"
   echo "     $(toolkit_cmd app-install-wizard)"
+  echo
+  print_local_https_cache_hint
   echo
   echo "Important: for local/dev VMs, use the Local VM firewall profile, not the Production profile."
 }
@@ -2651,6 +2669,10 @@ run_local_ssl_wizard() {
   local back_label="Local VM HTTPS / SSL"
   if [[ "$back_target" == "main" ]]; then
     back_label="Main menu"
+  elif [[ "$back_target" == "guided" ]]; then
+    # Called from the guided follow-up chain: leaving returns to the guided flow
+    # (credentials -> security -> apps), NOT the main menu.
+    back_label="Continue guided setup"
   fi
   while true; do
     echo
