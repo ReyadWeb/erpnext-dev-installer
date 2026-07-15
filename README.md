@@ -879,6 +879,9 @@ whether you deploy natively or with Docker.
 | File | Purpose |
 |---|---|
 | [`README.md`](README.md) | Setup and usage guide (this file) |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute (docs, tests, engines) |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Community standards |
+| [`SUPPORT.md`](SUPPORT.md) | Where to ask for help vs file bugs |
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history and release notes |
 | [`SECURITY.md`](SECURITY.md) | Threat model, credential handling, release signing |
 | [`TESTING.md`](TESTING.md) | Validation scenarios and QA commands |
@@ -928,3 +931,7 @@ ERPNext install. Every bug report and suggestion makes the next person's setup
 smoother.
 
 Happy building, and may your migrations always be reversible.
+
+Contributions of all sizes are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md)
+and [`SUPPORT.md`](SUPPORT.md). You do not need to be an ERPNext infrastructure
+expert to help.

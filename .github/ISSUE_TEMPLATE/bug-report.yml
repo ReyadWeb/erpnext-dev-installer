@@ -1,0 +1,128 @@
+name: Bug report
+description: Something does not behave as documented.
+title: "[bug]: "
+labels: ["type: bug", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. **Remove all secrets** before submitting.
+        Security vulnerabilities must **not** be filed here — use
+        [private vulnerability reporting](https://github.com/ReyadWeb/erpnext-dev-toolkit/security/advisories/new)
+        (see SECURITY.md).
+
+  - type: input
+    id: toolkit_version
+    attributes:
+      label: Toolkit version
+      description: Output of `erpnext-dev version` (or SCRIPT_VERSION).
+      placeholder: "v1.12.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment_engine
+    attributes:
+      label: Deployment engine
+      multiple: false
+      options:
+        - Native
+        - Docker development (pwd.yml)
+        - Docker production (compose.yaml)
+        - Not sure / N/A
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating_system
+    attributes:
+      label: Operating system
+      options:
+        - Ubuntu 24.04
+        - Ubuntu 26.04
+        - Debian 13
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: os_other
+    attributes:
+      label: OS details (if Other)
+      placeholder: "e.g. Debian 12, custom image"
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - Local VM
+        - Public VPS
+        - CI / testing
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: erpnext_version
+    attributes:
+      label: ERPNext / Frappe version (if known)
+      placeholder: "e.g. ERPNext v16.x / Frappe v16.x"
+
+  - type: input
+    id: command
+    attributes:
+      label: Exact command(s)
+      description: Copy-paste the command that failed.
+      placeholder: "sudo erpnext-dev backup-verify"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant redacted logs
+      description: Paste redacted terminal output. No passwords, keys, or tokens.
+      render: shell
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Doctor / diagnostics excerpt (redacted)
+      description: From `sudo erpnext-dev doctor --plain` or `engine-diagnostics`.
+      render: shell
+
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Secrets confirmation
+      options:
+        - label: I confirm that I removed passwords, API keys, private keys, database credentials, tokens, and other secrets from this report.
+          required: true
+        - label: I understand security vulnerabilities must be reported privately (SECURITY.md), not as a public issue.
+          required: true

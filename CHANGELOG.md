@@ -1,3 +1,15 @@
+## Unreleased - Phase 1 contributor architecture
+
+### Added
+
+- **Community health docs:** `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor
+  Covenant 2.1), and `SUPPORT.md` (bugs vs questions vs private security).
+- **GitHub contributor infrastructure:** bug + feature Issue Forms, issue-template
+  contact links, pull-request template, and `.github/CODEOWNERS` (maintainer defaults
+  + security/release paths).
+- **SECURITY.md** now prefers GitHub private vulnerability reporting and points
+  reporters away from public Issues for vulns.
+
 ## v1.12.0 - Rebrand to erpnext-dev-toolkit + multi-engine parity, UX, docs, and security polish
 
 Renames the project to **erpnext-dev-toolkit** to match the product name, closes

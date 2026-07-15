@@ -442,15 +442,34 @@ S3-compatible off-site backup target alongside rsync — after v1.9.1.
 ## Reporting security issues
 
 Report suspected security issues **privately** before public disclosure.
+**Do not open a public GitHub Issue for vulnerabilities.**
 
-1. Email or direct message the project maintainer with:
-   - toolkit version (`erpnext-dev version`);
-   - OS version (`/etc/os-release`);
-   - command used;
-   - redacted logs or support-bundle audit output;
-   - environment type (local dev VM, production VPS, backup server, restore VM).
-2. Do **not** include passwords, private keys, API tokens, raw `site_config.json`, database dumps, or customer data.
-3. Allow reasonable time for investigation and a fix before public discussion.
-4. For urgent production exposure (e.g. credentials left on a public-facing VM), run `sudo erpnext-dev security-audit` and `sudo erpnext-dev credentials-delete` after password-manager handoff while waiting for maintainer response.
+### Preferred: GitHub private vulnerability reporting
+
+Use GitHub's private reporting channel for this repository:
+
+https://github.com/ReyadWeb/erpnext-dev-toolkit/security/advisories/new
+
+That keeps the report confidential until a fix can be prepared.
+
+### What to include
+
+1. Toolkit version (`erpnext-dev version`).
+2. OS version (`/etc/os-release`).
+3. Command used and deployment engine (native / Docker development / Docker production).
+4. Redacted logs or support-bundle audit output.
+5. Environment type (local dev VM, production VPS, backup server, restore VM).
+
+Do **not** include passwords, private keys, API tokens, raw `site_config.json`,
+database dumps, or customer data.
+
+Allow reasonable time for investigation and a fix before public discussion.
+
+For urgent production exposure (e.g. credentials left on a public-facing VM), run
+`sudo erpnext-dev security-audit` and `sudo erpnext-dev credentials-delete` after
+password-manager handoff while waiting for a maintainer response.
+
+Support routing (bugs vs questions vs security) is summarized in
+[`SUPPORT.md`](SUPPORT.md).
 
 ## v1.2.0 Phase C security hardening

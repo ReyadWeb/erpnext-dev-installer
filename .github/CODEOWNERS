@@ -1,0 +1,16 @@
+# Default owner
+* @ReyadWeb
+
+# Security-sensitive paths — require maintainer attention
+/.github/workflows/ @ReyadWeb
+/lib/security.sh @ReyadWeb
+/lib/update.sh @ReyadWeb
+/SECURITY.md @ReyadWeb
+/docs/erpnext-dev-signing-key.asc @ReyadWeb
+
+# Release engineering
+/scripts/validate-release.sh @ReyadWeb
+/scripts/generate-release-checksums.sh @ReyadWeb
+/scripts/build-release-bundle.sh @ReyadWeb
+/RELEASE-MANIFEST.txt @ReyadWeb
+/SHA256SUMS @ReyadWeb

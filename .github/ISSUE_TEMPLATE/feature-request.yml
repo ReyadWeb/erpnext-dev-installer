@@ -1,0 +1,69 @@
+name: Feature request
+description: Propose new behavior or an improvement.
+title: "[feature]: "
+labels: ["type: feature", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem first. Large design changes may fit better as a
+        [Discussion](https://github.com/ReyadWeb/erpnext-dev-toolkit/discussions)
+        under Ideas or Architecture before an Issue.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem being solved
+      description: What hurt or gap does this address?
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current workaround
+      description: How do you cope today, if at all?
+
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Affected engine
+      options:
+        - Native
+        - Docker development
+        - Docker production
+        - Shared / both engines
+        - Docs / CI / other (not engine-specific)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Affected operating system
+      options:
+        - All supported (Ubuntu 24.04/26.04, Debian 13)
+        - Ubuntu 24.04
+        - Ubuntu 26.04
+        - Debian 13
+        - Other / unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Backward compatibility considerations
+      description: Would this break existing installs, CLI flags, backup formats, or docs?
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative approaches considered
