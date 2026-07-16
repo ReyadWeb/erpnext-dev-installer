@@ -1,3 +1,18 @@
+## Unreleased
+
+### Fixed
+
+- **Debian 13 native install no longer fails on system packages.** The installer
+  required `software-properties-common` (Ubuntu-only; removed from Debian 13 /
+  trixie), which aborted guided setup with `Unable to locate package`. That
+  package is now optional, and fontconfig uses the portable `libfontconfig1`
+  name. Ubuntu installs are unchanged.
+
+### Docs
+
+- README Debian 13 notes cover missing `sudo`/sudo group and the package-name
+  portability fix above.
+
 ## v1.15.1 - Local HTTPS verification reliability + Firefox trust guidance
 
 A patch release that hardens local HTTPS verification so false greens no longer

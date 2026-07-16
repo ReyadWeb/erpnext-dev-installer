@@ -253,6 +253,15 @@ should not be used otherwise.
 Debian 13 (trixie) uses the same Debian-family apt/systemd install path as Ubuntu.
 Most steps are identical; the usual friction points are:
 
+- **`sudo` may be missing:** unlike typical Ubuntu cloud images, a fresh Debian
+  install often has no `sudo` and the first user is not in the `sudo` group.
+  As root: `apt-get install -y sudo curl ca-certificates tar` then
+  `usermod -aG sudo YOUR_USER`, log out/in, and continue with the normal
+  `sudo ./erpnext-dev.sh …` commands.
+- **Package names:** the native installer no longer requires Ubuntu-only
+  `software-properties-common` (removed from Debian 13) and prefers
+  `libfontconfig1` for fontconfig. Re-run `local-dev-quickstart` after updating
+  the toolkit if an older release failed at system packages.
 - **Local HTTPS / mkcert:** install `mkcert` **and** `libnss3-tools` (`apt install -y mkcert libnss3-tools`) before `local-ssl-wizard` / `mkcert -install`, so browsers that use the NSS trust store can trust the certificate.
 - **Field validation:** use [`VALIDATION.md`](VALIDATION.md) for go-live checks (firewall, HTTPS, backups) on a real Debian VPS.
 - **Docker on Debian:** the toolkit’s Docker engine install prefers Docker’s official apt repository; OS differences are largely abstracted once the daemon is up.
