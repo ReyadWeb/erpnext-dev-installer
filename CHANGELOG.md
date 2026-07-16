@@ -1,4 +1,9 @@
-## Unreleased
+## v1.15.1 - Local HTTPS verification reliability + Firefox trust guidance
+
+A patch release that hardens local HTTPS verification so false greens no longer
+hide outages, and documents the Firefox-specific mkcert trust path (Firefox uses
+its own store, so Chrome/Brave can be fine while Firefox still warns). No engine
+or install-path changes.
 
 ### Added (Firefox local-HTTPS trust guidance)
 
