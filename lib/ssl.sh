@@ -1800,7 +1800,9 @@ print_host_mkcert_trust_copy_commands() {
 # certutil -A the mkcert root CA with CA trust flags into each.
 print_host_firefox_nss_import_commands() {
   cat <<'EOF_FF_NSS'
-  # Fully quit Firefox first, then run on the HOST (not the VM):
+  # Fully quit Firefox first, then run on the HOST (not the VM).
+  # Discover ANY profile that has an NSS DB (cert9.db) — including custom
+  # names like "Original profile", not only *.default* / *.release*.
   sudo apt install -y libnss3-tools
   CA="$(mkcert -CAROOT)/rootCA.pem"
   test -f "$CA" || { echo "mkcert rootCA.pem not found; run mkcert -install first"; exit 1; }
@@ -1809,11 +1811,12 @@ print_host_firefox_nss_import_commands() {
       "$HOME/snap/firefox/common/.mozilla/firefox" \
       "$HOME/.var/app/org.mozilla.firefox/.mozilla/firefox"; do
     [ -d "$root" ] || continue
-    find "$root" -maxdepth 1 -type d \( -name '*.default*' -o -name '*.release*' \) -print 2>/dev/null
-  done | while read -r profile; do
+    find "$root" -type f -name cert9.db -printf '%h\n' 2>/dev/null
+  done | sort -u | while read -r profile; do
     echo "Importing mkcert CA into: $profile"
     certutil -d "sql:$profile" -D -n "mkcert development CA" >/dev/null 2>&1 || true
-    certutil -d "sql:$profile" -A -t "CT,C,C" -n "mkcert development CA" -i "$CA"
+    certutil -d "sql:$profile" -A -t "CT,C,C" -n "mkcert development CA" -i "$CA" \
+      && certutil -d "sql:$profile" -L | grep -i mkcert || echo "  WARN: import/list failed for $profile"
   done
   echo "Done. Fully quit and reopen Firefox, then open your https:// site"
 EOF_FF_NSS
@@ -2658,21 +2661,30 @@ Firefox note (important):
      mkcert may not reach -- even when it prints "already installed in
      the Firefox trust store".
 
-   Recommended fix (LocalWP-style: import the mkcert CA into EVERY Firefox
-   profile, including Snap/Flatpak). Fully quit Firefox first, then run on
-   the HOST:
+   Fastest fix (often enough on Mint/Ubuntu Snap Firefox):
+     1. In Firefox open: about:config
+     2. Set security.enterprise_roots.enabled = true
+     3. Fully quit Firefox (every window) and reopen https://${SITE_NAME}
+     Firefox then trusts the OS store where mkcert already installed the CA.
+
+   Stronger fix (LocalWP-style: import the mkcert CA into EVERY Firefox
+   NSS profile, including Snap/Flatpak and custom names like "Original
+   profile"). Fully quit Firefox first, then run on the HOST:
 
 $(print_host_firefox_nss_import_commands)
 
-   Fallback if certutil import is inconvenient:
-     - about:config -> set security.enterprise_roots.enabled = true -> restart
-       Firefox (then it trusts the OS store where mkcert put the CA), or
-     - GUI import: mkcert -CAROOT -> open rootCA.pem in Firefox Settings ->
-       Privacy & Security -> Certificates -> Authorities -> Import ->
-       "Trust this CA to identify websites".
+   You must see at least one "Importing mkcert CA into: ..." line. If you see
+   none, Firefox's profile is elsewhere — check about:profiles in Firefox.
+
+   GUI import fallback:
+     mkcert -CAROOT -> open rootCA.pem in Firefox Settings ->
+     Privacy & Security -> Certificates -> Authorities -> Import ->
+     "Trust this CA to identify websites".
 
    Check packaging:  snap list 2>/dev/null | grep -i firefox
                      flatpak list 2>/dev/null | grep -i firefox
+                     ls -d ~/.mozilla/firefox/*/cert9.db \
+                           ~/snap/firefox/common/.mozilla/firefox/*/cert9.db 2>/dev/null
 
 Host checklist (${host_label}):
 ${host_dns_tests}

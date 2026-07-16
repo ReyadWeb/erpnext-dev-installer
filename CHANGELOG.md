@@ -9,6 +9,10 @@
   `rootCA.pem` with `certutil` into each. This covers the common case where
   `mkcert -install` reports success but Snap/Flatpak Firefox still warns
   "Not Secure" (pattern adapted from LocalWP Linux Repair).
+- Profile discovery finds **any** directory with `cert9.db` (not only
+  `*.default*` / `*.release*`), so custom profiles such as "Original profile"
+  are covered; also documents `security.enterprise_roots.enabled=true` as the
+  fastest Snap/Mint fallback.
 - Local HTTPS success screen points operators at that guide instead of only
   re-running `mkcert -install`.
 
