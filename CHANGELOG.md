@@ -1,3 +1,13 @@
+## Unreleased
+
+### Docs
+
+- **Debian sudo bootstrap.** Fresh Debian installs often lack `sudo` and do not
+  put the first user in the `sudo` group. README Debian 13 notes now include a
+  root bootstrap (`apt-get install sudo` + `usermod -aG sudo`), a Debian-ready
+  local-install block, and a Start here pointer. Bootstrap download pins use the
+  latest published GitHub Release (`v1.15.0`) until `v1.15.1` signing completes.
+
 ## v1.15.1 - Local HTTPS verification reliability + Firefox trust guidance
 
 A patch release that hardens local HTTPS verification so false greens no longer
