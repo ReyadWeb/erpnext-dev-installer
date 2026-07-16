@@ -100,14 +100,29 @@ v1.16 always reports mode `monitor` and state `not_armed` (no automation).
 
 | Path | Purpose |
 |------|---------|
-| `/etc/erpnext-dev/health.env` | Thresholds / mode / feature flags (v1.17+) |
+| `/etc/erpnext-dev/health.env` | Optional policy overrides (thresholds, `HEALTH_ALERT_WEBHOOK_URL`, `HEALTH_ALERT_ON`) |
 | `/etc/erpnext-dev/health-check.state` | Compat summary for existing readers (dual-written from snapshot) |
-| `/var/lib/erpnext-dev/metrics/` | `current.json`, rolling `history.jsonl` (v1.17+) |
-| `/var/lib/erpnext-dev/incidents/` | Incident records (v1.17+) |
-| `/var/lib/erpnext-dev/healing/` | Healing state / locks (v1.18+) |
+| `/var/lib/erpnext-dev/metrics/` | `current.json`, rolling `history.jsonl` |
+| `/var/lib/erpnext-dev/incidents/` | Incident JSON records + `latest.json` |
+| `/var/lib/erpnext-dev/healing/` | Cooldown / would-heal dry-run state (actions execute in v1.18) |
 
-Core toolkit has **no Prometheus dependency**. Optional OpenMetrics export is a
-later integration for advanced users.
+Core toolkit has **no Prometheus dependency**. `erpnext-dev health-metrics`
+emits OpenMetrics text for optional scrapers.
+
+### v1.17 monitoring behaviour
+
+On every `dashboard` / `health-check` / `health-snapshot` run:
+
+1. Append a compact sample to `metrics/history.jsonl` (pruned to
+   `HEALTH_HISTORY_MAX_LINES`, default 2016).
+2. Update `healing/state.json` consecutive-failure streaks and a **would-heal**
+   suggestion when the threshold is met (never restarts services).
+3. If overall status **transitions** into DEGRADED/CRITICAL (or recovers to
+   HEALTHY), write an incident under `incidents/` and optionally alert.
+4. Alerts: `logger` + stderr; optional POST to `HEALTH_ALERT_WEBHOOK_URL`
+   when `HEALTH_ALERT_ON` matches (`CRITICAL` default).
+
+CLI: `incidents`, `incident-show`, `health-history`, `health-metrics`.
 
 ---
 
@@ -116,7 +131,7 @@ later integration for advanced users.
 | Version | Focus |
 |---------|--------|
 | **v1.16.0** | Canonical snapshot + Operations Dashboard (`dashboard`, `--watch`, `--json`) |
-| **v1.17.0** | Persistent history, incidents, threshold engine, alert hooks |
+| **v1.17.0** | Persistent history, incidents, threshold engine, alert hooks, OpenMetrics |
 | **v1.18.0** | Guarded auto-healing (modes + ladder + locks) |
 | **v1.19.0** | External watchdog / heartbeat contract for CloudPanel |
 
