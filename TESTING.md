@@ -1,6 +1,37 @@
 # Testing guide
 
-**Current release:** v1.9.0 · See [`ROADMAP.md`](ROADMAP.md) for what is CI-proven vs what requires field validation.
+**Current release:** v1.16.0 · See [`ROADMAP.md`](ROADMAP.md) for what is CI-proven vs what requires field validation.
+
+---
+
+## v1.17.0 monitoring & incident engine
+
+Hermetic (no install, no sudo): `scripts/test-health-snapshot.sh` covers status
+normalization plus incident transitions, history append, and would-heal cooldown
+dry-run under a temporary `HEALTH_LIB_DIR`.
+
+```bash
+scripts/test-health-snapshot.sh
+./erpnext-dev.sh --help | grep -nE "incidents|health-history|health-metrics"
+```
+
+On an installed host:
+
+```bash
+sudo erpnext-dev health-check
+sudo erpnext-dev incidents
+sudo erpnext-dev incident-show
+sudo erpnext-dev health-history 10
+sudo erpnext-dev health-metrics | head
+ls -la /var/lib/erpnext-dev/metrics /var/lib/erpnext-dev/incidents /var/lib/erpnext-dev/healing
+```
+
+Expected:
+
+- History grows in `/var/lib/erpnext-dev/metrics/history.jsonl`.
+- Status transitions create incident JSON under `/var/lib/erpnext-dev/incidents/`.
+- Dashboard healing section shows streaks / would-heal text but **never** restarts services.
+- Optional `/etc/erpnext-dev/health.env` can set `HEALTH_ALERT_WEBHOOK_URL` / thresholds.
 
 ---
 

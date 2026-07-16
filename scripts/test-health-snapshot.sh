@@ -60,6 +60,42 @@ case "$m_status" in
   *) echo "FAIL: memory probe bad status ${m_status}" >&2; fail=$((fail + 1)) ;;
 esac
 
+# Incident + history persistence (hermetic tmpdir)
+HEALTH_LIB_DIR="$(mktemp -d /tmp/erpnext-dev-health-test.XXXXXX)"
+trap 'rm -rf "${HEALTH_LIB_DIR}"' EXIT
+SNAPSHOT_GENERATED_AT="2026-07-16T12:00:00Z"
+SNAPSHOT_SITE="erp.test"
+SNAPSHOT_OVERALL="CRITICAL"
+SNAPSHOT_HOST_STATUS="HEALTHY"
+SNAPSHOT_APP_STATUS="CRITICAL"
+SNAPSHOT_HTTP_STATUS="CRITICAL"
+SNAPSHOT_HTTP_DETAIL="HTTP 000"
+SNAPSHOT_PROTECTION_STATUS="HEALTHY"
+SNAPSHOT_WOULD_HEAL="restart_web_runtime"
+SNAPSHOT_DISK_PERCENT=42
+SNAPSHOT_MEM_AVAIL_PCT=55
+SNAPSHOT_HTTP_MS=12
+health_history_append
+[[ -f "${HEALTH_LIB_DIR}/metrics/history.jsonl" ]] || { echo "FAIL: history not written" >&2; fail=$((fail + 1)); }
+health_record_incident "HEALTHY" "CRITICAL"
+incident_count="$(find "${HEALTH_LIB_DIR}/incidents" -name '*.json' ! -name latest.json 2>/dev/null | wc -l | tr -d ' ')"
+assert_eq "incident created on CRITICAL transition" "1" "$incident_count"
+health_record_incident "CRITICAL" "CRITICAL"
+incident_count2="$(find "${HEALTH_LIB_DIR}/incidents" -name '*.json' ! -name latest.json 2>/dev/null | wc -l | tr -d ' ')"
+assert_eq "no duplicate incident when status unchanged" "1" "$incident_count2"
+health_record_incident "CRITICAL" "HEALTHY"
+incident_count3="$(find "${HEALTH_LIB_DIR}/incidents" -name '*.json' ! -name latest.json 2>/dev/null | wc -l | tr -d ' ')"
+assert_eq "recovery incident recorded" "2" "$incident_count3"
+
+# Cooldown dry-run streaks
+SNAPSHOT_HTTP_STATUS="CRITICAL"
+SNAPSHOT_OVERALL="CRITICAL"
+health_cooldown_tick
+assert_eq "http streak after 1 fail" "1" "${SNAPSHOT_HTTP_FAIL_STREAK}"
+health_cooldown_tick
+health_cooldown_tick
+assert_eq "would_heal after threshold" "restart_web_runtime" "${SNAPSHOT_WOULD_HEAL}"
+
 if (( fail > 0 )); then
   echo "test-health-snapshot: ${fail} failure(s)" >&2
   exit 1

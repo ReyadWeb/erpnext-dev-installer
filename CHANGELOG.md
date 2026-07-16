@@ -1,3 +1,17 @@
+## Unreleased
+
+### Added (v1.17.0 — Monitoring & incident engine)
+
+- **Persistent metrics history** at `/var/lib/erpnext-dev/metrics/history.jsonl`
+  (rolling) plus `current.json` on every snapshot.
+- **Incident records** on HEALTHY↔DEGRADED/CRITICAL transitions under
+  `/var/lib/erpnext-dev/incidents/` with `incidents` / `incident-show` CLI.
+- **Cooldown / would-heal dry-run** in `/var/lib/erpnext-dev/healing/state.json`
+  (suggests restart actions after consecutive failures; **does not** restart).
+- **Alerts**: journal/`logger` + stderr; optional `HEALTH_ALERT_WEBHOOK_URL` in
+  `/etc/erpnext-dev/health.env`.
+- **`health-metrics`** OpenMetrics text export for optional Prometheus scrapers.
+
 ## v1.16.0 - Operations Dashboard + canonical health snapshot
 
 Minor release that introduces a unified ERPNext-aware health model and

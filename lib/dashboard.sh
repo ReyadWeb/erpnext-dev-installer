@@ -1,6 +1,6 @@
 # shellcheck shell=bash
-# Canonical health snapshot and Operations Dashboard (v1.16).
-# Read-only: no auto-healing. See docs/HEALTH-ARCHITECTURE.md.
+# Canonical health snapshot, Operations Dashboard (v1.16), and monitoring /
+# incident engine (v1.17). No auto-healing actions. See docs/HEALTH-ARCHITECTURE.md.
 # Sourced by the toolkit entry point; do not execute directly.
 
 [[ -n "${_ERPNEXT_DEV_DASHBOARD_LOADED:-}" ]] && return 0
@@ -19,6 +19,31 @@ _ERPNEXT_DEV_DASHBOARD_LOADED=1
 : "${HEALTH_HTTPS_CRITICAL_DAYS:=7}"
 : "${HEALTH_HTTP_TIMEOUT_SEC:=5}"
 : "${HEALTH_LIB_DIR:=/var/lib/erpnext-dev}"
+: "${HEALTH_ENV_FILE:=/etc/erpnext-dev/health.env}"
+: "${HEALTH_HISTORY_MAX_LINES:=2016}"
+: "${HEALTH_INCIDENT_KEEP:=50}"
+: "${HEALTH_CONSECUTIVE_FAIL_THRESHOLD:=3}"
+: "${HEALTH_COOLDOWN_SEC:=600}"
+: "${HEALTH_ALERT_ON:=CRITICAL}"
+: "${HEALTH_ALERT_WEBHOOK_URL:=}"
+: "${HEALTH_ALERT_WEBHOOK_TIMEOUT_SEC:=5}"
+
+health_load_policy() {
+  if [[ -f "${HEALTH_ENV_FILE}" ]]; then
+    set -a
+    # shellcheck disable=SC1090,SC1091
+    source "${HEALTH_ENV_FILE}"
+    set +a
+  fi
+}
+
+health_ensure_lib_dirs() {
+  mkdir -p \
+    "${HEALTH_LIB_DIR}/metrics" \
+    "${HEALTH_LIB_DIR}/incidents" \
+    "${HEALTH_LIB_DIR}/healing" \
+    2>/dev/null || true
+}
 
 # --- Status model ------------------------------------------------------------
 
@@ -430,6 +455,7 @@ health_probe_toolkit_integrity() {
 health_snapshot_collect() {
   local pair overall="HEALTHY" engine_label install_value runtime_value
 
+  health_load_policy
   SNAPSHOT_SCHEMA_VERSION="1"
   SNAPSHOT_GENERATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   SNAPSHOT_SITE="${PRODUCTION_DOMAIN:-${SITE_NAME:-unknown}}"
@@ -490,8 +516,13 @@ health_snapshot_collect() {
   pair="$(health_probe_toolkit_integrity)"; SNAPSHOT_INTEGRITY_STATUS="${pair%%|*}"; SNAPSHOT_INTEGRITY_DETAIL="${pair#*|}"
 
   SNAPSHOT_HEALING_MODE="monitor"
-  SNAPSHOT_HEALING_STATE="not_armed"
-  SNAPSHOT_HEALING_DETAIL="Auto-healing not enabled in v1.16 (observe only)"
+  SNAPSHOT_HEALING_STATE="observing"
+  SNAPSHOT_HEALING_DETAIL="Monitoring active; auto-healing actions deferred to v1.18"
+  SNAPSHOT_WOULD_HEAL="none"
+  SNAPSHOT_HTTP_FAIL_STREAK="0"
+  SNAPSHOT_OVERALL_FAIL_STREAK="0"
+  SNAPSHOT_LAST_INCIDENT_ID=""
+  SNAPSHOT_PREVIOUS_OVERALL=""
 
   # Host rollup (CPU alone is not collected as a hard overall driver — load used as pressure proxy)
   SNAPSHOT_HOST_STATUS="HEALTHY"
@@ -528,6 +559,219 @@ health_snapshot_collect() {
   SNAPSHOT_OVERALL="$overall"
 }
 
+health_previous_overall_from_disk() {
+  local prev=""
+  if [[ -f "${HEALTH_LIB_DIR}/metrics/current.json" ]]; then
+    prev="$(sed -n 's/.*"overall_status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+      "${HEALTH_LIB_DIR}/metrics/current.json" 2>/dev/null | head -n 1)"
+  fi
+  printf '%s' "${prev}"
+}
+
+health_history_append() {
+  local hist="${HEALTH_LIB_DIR}/metrics/history.jsonl" tmp
+  health_ensure_lib_dirs
+  [[ -d "${HEALTH_LIB_DIR}/metrics" && -w "${HEALTH_LIB_DIR}/metrics" ]] || return 0
+  {
+    printf '{'
+    printf '"t":' ; json_escape "${SNAPSHOT_GENERATED_AT:-}" ; printf ','
+    printf '"overall":' ; json_escape "${SNAPSHOT_OVERALL:-UNKNOWN}" ; printf ','
+    printf '"host":' ; json_escape "${SNAPSHOT_HOST_STATUS:-UNKNOWN}" ; printf ','
+    printf '"app":' ; json_escape "${SNAPSHOT_APP_STATUS:-UNKNOWN}" ; printf ','
+    printf '"disk_pct":%s,' "${SNAPSHOT_DISK_PERCENT:-0}"
+    printf '"mem_avail_pct":%s,' "${SNAPSHOT_MEM_AVAIL_PCT:-0}"
+    printf '"http":' ; json_escape "${SNAPSHOT_HTTP_STATUS:-UNKNOWN}" ; printf ','
+    printf '"http_ms":%s' "${SNAPSHOT_HTTP_MS:-0}"
+    printf '}\n'
+  } >>"$hist"
+  chmod 600 "$hist" 2>/dev/null || true
+  if [[ -f "$hist" ]]; then
+    local lines
+    lines="$(wc -l <"$hist" | tr -d ' ')"
+    if [[ "$lines" =~ ^[0-9]+$ && "$lines" -gt "${HEALTH_HISTORY_MAX_LINES}" ]]; then
+      tmp="$(mktemp)"
+      tail -n "${HEALTH_HISTORY_MAX_LINES}" "$hist" >"$tmp" && mv "$tmp" "$hist"
+      chmod 600 "$hist" 2>/dev/null || true
+    fi
+  fi
+}
+
+health_record_incident() {
+  local prev="$1" curr="$2" id path prev_n curr_n should=0
+  [[ -n "$curr" && -n "$prev" ]] || return 0
+  prev_n="$(health_status_normalize "$prev")"
+  curr_n="$(health_status_normalize "$curr")"
+  [[ "$prev_n" != "$curr_n" ]] || return 0
+  case "$curr_n" in
+    DEGRADED|CRITICAL) should=1 ;;
+  esac
+  if [[ "$curr_n" == "HEALTHY" && ( "$prev_n" == "DEGRADED" || "$prev_n" == "CRITICAL" ) ]]; then
+    should=1
+  fi
+  (( should == 1 )) || return 0
+
+  health_ensure_lib_dirs
+  # Include nanoseconds (or RANDOM fallback) so rapid transitions do not collide.
+  id="$(date -u +%Y%m%dT%H%M%S%NZ 2>/dev/null || printf '%sZ-%s' "$(date -u +%Y%m%dT%H%M%S)" "${RANDOM}")-$$"
+  path="${HEALTH_LIB_DIR}/incidents/${id}.json"
+  {
+    printf '{\n'
+    printf '  "id": ' ; json_escape "$id" ; printf ',\n'
+    printf '  "timestamp": ' ; json_escape "${SNAPSHOT_GENERATED_AT:-}" ; printf ',\n'
+    printf '  "previous_status": ' ; json_escape "$prev_n" ; printf ',\n'
+    printf '  "status": ' ; json_escape "$curr_n" ; printf ',\n'
+    printf '  "site": ' ; json_escape "${SNAPSHOT_SITE:-}" ; printf ',\n'
+    printf '  "host": ' ; json_escape "${SNAPSHOT_HOST_STATUS:-}" ; printf ',\n'
+    printf '  "application": ' ; json_escape "${SNAPSHOT_APP_STATUS:-}" ; printf ',\n'
+    printf '  "http": ' ; json_escape "${SNAPSHOT_HTTP_STATUS:-}" ; printf ',\n'
+    printf '  "http_detail": ' ; json_escape "${SNAPSHOT_HTTP_DETAIL:-}" ; printf ',\n'
+    printf '  "protection": ' ; json_escape "${SNAPSHOT_PROTECTION_STATUS:-}" ; printf ',\n'
+    printf '  "would_heal": ' ; json_escape "${SNAPSHOT_WOULD_HEAL:-none}" ; printf '\n'
+    printf '}\n'
+  } >"$path"
+  chmod 600 "$path" 2>/dev/null || true
+  ln -sfn "$path" "${HEALTH_LIB_DIR}/incidents/latest.json" 2>/dev/null || cp -f "$path" "${HEALTH_LIB_DIR}/incidents/latest.json" 2>/dev/null || true
+  SNAPSHOT_LAST_INCIDENT_ID="$id"
+
+  # Prune oldest incident files beyond keep count
+  local -a files=()
+  local f
+  for f in "${HEALTH_LIB_DIR}/incidents/"*.json; do
+    [[ -f "$f" ]] || continue
+    [[ "$(basename "$f")" == "latest.json" ]] && continue
+    files+=("$f")
+  done
+  if (( ${#files[@]} > 1 )); then
+    mapfile -t files < <(printf '%s\n' "${files[@]}" | sort)
+  fi
+  if (( ${#files[@]} > HEALTH_INCIDENT_KEEP )); then
+    local drop=$(( ${#files[@]} - HEALTH_INCIDENT_KEEP ))
+    local i
+    for (( i=0; i<drop; i++ )); do
+      rm -f "${files[$i]}" 2>/dev/null || true
+    done
+  fi
+}
+
+health_cooldown_tick() {
+  local state_file="${HEALTH_LIB_DIR}/healing/state.json"
+  local now http_streak overall_streak last_action_at cooldown_until would_heal
+  local prev_http_streak=0 prev_overall_streak=0
+  now="$(date +%s)"
+  health_ensure_lib_dirs
+
+  if [[ -f "$state_file" ]]; then
+    prev_http_streak="$(sed -n 's/.*"http_fail_streak"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$state_file" | head -n 1)"
+    prev_overall_streak="$(sed -n 's/.*"overall_fail_streak"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$state_file" | head -n 1)"
+    last_action_at="$(sed -n 's/.*"last_would_heal_at"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$state_file" | head -n 1)"
+    [[ "$prev_http_streak" =~ ^[0-9]+$ ]] || prev_http_streak=0
+    [[ "$prev_overall_streak" =~ ^[0-9]+$ ]] || prev_overall_streak=0
+    [[ "$last_action_at" =~ ^[0-9]+$ ]] || last_action_at=0
+  else
+    last_action_at=0
+  fi
+
+  if [[ "$(health_status_normalize "${SNAPSHOT_HTTP_STATUS:-UNKNOWN}")" == "CRITICAL" ]]; then
+    http_streak=$(( prev_http_streak + 1 ))
+  else
+    http_streak=0
+  fi
+  case "$(health_status_normalize "${SNAPSHOT_OVERALL:-UNKNOWN}")" in
+    DEGRADED|CRITICAL) overall_streak=$(( prev_overall_streak + 1 )) ;;
+    *) overall_streak=0 ;;
+  esac
+
+  would_heal="none"
+  cooldown_until=$(( last_action_at + HEALTH_COOLDOWN_SEC ))
+  if (( now >= cooldown_until )); then
+    if (( http_streak >= HEALTH_CONSECUTIVE_FAIL_THRESHOLD )); then
+      would_heal="restart_web_runtime"
+      last_action_at="$now"
+    elif (( overall_streak >= HEALTH_CONSECUTIVE_FAIL_THRESHOLD )) && \
+         [[ "$(health_status_normalize "${SNAPSHOT_OVERALL:-}")" == "CRITICAL" ]]; then
+      would_heal="restart_app_stack"
+      last_action_at="$now"
+    fi
+  else
+    would_heal="cooldown"
+  fi
+
+  SNAPSHOT_HTTP_FAIL_STREAK="$http_streak"
+  SNAPSHOT_OVERALL_FAIL_STREAK="$overall_streak"
+  SNAPSHOT_WOULD_HEAL="$would_heal"
+  if [[ "$would_heal" == "restart_web_runtime" || "$would_heal" == "restart_app_stack" ]]; then
+    SNAPSHOT_HEALING_DETAIL="Would heal (dry-run): ${would_heal} — not executed until v1.18"
+  elif [[ "$would_heal" == "cooldown" ]]; then
+    SNAPSHOT_HEALING_DETAIL="Cooldown active; next dry-run suggestion after ${HEALTH_COOLDOWN_SEC}s"
+  else
+    SNAPSHOT_HEALING_DETAIL="Monitoring active; streaks http=${http_streak} overall=${overall_streak} (threshold ${HEALTH_CONSECUTIVE_FAIL_THRESHOLD})"
+  fi
+
+  {
+    printf '{\n'
+    printf '  "updated_at": %s,\n' "$now"
+    printf '  "mode": ' ; json_escape "monitor" ; printf ',\n'
+    printf '  "http_fail_streak": %s,\n' "$http_streak"
+    printf '  "overall_fail_streak": %s,\n' "$overall_streak"
+    printf '  "would_heal": ' ; json_escape "$would_heal" ; printf ',\n'
+    printf '  "last_would_heal_at": %s,\n' "$last_action_at"
+    printf '  "cooldown_sec": %s\n' "${HEALTH_COOLDOWN_SEC}"
+    printf '}\n'
+  } >"$state_file"
+  chmod 600 "$state_file" 2>/dev/null || true
+}
+
+health_alert_dispatch() {
+  local status="${1:-}" id="${2:-}"
+  local status_n msg
+  status_n="$(health_status_normalize "$status")"
+  case "${HEALTH_ALERT_ON^^}" in
+    CRITICAL)
+      [[ "$status_n" == "CRITICAL" ]] || return 0
+      ;;
+    DEGRADED|WARN)
+      [[ "$status_n" == "CRITICAL" || "$status_n" == "DEGRADED" ]] || return 0
+      ;;
+    NONE|OFF|0) return 0 ;;
+    *)
+      [[ "$status_n" == "CRITICAL" ]] || return 0
+      ;;
+  esac
+
+  msg="erpnext-dev health ${status_n} site=${SNAPSHOT_SITE:-unknown} incident=${id:-none} http=${SNAPSHOT_HTTP_STATUS:-} disk=${SNAPSHOT_DISK_PERCENT:-}%"
+  if command -v logger >/dev/null 2>&1; then
+    logger -t erpnext-dev-health "$msg" 2>/dev/null || true
+  fi
+  echo "ALERT: $msg" >&2
+
+  if [[ -n "${HEALTH_ALERT_WEBHOOK_URL}" ]] && command -v curl >/dev/null 2>&1; then
+    curl -sS -o /dev/null \
+      --connect-timeout "${HEALTH_ALERT_WEBHOOK_TIMEOUT_SEC}" \
+      --max-time "${HEALTH_ALERT_WEBHOOK_TIMEOUT_SEC}" \
+      -X POST \
+      -H 'Content-Type: application/json' \
+      --data "{\"text\":$(json_escape "$msg"),\"status\":$(json_escape "$status_n"),\"incident\":$(json_escape "${id:-}"),\"site\":$(json_escape "${SNAPSHOT_SITE:-}")}" \
+      "${HEALTH_ALERT_WEBHOOK_URL}" 2>/dev/null || true
+  fi
+}
+
+health_monitor_after_snapshot() {
+  local prev
+  prev="$(health_previous_overall_from_disk)"
+  SNAPSHOT_PREVIOUS_OVERALL="$prev"
+
+  # Cooldown/would-heal before incident so incident can record would_heal
+  health_cooldown_tick
+  health_history_append
+
+  if [[ -n "$prev" ]]; then
+    health_record_incident "$prev" "${SNAPSHOT_OVERALL:-UNKNOWN}"
+  fi
+  if [[ -n "${SNAPSHOT_LAST_INCIDENT_ID:-}" ]]; then
+    health_alert_dispatch "${SNAPSHOT_OVERALL:-}" "${SNAPSHOT_LAST_INCIDENT_ID}"
+  fi
+}
+
 health_snapshot_write_compat_state() {
   local overall_legacy disk_percent backup_state backup_age off_status
   overall_legacy="$(health_legacy_ok_warn "${SNAPSHOT_OVERALL:-UNKNOWN}")"
@@ -547,7 +791,8 @@ health_snapshot_write_compat_state() {
       "$off_status"
   fi
 
-  mkdir -p "${HEALTH_LIB_DIR}/metrics" 2>/dev/null || true
+  health_ensure_lib_dirs
+  health_monitor_after_snapshot
   if [[ -d "${HEALTH_LIB_DIR}/metrics" && -w "${HEALTH_LIB_DIR}/metrics" ]]; then
     health_snapshot_emit_json >"${HEALTH_LIB_DIR}/metrics/current.json" 2>/dev/null || true
     chmod 600 "${HEALTH_LIB_DIR}/metrics/current.json" 2>/dev/null || true
@@ -613,8 +858,17 @@ health_snapshot_emit_json() {
   printf '  },\n'
   printf '  "healing": {\n'
   printf '    "mode": ' ; json_escape "${SNAPSHOT_HEALING_MODE:-monitor}" ; printf ',\n'
-  printf '    "state": ' ; json_escape "${SNAPSHOT_HEALING_STATE:-not_armed}" ; printf ',\n'
-  printf '    "detail": ' ; json_escape "${SNAPSHOT_HEALING_DETAIL:-}" ; printf '\n'
+  printf '    "state": ' ; json_escape "${SNAPSHOT_HEALING_STATE:-observing}" ; printf ',\n'
+  printf '    "detail": ' ; json_escape "${SNAPSHOT_HEALING_DETAIL:-}" ; printf ',\n'
+  printf '    "would_heal": ' ; json_escape "${SNAPSHOT_WOULD_HEAL:-none}" ; printf ',\n'
+  printf '    "http_fail_streak": %s,\n' "${SNAPSHOT_HTTP_FAIL_STREAK:-0}"
+  printf '    "overall_fail_streak": %s\n' "${SNAPSHOT_OVERALL_FAIL_STREAK:-0}"
+  printf '  },\n'
+  printf '  "monitoring": {\n'
+  printf '    "previous_overall": ' ; json_escape "${SNAPSHOT_PREVIOUS_OVERALL:-}" ; printf ',\n'
+  printf '    "last_incident_id": ' ; json_escape "${SNAPSHOT_LAST_INCIDENT_ID:-}" ; printf ',\n'
+  printf '    "history_file": ' ; json_escape "${HEALTH_LIB_DIR}/metrics/history.jsonl" ; printf ',\n'
+  printf '    "incidents_dir": ' ; json_escape "${HEALTH_LIB_DIR}/incidents" ; printf '\n'
   printf '  }\n'
   printf '}\n'
 }
@@ -679,16 +933,131 @@ show_operations_dashboard() {
   dashboard_status_line "Toolkit integrity" "$SNAPSHOT_INTEGRITY_STATUS" "$SNAPSHOT_INTEGRITY_DETAIL"
   ui_box_end
 
-  ui_box_start "AUTO-HEALING"
+  ui_box_start "MONITORING & AUTO-HEALING"
   status_line "Mode" "INFO" "$SNAPSHOT_HEALING_MODE"
-  status_line "Monitor" "INFO" "$SNAPSHOT_HEALING_STATE"
+  status_line "State" "INFO" "$SNAPSHOT_HEALING_STATE"
+  status_line "Would heal" "INFO" "${SNAPSHOT_WOULD_HEAL:-none} (dry-run)"
+  status_line "HTTP streak" "INFO" "${SNAPSHOT_HTTP_FAIL_STREAK:-0} / ${HEALTH_CONSECUTIVE_FAIL_THRESHOLD}"
+  status_line "Overall streak" "INFO" "${SNAPSHOT_OVERALL_FAIL_STREAK:-0} / ${HEALTH_CONSECUTIVE_FAIL_THRESHOLD}"
   status_line "Note" "INFO" "$SNAPSHOT_HEALING_DETAIL"
+  if [[ -n "${SNAPSHOT_LAST_INCIDENT_ID:-}" ]]; then
+    status_line "New incident" "WARN" "$SNAPSHOT_LAST_INCIDENT_ID"
+  elif [[ -f "${HEALTH_LIB_DIR}/incidents/latest.json" ]]; then
+    status_line "Latest incident" "INFO" "$(basename "$(readlink -f "${HEALTH_LIB_DIR}/incidents/latest.json" 2>/dev/null || echo latest.json)")"
+  fi
   echo
-  echo "  Architecture: docs/HEALTH-ARCHITECTURE.md"
-  echo "  Healing modes (safe/advanced) ship in v1.18 — not armed in v1.16."
+  echo "  History: ${HEALTH_LIB_DIR}/metrics/history.jsonl"
+  echo "  Incidents: $(toolkit_cmd incidents)"
+  echo "  OpenMetrics: $(toolkit_cmd health-metrics)"
+  echo "  Actions execute in v1.18 — observe/detect/record/alert only."
   ui_box_end
 
-  ui_next "$(toolkit_cmd dashboard --json)" "$(toolkit_cmd health-check)" "$(toolkit_cmd production-ops-wizard)"
+  ui_next "$(toolkit_cmd dashboard --json)" "$(toolkit_cmd incidents)" "$(toolkit_cmd health-history)"
+}
+
+show_health_incidents() {
+  require_sudo
+  local dir="${HEALTH_LIB_DIR}/incidents" f count=0
+  ui_box_start "Health Incidents"
+  if [[ ! -d "$dir" ]]; then
+    status_line "Incidents" "INFO" "none yet — run health-check or dashboard first"
+    ui_box_end
+    return 0
+  fi
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    local id status ts
+    id="$(basename "$f" .json)"
+    status="$(sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$f" | head -n 1)"
+    ts="$(sed -n 's/.*"timestamp"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$f" | head -n 1)"
+    status_line "$id" "$(health_legacy_ok_warn "${status:-UNKNOWN}")" "${ts:-unknown} → ${status:-UNKNOWN}"
+    count=$((count + 1))
+  done < <(
+    for f in "$dir"/*.json; do
+      [[ -f "$f" ]] || continue
+      [[ "$(basename "$f")" == "latest.json" ]] && continue
+      printf '%s\n' "$f"
+    done | sort -r | head -n 20
+  )
+  if (( count == 0 )); then
+    status_line "Incidents" "INFO" "none recorded"
+  fi
+  ui_box_end
+  ui_next "$(toolkit_cmd incident-show)" "$(toolkit_cmd health-history)" "$(toolkit_cmd dashboard)"
+}
+
+show_health_incident() {
+  require_sudo
+  local id="${1:-}" path
+  if [[ -z "$id" ]]; then
+    if [[ -f "${HEALTH_LIB_DIR}/incidents/latest.json" ]]; then
+      path="$(readlink -f "${HEALTH_LIB_DIR}/incidents/latest.json" 2>/dev/null || true)"
+      [[ -n "$path" && -f "$path" ]] || path="${HEALTH_LIB_DIR}/incidents/latest.json"
+    else
+      fail "No incident id given and no latest incident. Usage: $(toolkit_cmd incident-show) <id>"
+    fi
+  else
+    path="${HEALTH_LIB_DIR}/incidents/${id}.json"
+    [[ -f "$path" ]] || path="${HEALTH_LIB_DIR}/incidents/${id}"
+  fi
+  [[ -f "$path" ]] || fail "Incident not found: ${id:-latest}"
+  ui_box_start "Incident $(basename "$path" .json)"
+  cat "$path"
+  echo
+  ui_box_end
+}
+
+show_health_history() {
+  require_sudo
+  local hist="${HEALTH_LIB_DIR}/metrics/history.jsonl" n="${1:-20}" line
+  ui_box_start "Health History (last ${n})"
+  if [[ ! -f "$hist" ]]; then
+    status_line "History" "INFO" "empty — run health-check or dashboard first"
+    ui_box_end
+    return 0
+  fi
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    local t overall disk mem http
+    t="$(sed -n 's/.*"t":"\([^"]*\)".*/\1/p' <<<"$line")"
+    overall="$(sed -n 's/.*"overall":"\([^"]*\)".*/\1/p' <<<"$line")"
+    disk="$(sed -n 's/.*"disk_pct":\([0-9][0-9]*\).*/\1/p' <<<"$line")"
+    mem="$(sed -n 's/.*"mem_avail_pct":\([0-9][0-9]*\).*/\1/p' <<<"$line")"
+    http="$(sed -n 's/.*"http":"\([^"]*\)".*/\1/p' <<<"$line")"
+    status_line "${t:-unknown}" "$(health_legacy_ok_warn "${overall:-UNKNOWN}")" \
+      "overall=${overall:-?} disk=${disk:-?}% mem_avail=${mem:-?}% http=${http:-?}"
+  done < <(tail -n "$n" "$hist")
+  ui_box_end
+  ui_next "$(toolkit_cmd incidents)" "$(toolkit_cmd health-metrics)" "$(toolkit_cmd dashboard)"
+}
+
+health_emit_openmetrics() {
+  require_sudo
+  health_snapshot_collect
+  health_snapshot_write_compat_state
+  local overall_rank
+  overall_rank="$(health_status_rank "${SNAPSHOT_OVERALL:-UNKNOWN}")"
+  cat <<EOF
+# HELP erpnext_dev_health_overall Overall health rank (0=HEALTHY 1=UNKNOWN 2=DEGRADED 3=CRITICAL)
+# TYPE erpnext_dev_health_overall gauge
+erpnext_dev_health_overall{site="$(printf '%s' "${SNAPSHOT_SITE:-}" | tr -d '"')",status="$(printf '%s' "${SNAPSHOT_OVERALL:-UNKNOWN}")"} ${overall_rank}
+# HELP erpnext_dev_disk_used_percent Root filesystem used percent
+# TYPE erpnext_dev_disk_used_percent gauge
+erpnext_dev_disk_used_percent ${SNAPSHOT_DISK_PERCENT:-0}
+# HELP erpnext_dev_memory_available_percent MemAvailable as percent of MemTotal
+# TYPE erpnext_dev_memory_available_percent gauge
+erpnext_dev_memory_available_percent ${SNAPSHOT_MEM_AVAIL_PCT:-0}
+# HELP erpnext_dev_http_latency_ms HTTP /api/method/ping latency
+# TYPE erpnext_dev_http_latency_ms gauge
+erpnext_dev_http_latency_ms ${SNAPSHOT_HTTP_MS:-0}
+# HELP erpnext_dev_http_up 1 if HTTP probe HEALTHY
+# TYPE erpnext_dev_http_up gauge
+erpnext_dev_http_up $([[ "$(health_status_normalize "${SNAPSHOT_HTTP_STATUS:-}")" == "HEALTHY" ]] && echo 1 || echo 0)
+# HELP erpnext_dev_http_fail_streak Consecutive CRITICAL HTTP probes
+# TYPE erpnext_dev_http_fail_streak gauge
+erpnext_dev_http_fail_streak ${SNAPSHOT_HTTP_FAIL_STREAK:-0}
+# EOF
+EOF
 }
 
 run_operations_dashboard() {

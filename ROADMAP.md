@@ -48,7 +48,7 @@ record for this dimension.
 | **v1.15.2** | Debian 13 native install parity: drop hard dependency on Ubuntu-only `software-properties-common`; portable `libfontconfig1`; README Debian sudo bootstrap + install block. | **implemented** |
 | **v1.15.3** | Credentials / Login submenu (`credentials-menu`) + Firefox Snap/Flatpak NSS host-trust helper (`host-firefox-trust-mkcert.sh`). | **implemented** |
 | **v1.16.0** | **Operations Dashboard + canonical health snapshot**: unified HEALTHY/DEGRADED/CRITICAL/UNKNOWN model; host + ERPNext + engine-aware + protection/DR probes; `dashboard` / `--watch` / `--json`; `health-check` consumes the same snapshot. No auto-healing. See [`docs/HEALTH-ARCHITECTURE.md`](docs/HEALTH-ARCHITECTURE.md). | **implemented** |
-| **v1.17.0** | **Monitoring & incident engine**: `/var/lib/erpnext-dev` metrics history + incidents; threshold transitions; cooldown bookkeeping; CLI alert hooks; optional OpenMetrics. | planned |
+| **v1.17.0** | **Monitoring & incident engine**: `/var/lib/erpnext-dev` metrics history + incidents; threshold transitions; cooldown / would-heal dry-run; CLI + webhook alert hooks; OpenMetrics export. | **in progress** |
 | **v1.18.0** | **Guarded auto-healing**: monitor / safe / advanced modes; recovery ladder; rate limits + AUTO-HEALING LOCKED; recovery verification. Safe = default; host reboot opt-in only. | planned |
 | **v1.19.0** | **External watchdog foundation**: guest heartbeat contract; Case B (VM-down) external/provider recovery; optional `RuntimeWatchdogSec=` guidance; CloudPanel stub. | planned |
 

@@ -675,6 +675,24 @@ sudo erpnext-dev production-ops-wizard
 Architecture and future healing phases:
 [`docs/HEALTH-ARCHITECTURE.md`](docs/HEALTH-ARCHITECTURE.md).
 
+Monitoring (v1.17+):
+
+```bash
+sudo erpnext-dev incidents              # recent status transitions
+sudo erpnext-dev incident-show          # latest incident JSON
+sudo erpnext-dev health-history         # recent history samples
+sudo erpnext-dev health-metrics         # OpenMetrics text export
+```
+
+Optional policy file `/etc/erpnext-dev/health.env` (example):
+
+```bash
+HEALTH_ALERT_ON=CRITICAL
+HEALTH_ALERT_WEBHOOK_URL=https://hooks.example.com/erpnext-dev
+HEALTH_CONSECUTIVE_FAIL_THRESHOLD=3
+HEALTH_COOLDOWN_SEC=600
+```
+
 ---
 
 ## Health monitoring
@@ -692,8 +710,9 @@ sudo erpnext-dev health-check-status
 It covers host resources (including MemAvailable), HTTP reachability/latency,
 engine-aware runtime (native or Docker), HTTPS, firewall, Fail2Ban, backups,
 and restore rehearsal. Results are recorded at
-`/etc/erpnext-dev/health-check.state` (compat) and optionally
-`/var/lib/erpnext-dev/metrics/current.json`.
+`/etc/erpnext-dev/health-check.state` (compat) and
+`/var/lib/erpnext-dev/metrics/` (history + current). Status transitions create
+incident files under `/var/lib/erpnext-dev/incidents/`.
 
 ---
 
