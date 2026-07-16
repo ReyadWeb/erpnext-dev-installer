@@ -1,4 +1,8 @@
-## Unreleased
+## v1.15.2 - Debian 13 native install parity
+
+Patch release so guided native install on Debian 13 works like Ubuntu: fix the
+system-package abort caused by an Ubuntu-only dependency, and document the
+Debian `sudo` bootstrap path for fresh installs.
 
 ### Fixed
 
@@ -10,8 +14,8 @@
 
 ### Docs
 
-- README Debian 13 notes cover missing `sudo`/sudo group and the package-name
-  portability fix above.
+- README Debian 13 notes include a root `sudo` bootstrap, a Debian-ready
+  local-install block, and a Start here pointer when `sudo` is missing.
 
 ## v1.15.1 - Local HTTPS verification reliability + Firefox trust guidance
 
