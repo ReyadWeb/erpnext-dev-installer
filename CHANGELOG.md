@@ -40,7 +40,7 @@ NSS import helper. No engine or install-path changes.
   reset-admin-password helpers so operators can view or remove the plaintext
   credentials file without memorizing CLI names.
 
-### Improved (Firefox Snap/Flatpak trust — LocalWP-inspired)
+### Improved (Firefox Snap/Flatpak trust)
 
 - **`browser-trust-guide` now includes a host-side NSS import one-liner** that
   discovers Firefox profiles under `~/.mozilla/firefox`,
