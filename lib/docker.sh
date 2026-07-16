@@ -17,11 +17,11 @@ _ERPNEXT_DEV_DOCKER_LOADED=1
 # ------------------------------------------------------------
 DOCKER_WORKDIR="${DOCKER_WORKDIR:-/opt/erpnext-dev/docker}"
 FRAPPE_DOCKER_REPO="${FRAPPE_DOCKER_REPO:-https://github.com/frappe/frappe_docker.git}"
-# Pin the frappe_docker checkout for reproducible provisioning. Set to an
-# immutable commit SHA (e.g. FRAPPE_DOCKER_REF=<40-char-sha>) for a fully audited
-# provision; the default tracks the upstream default branch. Either way the
-# resolved commit SHA is recorded at provision time (see docker_write_pins).
-FRAPPE_DOCKER_REF="${FRAPPE_DOCKER_REF:-main}"
+# Pin the frappe_docker checkout for reproducible provisioning. Default is an
+# audited immutable commit SHA. Override with FRAPPE_DOCKER_REF=main (or another
+# branch/tag/SHA) when you intentionally want a different tip; the resolved
+# commit SHA is always recorded at provision time (see docker_write_pins).
+FRAPPE_DOCKER_REF="${FRAPPE_DOCKER_REF:-c004361e790125ed13aaa933d11f7838711a8960}"
 # Pinned production-ready image published by the Frappe team. For maximum
 # reproducibility pin by DIGEST rather than tag, e.g.
 # DOCKER_ERPNEXT_IMAGE=frappe/erpnext@sha256:<digest>. The digest actually pulled
@@ -478,6 +478,28 @@ docker_preflight() {
 # ------------------------------------------------------------
 # Provisioning
 # ------------------------------------------------------------
+docker_frappe_ref_is_sha() {
+  [[ "${1:-}" =~ ^[0-9a-f]{7,40}$ ]]
+}
+
+docker_checkout_frappe_ref() {
+  # Fetch/checkout FRAPPE_DOCKER_REF whether it is a branch, tag, or commit SHA.
+  local clone="$1"
+  if docker_frappe_ref_is_sha "$FRAPPE_DOCKER_REF"; then
+    $SUDO git -C "$clone" fetch --depth 1 origin "$FRAPPE_DOCKER_REF" >/dev/null 2>&1 \
+      || $SUDO git -C "$clone" fetch --depth 1 origin >/dev/null 2>&1 \
+      || true
+    if ! $SUDO git -C "$clone" checkout -q "$FRAPPE_DOCKER_REF" 2>/dev/null; then
+      $SUDO git -C "$clone" checkout -q FETCH_HEAD 2>/dev/null \
+        || fail "Could not check out frappe_docker SHA ${FRAPPE_DOCKER_REF}"
+    fi
+  else
+    $SUDO git -C "$clone" fetch --depth 1 origin "$FRAPPE_DOCKER_REF" >/dev/null 2>&1 || true
+    $SUDO git -C "$clone" checkout -q "$FRAPPE_DOCKER_REF" 2>/dev/null || true
+    $SUDO git -C "$clone" reset --hard "origin/${FRAPPE_DOCKER_REF}" >/dev/null 2>&1 || true
+  fi
+}
+
 docker_provision_workdir() {
   require_sudo
   local clone
@@ -487,14 +509,22 @@ docker_provision_workdir() {
 
   if [[ -d "${clone}/.git" ]]; then
     log "Updating frappe_docker checkout (${FRAPPE_DOCKER_REF})"
-    $SUDO git -C "$clone" fetch --depth 1 origin "$FRAPPE_DOCKER_REF" >/dev/null 2>&1 || true
-    $SUDO git -C "$clone" checkout -q "$FRAPPE_DOCKER_REF" 2>/dev/null || true
-    $SUDO git -C "$clone" reset --hard "origin/${FRAPPE_DOCKER_REF}" >/dev/null 2>&1 || true
+    docker_checkout_frappe_ref "$clone"
   else
     log "Cloning frappe_docker (${FRAPPE_DOCKER_REF}) into ${clone}"
     $SUDO rm -rf "$clone"
-    if ! $SUDO git clone --depth 1 --branch "$FRAPPE_DOCKER_REF" "$FRAPPE_DOCKER_REPO" "$clone" >/dev/null 2>&1; then
-      # Fallback: full clone then checkout (branch may be a commit/tag).
+    if docker_frappe_ref_is_sha "$FRAPPE_DOCKER_REF"; then
+      $SUDO mkdir -p "$clone"
+      $SUDO git -C "$clone" init -q >/dev/null 2>&1 \
+        || fail "Could not init frappe_docker checkout at ${clone}"
+      $SUDO git -C "$clone" remote add origin "$FRAPPE_DOCKER_REPO" >/dev/null 2>&1 \
+        || fail "Could not add frappe_docker remote"
+      $SUDO git -C "$clone" fetch --depth 1 origin "$FRAPPE_DOCKER_REF" >/dev/null 2>&1 \
+        || fail "Could not fetch frappe_docker SHA ${FRAPPE_DOCKER_REF}"
+      $SUDO git -C "$clone" checkout -q FETCH_HEAD >/dev/null 2>&1 \
+        || fail "Could not check out frappe_docker SHA ${FRAPPE_DOCKER_REF}"
+    elif ! $SUDO git clone --depth 1 --branch "$FRAPPE_DOCKER_REF" "$FRAPPE_DOCKER_REPO" "$clone" >/dev/null 2>&1; then
+      # Fallback: full clone then checkout (unusual branch/tag shapes).
       $SUDO rm -rf "$clone"
       $SUDO git clone "$FRAPPE_DOCKER_REPO" "$clone" >/dev/null 2>&1 || fail "Could not clone frappe_docker from ${FRAPPE_DOCKER_REPO}"
       $SUDO git -C "$clone" checkout -q "$FRAPPE_DOCKER_REF" 2>/dev/null || warn "Could not check out ref ${FRAPPE_DOCKER_REF}; using default branch."

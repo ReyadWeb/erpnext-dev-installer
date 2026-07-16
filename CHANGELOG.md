@@ -1,3 +1,17 @@
+## Unreleased
+
+### Fixed / hardened
+
+- **README Docker messaging** — removed stale “local-dev only / production SSL on
+  roadmap” wording; documents shipped Docker production + Traefik HTTPS, and
+  accurately states Debian 13 field validation + Ubuntu 26.04 non-blocking CI.
+- **`FRAPPE_DOCKER_REF` default** — pinned to audited immutable
+  `frappe_docker` commit `c004361e7901…` (override with `main` when intentional);
+  SHA-aware shallow fetch/checkout.
+- **Health observe probes** — CPU busy % + iowait sample; certificate expiry
+  days against `HEALTH_HTTPS_*_DAYS`; Docker restart-loop detection; best-effort
+  workers / scheduler / queue depth. Still **monitor-only** (no auto-healing).
+
 ## v1.17.0 - Monitoring & incident engine
 
 Minor release that persists health history and incidents, adds threshold /

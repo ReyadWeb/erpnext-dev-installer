@@ -52,15 +52,17 @@ Legacy health-check rows that used `OK` / `WARN` map to `HEALTHY` / `DEGRADED`
 
 ## Observe layers
 
-1. **Host** — load/core, CPU, MemAvailable, swap, disk %, inodes, I/O wait, RO
-   filesystem, uptime, OOM signals, basic connectivity, reboot-required.
-2. **Frappe / ERPNext** — HTTP status + latency, DB/Redis reachability, workers,
-   scheduler, Socket.IO / ports, queue pressure where cheap.
+1. **Host** — load/core, sampled CPU busy %, MemAvailable, swap, disk %,
+   inodes, sampled I/O wait %, uptime, reboot-required. (RO filesystem / OOM
+   remain optional future signals.)
+2. **Frappe / ERPNext** — HTTP status + latency, DB/Redis reachability,
+   best-effort workers + scheduler freshness, Socket.IO / ports, Redis queue
+   depth when `redis-cli` reaches host Redis.
 3. **Engine runtime** — native (nginx, supervisor/systemd, ports) or Docker
-   (compose project, container health, restart counts). Build on Docker restart
-   policies; detect restart loops.
-4. **Protection / DR** — HTTPS, firewall, Fail2Ban, backup ages/verify, restore
-   rehearsal, toolkit integrity, healing mode / arm state.
+   (running/total, unhealthy, restarting, max RestartCount loop detection).
+4. **Protection / DR** — HTTPS + certificate days remaining (thresholded),
+   firewall, Fail2Ban, backup ages/verify, restore rehearsal, toolkit
+   integrity, healing mode / would-heal dry-run (actions in v1.18).
 
 ---
 
