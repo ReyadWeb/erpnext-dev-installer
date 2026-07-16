@@ -1,6 +1,6 @@
 # ERPNext Developer Toolkit — Roadmap
 
-**Current release:** v1.15.1 (July 2026) — **local HTTPS reliability**: status-aware `verify-local-ssl` (no false OK on 502), active static-asset probe, and Firefox-specific mkcert trust guidance. Builds on v1.15.0 guided-setup UX fixes (v1.13.0 Debian native CI remains planned)  
+**Current release:** v1.15.2 (July 2026) — **Debian 13 native install parity**: portable apt package list (no Ubuntu-only `software-properties-common`), `libfontconfig1`, and documented Debian `sudo` bootstrap for fresh installs. Builds on v1.15.1 local HTTPS reliability (v1.13.0 Debian native CI remains planned)  
 **External review (July 2026):** enterprise-candidate for single-admin Ubuntu VM ops — **9.4 / 10** (**9.6–9.7** after v1.8.2 + v1.9.0 + v1.9.1 + VPS pass)  
 **Full history:** [`CHANGELOG.md`](CHANGELOG.md) · **Security:** [`SECURITY.md`](SECURITY.md) · **Testing:** [`TESTING.md`](TESTING.md)
 
@@ -44,6 +44,7 @@ record for this dimension.
 | **v1.14.0** | Community polish: Phase 1 (`CONTRIBUTING` / CoC / `SUPPORT`, bug+feature forms, PR template, CODEOWNERS, Discussions, private vuln reporting, starter `good first issue`s) + Phase 2 (compatibility + docs Issue Forms, `docs/DEVELOPMENT.md`, `docs/RELEASE-PROCESS.md`, community board guide). Remaining later: governance ladder, module owner teams as the community grows. | **implemented** |
 | **v1.15.0** | Guided-setup UX fixes: deployment engine prompted once per run; native local guided chain flows end-to-end (mkcert HTTPS → credentials checkpoint → security profile → optional apps) without dead-ends; unstyled-login hard-refresh guidance; support-bundle secret scanner detects GitHub's new stateless `ghs_` token format. | **implemented** |
 | **v1.15.1** | Local HTTPS reliability: status-aware `verify-local-ssl` (2xx/3xx required; nginx 502 is FAIL); active static-asset probe from login `Link` header; Firefox-specific mkcert trust guidance (certutil / Snap Flatpak / enterprise_roots / manual rootCA import). | **implemented** |
+| **v1.15.2** | Debian 13 native install parity: drop hard dependency on Ubuntu-only `software-properties-common`; portable `libfontconfig1`; README Debian sudo bootstrap + install block. | **implemented** |
 
 Native engine matrix: Ubuntu 24.04 / 26.04, Debian 13. Docker engine host matrix:
 Ubuntu 24.04 / 26.04, Debian 11 / 12 / 13.
