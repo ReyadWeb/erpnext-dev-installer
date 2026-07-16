@@ -19,6 +19,25 @@
 - Local HTTPS success screen points operators at that guide instead of only
   re-running `mkcert -install`.
 
+## v1.15.2 - Debian 13 native install parity
+
+Patch release so guided native install on Debian 13 works like Ubuntu: fix the
+system-package abort caused by an Ubuntu-only dependency, and document the
+Debian `sudo` bootstrap path for fresh installs.
+
+### Fixed
+
+- **Debian 13 native install no longer fails on system packages.** The installer
+  required `software-properties-common` (Ubuntu-only; removed from Debian 13 /
+  trixie), which aborted guided setup with `Unable to locate package`. That
+  package is now optional, and fontconfig uses the portable `libfontconfig1`
+  name. Ubuntu installs are unchanged.
+
+### Docs
+
+- README Debian 13 notes include a root `sudo` bootstrap, a Debian-ready
+  local-install block, and a Start here pointer when `sudo` is missing.
+
 ## v1.15.1 - Local HTTPS verification reliability + Firefox trust guidance
 
 A patch release that hardens local HTTPS verification so false greens no longer

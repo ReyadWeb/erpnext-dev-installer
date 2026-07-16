@@ -226,16 +226,38 @@ install_optional_package() {
 install_system_packages() {
   log "Installing system packages"
 
-  install_required_packages \
-    git curl wget nano ca-certificates gnupg lsb-release \
-    software-properties-common build-essential pkg-config \
-    redis-server mariadb-server mariadb-client libmariadb-dev \
-    python3 python3-dev python3-pip python3-venv \
-    libffi-dev libssl-dev libjpeg-dev zlib1g-dev \
-    xvfb libfontconfig \
+  # Keep this list Debian-family portable (Ubuntu 24.04/26.04 + Debian 13).
+  # Do not hard-require Ubuntu-only packages here — Debian 13 removed
+  # software-properties-common, and we never call add-apt-repository.
+  local packages=(
+    git curl wget nano ca-certificates gnupg lsb-release
+    build-essential pkg-config
+    redis-server mariadb-server mariadb-client libmariadb-dev
+    python3 python3-dev python3-pip python3-venv
+    libffi-dev libssl-dev libjpeg-dev zlib1g-dev
+    xvfb
     cron netcat-openbsd
+  )
+
+  # Refresh apt metadata before availability probes so Debian/Ubuntu package
+  # names resolve against a current index.
+  $SUDO apt-get update
+
+  # fontconfig runtime: Debian ships libfontconfig1; some Ubuntu releases also
+  # expose a libfontconfig transitional name. Prefer the portable package.
+  if apt_package_available "libfontconfig1"; then
+    packages+=(libfontconfig1)
+  elif apt_package_available "libfontconfig"; then
+    packages+=(libfontconfig)
+  else
+    packages+=(fontconfig)
+  fi
+
+  install_required_packages "${packages[@]}"
 
   log "Installing optional packages"
+  # Ubuntu convenience package only; absent on Debian 13 (and unused by us).
+  install_optional_package "software-properties-common"
   install_optional_package "wkhtmltopdf"
 
   $SUDO systemctl enable --now mariadb

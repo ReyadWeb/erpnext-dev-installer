@@ -18,7 +18,7 @@ It supports two setup paths:
 > the path to **9.8+** are in [`ROADMAP.md`](ROADMAP.md). This README focuses on
 > installation, operations, and usage.
 
-**Current release:** v1.15.1 · **Readiness:** ~9.5/10 for single-admin local/public VM
+**Current release:** v1.15.2 · **Readiness:** ~9.5/10 for single-admin local/public VM
 (after VPS production validation). v1.10.0 turns the toolkit into a **multi-engine**
 platform: choose a **native** VM install (default, unchanged) or a **Docker**
 engine that wraps the official `frappe_docker`, behind the same `erpnext-dev` CLI.
@@ -116,7 +116,7 @@ over HTTP on the published port.
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar && \
-VERSION="v1.15.1" && \
+VERSION="v1.15.2" && \
 BASE="https://github.com/ReyadWeb/erpnext-dev-toolkit/releases/download/${VERSION}" && \
 cd ~ && \
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz" && \
@@ -131,11 +131,15 @@ for host OS when asked (or your actual host OS). After install, run the printed
 **host mapping** and **mkcert/scp** commands on your physical host machine — each
 is a single copy-paste line.
 
+**Debian tip:** if `sudo` is missing or your user is not in the `sudo` group, see
+[Debian 13 notes](#debian-13-notes-native) first (bootstrap as root, then re-run
+the block above as your normal user).
+
 Or install step by step ([details below](#install-and-verify)):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
-VERSION="v1.15.1"
+VERSION="v1.15.2"
 BASE="https://github.com/ReyadWeb/erpnext-dev-toolkit/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz"
@@ -250,12 +254,45 @@ should not be used otherwise.
 
 ### Debian 13 notes (native)
 
-Debian 13 (trixie) uses the same Debian-family apt/systemd install path as Ubuntu.
-Most steps are identical; the usual friction points are:
+Debian 13 (trixie) uses the same Debian-family apt/systemd install path as Ubuntu
+after you have `sudo`. A **fresh Debian install often does not ship `sudo`**, and
+the first user is usually **not** in the `sudo` group (unlike typical Ubuntu
+cloud images).
 
-- **Local HTTPS / mkcert:** install `mkcert` **and** `libnss3-tools` (`apt install -y mkcert libnss3-tools`) before `local-ssl-wizard` / `mkcert -install`, so browsers that use the NSS trust store can trust the certificate.
-- **Field validation:** use [`VALIDATION.md`](VALIDATION.md) for go-live checks (firewall, HTTPS, backups) on a real Debian VPS.
-- **Docker on Debian:** the toolkit’s Docker engine install prefers Docker’s official apt repository; OS differences are largely abstracted once the daemon is up.
+**1) Bootstrap `sudo` (as root)** — log in as `root`, or run `su -`:
+
+```bash
+apt-get update
+apt-get install -y sudo curl ca-certificates tar
+# Replace YOUR_USER with the login you will use day-to-day (not root):
+usermod -aG sudo YOUR_USER
+```
+
+Log out and back in as `YOUR_USER` so group membership applies (`groups` should
+list `sudo`).
+
+**2) Fresh local install (as YOUR_USER)** — same as [Start here](#start-here):
+
+```bash
+sudo apt-get update && sudo apt-get install -y curl ca-certificates tar && \
+VERSION="v1.15.2" && \
+BASE="https://github.com/ReyadWeb/erpnext-dev-toolkit/releases/download/${VERSION}" && \
+cd ~ && \
+curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz" && \
+tar -xzf "erpnext-dev-${VERSION}.tar.gz" && \
+cd "erpnext-dev-${VERSION}" && \
+sha256sum -c SHA256SUMS && \
+sudo ./erpnext-dev.sh local-dev-quickstart
+```
+
+Other Debian notes:
+
+- **Package names (v1.15.2+):** the native installer no longer requires Ubuntu-only
+  `software-properties-common` (removed from Debian 13) and prefers
+  `libfontconfig1` for fontconfig.
+- **Local HTTPS / mkcert (on the HOST browser machine):** `apt install -y mkcert libnss3-tools` before `mkcert -install`. Firefox may still need `browser-trust-guide`.
+- **Field validation:** use [`VALIDATION.md`](VALIDATION.md) for go-live checks on a real Debian VPS.
+- **Docker on Debian:** the toolkit prefers Docker’s official apt repository; OS differences are largely abstracted once the daemon is up.
 
 ---
 
