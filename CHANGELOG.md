@@ -1,5 +1,13 @@
 ## Unreleased
 
+### Added
+
+- **Credentials / Login submenu** under Advanced (item 50) and via
+  `erpnext-dev credentials-menu` / `login-menu`. Wires the existing
+  credentials-info, credentials-show, file-status, secure, delete, and
+  reset-admin-password helpers so operators can view or remove the plaintext
+  credentials file without memorizing CLI names.
+
 ### Improved (Firefox Snap/Flatpak trust — LocalWP-inspired)
 
 - **`browser-trust-guide` now includes a host-side NSS import one-liner** that
