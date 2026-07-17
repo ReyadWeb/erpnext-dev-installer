@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Hermetic UI render checks for the polished main menu (v1.17.3+).
+# No sudo, no install, no network. Verifies NO_COLOR / TERM=dumb emit no ANSI.
+set -Eeuo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+fail=0
+note_fail() {
+  echo "FAIL: $*" >&2
+  fail=$((fail + 1))
+}
+pass() { echo "OK: $*"; }
+
+bash -n lib/ui.sh || note_fail "bash -n lib/ui.sh"
+bash -n lib/menu.sh || note_fail "bash -n lib/menu.sh"
+bash -n erpnext-dev.sh || note_fail "bash -n erpnext-dev.sh"
+
+export NO_COLOR=1
+export FORCE_NO_COLOR=1
+export TERM=dumb
+export COLUMNS=80
+export MENU_FORCE_ONE_COLUMN=true
+export UI_FORCE_ASCII=1
+export MENU_NO_CLEAR=1
+
+tmp="$(mktemp /tmp/erpnext-dev-ui-render.XXXXXX)"
+cleanup() { rm -f "$tmp"; }
+trap cleanup EXIT
+
+# Run through the real entrypoint (sources all libs, then menu_render_test).
+if ! ./erpnext-dev.sh menu-render-test >"$tmp" 2>/tmp/erpnext-dev-ui-render.err; then
+  note_fail "menu-render-test exited non-zero"
+  cat /tmp/erpnext-dev-ui-render.err >&2 || true
+fi
+
+grep -q "ERPNext Developer Toolkit" "$tmp" || note_fail "missing toolkit title"
+grep -q "Start here / setup wizard" "$tmp" || note_fail "missing Start here item"
+grep -q "Production operations" "$tmp" || note_fail "missing Production operations item"
+grep -q "Choose an option" "$tmp" || note_fail "missing Choose an option prompt"
+grep -qE '\[q\]|q\) Quit' "$tmp" || note_fail "missing quit affordance"
+
+if grep -q $'\033' "$tmp"; then
+  note_fail "ANSI escape codes present with NO_COLOR=1 / TERM=dumb"
+fi
+
+# Wide layout still renders key labels without ANSI under NO_COLOR.
+export COLUMNS=120
+export MENU_FORCE_ONE_COLUMN=false
+export MENU_FORCE_TWO_COLUMNS=true
+tmp2="$(mktemp /tmp/erpnext-dev-ui-render-wide.XXXXXX)"
+./erpnext-dev.sh menu-render-test >"$tmp2" 2>/dev/null || note_fail "wide menu-render-test failed"
+grep -q "Operations dashboard" "$tmp2" || note_fail "wide layout missing Operations dashboard"
+if grep -q $'\033' "$tmp2"; then
+  note_fail "ANSI escape codes in wide layout with NO_COLOR=1"
+fi
+rm -f "$tmp2"
+
+if (( fail > 0 )); then
+  echo "test-ui-render: ${fail} failure(s)" >&2
+  echo "----- render output (compact) -----" >&2
+  cat "$tmp" >&2 || true
+  exit 1
+fi
+echo "test-ui-render: all checks passed"

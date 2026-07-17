@@ -474,7 +474,17 @@ and a short command:
 /usr/local/bin/erpnext-dev        short command for daily use
 ```
 
-Use `sudo erpnext-dev <command>` for everything after install. Handy basics:
+Use `sudo erpnext-dev <command>` for everything after install.
+
+The interactive main menu (`sudo erpnext-dev` / `menu`) uses a Bash-native
+polished layout: status strip + two-column options on wide terminals,
+single-column on small SSH sessions. It supports `NO_COLOR=1` / `--no-color`,
+`TERM=dumb`, and ASCII fallback. Status badges read the **cached** health
+snapshot only — live probes stay on `dashboard` / `health-check`.
+
+![Main menu UI mockup](docs/assets/menu-ui-mockup.png)
+
+Handy basics:
 
 ```bash
 erpnext-dev --help

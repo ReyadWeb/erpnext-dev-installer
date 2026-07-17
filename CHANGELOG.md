@@ -1,3 +1,17 @@
+## Unreleased
+
+### Added (v1.17.3 — CLI menu UI foundation)
+
+- **`lib/ui.sh`** — Bash-native terminal UI helpers: color / `NO_COLOR` /
+  `TERM=dumb`, Unicode/ASCII box drawing, responsive width, status badges.
+- **`lib/menu.sh`** — Polished main menu with cached status strip (Toolkit /
+  Site / Mode / Runtime + HTTPS / Backups / Off-VM / Restore / Health /
+  Go-live) and two-column layout on wide terminals; single-column under 90
+  columns. Reads `/var/lib/erpnext-dev/metrics/current.json` only — no slow
+  probes on each render.
+- **`menu-render-test`** + `scripts/test-ui-render.sh` for CI (asserts no ANSI
+  when `NO_COLOR=1`).
+
 ## v1.17.2 - Release publish alignment + dashboard docs
 
 Patch release focused on public release polish (not new healing behaviour).

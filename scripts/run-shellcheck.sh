@@ -12,6 +12,7 @@ fi
 targets=(
   erpnext-dev.sh
   lib/common.sh
+  lib/ui.sh
   lib/config.sh
   lib/access.sh
   lib/frappe.sh
@@ -29,6 +30,7 @@ targets=(
   lib/install.sh
   lib/ops.sh
   lib/dashboard.sh
+  lib/menu.sh
   lib/security.sh
   lib/update.sh
   scripts/validate-release.sh
@@ -41,6 +43,7 @@ targets=(
   scripts/test-host-os-output.sh
   scripts/test-install-self-path.sh
   scripts/test-engine-select.sh
+  scripts/test-ui-render.sh
   scripts/release-signing-policy.sh
   scripts/assert-github-release-assets.sh
 )

@@ -4,6 +4,32 @@
 
 ---
 
+## v1.17.3 CLI menu UI foundation
+
+Hermetic (no sudo):
+
+```bash
+scripts/test-ui-render.sh
+./erpnext-dev.sh menu-render-test
+NO_COLOR=1 TERM=dumb COLUMNS=80 ./erpnext-dev.sh menu-render-test | od -c | head
+```
+
+Expected:
+
+- Title, all 17 main options, and “Choose an option” appear.
+- With `NO_COLOR=1` / `TERM=dumb`, output contains **no** ANSI escapes.
+- Menu stays fast (cached metrics only; no live health probes).
+
+Interactive smoke:
+
+```bash
+sudo erpnext-dev menu
+# wide terminal: two-column boxed menu + status strip
+# narrow / COLUMNS=80: single-column list
+```
+
+---
+
 ## v1.17.2 release publish alignment
 
 After a stable tag’s release workflow finishes (and `release-signing` is approved):

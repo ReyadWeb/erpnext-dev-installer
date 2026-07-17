@@ -24,6 +24,7 @@ scripts/check-module-consistency.sh
 scripts/build-release-bundle.sh
 scripts/host-firefox-trust-mkcert.sh
 lib/common.sh
+lib/ui.sh
 lib/config.sh
 lib/access.sh
 lib/frappe.sh
@@ -41,8 +42,10 @@ lib/engine.sh
 lib/install.sh
 lib/ops.sh
 lib/dashboard.sh
+lib/menu.sh
 lib/security.sh
 lib/update.sh
+scripts/test-ui-render.sh
 .github/workflows/ci.yml
 .github/workflows/integration.yml
 .github/workflows/release.yml
@@ -67,4 +70,5 @@ docs/assets/dashboard-health.png
 docs/assets/incident-history.png
 docs/assets/health-json-example.md
 docs/assets/health-metrics-example.txt
+docs/assets/menu-ui-mockup.png
 scripts/assert-github-release-assets.sh

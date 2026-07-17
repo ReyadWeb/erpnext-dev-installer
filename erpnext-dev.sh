@@ -216,6 +216,12 @@ if [[ ! -f "${_ERPNEXT_DEV_ROOT}/lib/common.sh" ]]; then
 fi
 # shellcheck source=lib/common.sh disable=SC1091
 source "${_ERPNEXT_DEV_ROOT}/lib/common.sh"
+if [[ ! -f "${_ERPNEXT_DEV_ROOT}/lib/ui.sh" ]]; then
+  echo "ERROR: Missing toolkit library: ${_ERPNEXT_DEV_ROOT}/lib/ui.sh" >&2
+  exit 1
+fi
+# shellcheck source=lib/ui.sh disable=SC1091
+source "${_ERPNEXT_DEV_ROOT}/lib/ui.sh"
 if [[ ! -f "${_ERPNEXT_DEV_ROOT}/lib/config.sh" ]]; then
   echo "ERROR: Missing toolkit library: ${_ERPNEXT_DEV_ROOT}/lib/config.sh" >&2
   exit 1
@@ -318,6 +324,12 @@ if [[ ! -f "${_ERPNEXT_DEV_ROOT}/lib/dashboard.sh" ]]; then
 fi
 # shellcheck source=lib/dashboard.sh disable=SC1091
 source "${_ERPNEXT_DEV_ROOT}/lib/dashboard.sh"
+if [[ ! -f "${_ERPNEXT_DEV_ROOT}/lib/menu.sh" ]]; then
+  echo "ERROR: Missing toolkit library: ${_ERPNEXT_DEV_ROOT}/lib/menu.sh" >&2
+  exit 1
+fi
+# shellcheck source=lib/menu.sh disable=SC1091
+source "${_ERPNEXT_DEV_ROOT}/lib/menu.sh"
 if [[ ! -f "${_ERPNEXT_DEV_ROOT}/lib/security.sh" ]]; then
   echo "ERROR: Missing toolkit library: ${_ERPNEXT_DEV_ROOT}/lib/security.sh" >&2
   exit 1
@@ -331,6 +343,7 @@ fi
 # shellcheck source=lib/update.sh disable=SC1091
 source "${_ERPNEXT_DEV_ROOT}/lib/update.sh"
 erpnext_dev_init_terminal_colors
+ui_init
 
 prepare_log_file
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -740,6 +753,7 @@ Core:
   update-rollback     Check out the app commits recorded before the last safe update
   security-audit      Read-only SSH, firewall, HTTPS, credential, and patch posture review
   menu-self-test      Validate q/Q and b/B handling across interactive menus
+  menu-render-test    Print the polished main menu once (CI / NO_COLOR checks)
   guided-setup        Guided install / repair workflow
   status              Compact ERPNext status
   verify-access       HTTP access checks
@@ -969,39 +983,7 @@ Questions or bugs? See SUPPORT.md. Want to contribute? See CONTRIBUTING.md.
 EOF_HELP
 }
 
-show_menu() {
-  while true; do
-    echo
-    echo "============================================================"
-    echo "${APP_NAME} v${SCRIPT_VERSION}"
-    echo "============================================================"
-    print_two_column_menu       "1) Start here / setup wizard"       "2) Public VM quickstart"       "3) Local VM quickstart"       "4) Status"       "5) Start service"       "6) Stop service"       "7) Verify access"       "8) Local VM HTTPS / SSL"       "9) Production HTTPS / SSL"       "10) Security profiles"       "11) Backup / maintenance"       "12) Optional apps"       "13) Advanced"       "14) Final QA"       "15) Operations dashboard"       "16) Production operations"       "17) Help"
-    menu_footer quit-only
-    menu_read_choice choice
-
-    case "$choice" in
-      1) run_first_run_wizard ;;
-      2) run_public_vm_guided_setup ;;
-      3) run_local_dev_quickstart ;;
-      4) show_status_menu ;;
-      5) run_start ;;
-      6) run_stop ;;
-      7) verify_access ;;
-      8) show_local_ssl_menu ;;
-      9) show_production_ssl_menu ;;
-      10) security_hardening_wizard ;;
-      11) run_backup_maintenance_menu ;;
-      12) show_app_library_menu ;;
-      13) show_advanced_menu ;;
-      14) final_qa_wizard ;;
-      15) run_operations_dashboard ;;
-      16) production_ops_wizard ;;
-      17) show_help ;;
-      q|Q) exit 0 ;;
-      *) warn "Invalid option" ;;
-    esac
-  done
-}
+# show_menu is defined in lib/menu.sh (polished status panel + responsive layout).
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -1038,7 +1020,7 @@ parse_args() {
           DASHBOARD_WATCH_SEC=5
         fi
         ;;
-      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|support-bundle-audit|audit-support-bundle|support-bundle-audit-test|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|credentials-menu|login-menu|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|go-live-record|go-live-status|cloud-firewall-checklist|cloudflare-checklist|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|health-check|health-check-run-now|configure-health-check-timer|health-check-status|health-check-journal|disable-health-check-timer|health-monitoring-wizard|production-monitoring-wizard|dashboard|ops-dashboard-v2|health-snapshot|incidents|incident-show|health-history|health-metrics|openmetrics|service-recovery-plan|restore-preflight|production-ops-wizard|production-ops-dashboard|operations-wizard|operations-dashboard|ops-wizard|ops-dashboard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|update-preflight|upgrade-preflight|safe-update|safe-update-wizard|update-erpnext|upgrade-erpnext|update-rollback|rollback-update|wait-ready|menu|help|-h|--help|version|--version|versions|version-matrix|toolchain|where-installed|verify-toolkit|toolkit-verify|verify-install|verify-signature|verify-release-signature|verify-sig|install-cli|repair-cli|update-toolkit|toolkit-rollback|update-toolkit-rollback|rollback-toolkit|clear-lock|unlock|force-unlock|menu-self-test|menu-navigation-self-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|setup-production-runtime|convert-to-production|production-runtime-setup|convert-to-dev-runtime|convert-to-development-runtime|production-runtime-status|runtime-mode-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|set-host-os|host-os|choose-host-os|set-engine|engine|choose-engine|deployment-engine|engine-status|engine-restore|engine-upgrade|engine-rollback|engine-diagnostics|docker-production-setup|docker-prod-setup|docker-production|docker-backup|docker-backup-files|docker-backup-verify|docker-restore|docker-restore-full|docker-restore-db|docker-restore-rehearsal|docker-restore-evidence|docker-offvm-backup|docker-offvm-backup-dry-run|docker-offvm-status|docker-object-config|docker-object-backup-config|docker-object-backup|docker-object-backup-dry-run|docker-object-status|configure-object-backup|object-backup-config|object-config|object-backup|run-object-backup|object-backup-dry-run|object-status|object-backup-status|docker-https-wizard|docker-production-https|docker-https-menu|docker-enable-letsencrypt|docker-letsencrypt|docker-https-letsencrypt|docker-configure-cloudflare-origin|docker-cloudflare-origin|docker-https-cloudflare-origin|docker-https-status|docker-https-rollback|docker-disable-https|docker-production-exposure|docker-exposure-check|docker-custom-image-config|docker-custom-apps|docker-build-custom-image|docker-custom-image-build|docker-deploy-custom-image|docker-custom-image-deploy|docker-custom-image-status|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-audit|security-audit-test|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-gameplan|install-lending|install-raven|install-india-compliance|install-gst|install-india-gst|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
+      first-run|start-here|quickstart|setup-wizard|public-vm-quickstart|public-setup|public-vm-guided-setup|public-guided-setup|production-guided-setup|local-dev-quickstart|local-setup|install-preflight|environment-preflight|set-domain|show-config|guided-setup|setup|install|repair|status|status-menu|runtime-status|install-status|service-summary|doctor|support-bundle|support|support-bundle-audit|audit-support-bundle|support-bundle-audit-test|full-status|start|stop|uninstall|advanced|access|verify-access|access-info|education-access-info|portal-access-info|desk-url|credentials-info|credentials|login-info|credentials-show|show-credentials|credentials-file-status|credentials-secure|credentials-delete|credentials-menu|login-menu|reset-admin-password|admin-password-reset|next-step|local-ssl-menu|local-https|local-vm-ssl|local-ssl-wizard|ssl-wizard|trusted-mkcert-setup|mkcert-setup|access-menu|backup-menu|backup|backup-files|backup-status|backup-verify|verify-backups|off-vm-backup-guide|restore-rehearsal-guide|restore-rehearsal-status|restore-rehearsal-record|restore-rehearsal-report|go-live-record|go-live-status|cloud-firewall-checklist|cloudflare-checklist|restore-rehearsal-wizard|restore-key-setup|pull-off-vm-backup|backup-server-add-restore-key|backup-server-remove-restore-key|backup-server-list-restore-keys|production-checklist|release-readiness|final-qa|final-qa-wizard|command-audit|release-notes-guide|backup-hardening-wizard|backup-wizard|backup-schedule-plan|configure-backup-schedule|backup-schedule-status|scheduled-backup-status|disable-backup-schedule|scheduled-backups|backup-retention-plan|backup-retention-status|cleanup-old-backups|cleanup-old-backups-dry-run|backup-cleanup-dry-run|backup-cleanup|off-vm-backup-plan|off-vm-backup-guided-setup|generate-off-vm-backup-key|off-vm-backup-keygen|backup-server-setup|prepare-backup-server|off-vm-backup-server-setup|configure-rsync-backup-target|off-vm-backup-dry-run|run-off-vm-backup|off-vm-backup-status|disable-off-vm-backup|off-vm-backup-wizard|health-check|health-check-run-now|configure-health-check-timer|health-check-status|health-check-journal|disable-health-check-timer|health-monitoring-wizard|production-monitoring-wizard|dashboard|ops-dashboard-v2|health-snapshot|incidents|incident-show|health-history|health-metrics|openmetrics|service-recovery-plan|restore-preflight|production-ops-wizard|production-ops-dashboard|operations-wizard|operations-dashboard|ops-wizard|ops-dashboard|list-backups|backups|restore-db|restore-full|maintenance|migrate|build|clear-cache|restart|update-preflight|upgrade-preflight|safe-update|safe-update-wizard|update-erpnext|upgrade-erpnext|update-rollback|rollback-update|wait-ready|menu|help|-h|--help|version|--version|versions|version-matrix|toolchain|where-installed|verify-toolkit|toolkit-verify|verify-install|verify-signature|verify-release-signature|verify-sig|install-cli|repair-cli|update-toolkit|toolkit-rollback|update-toolkit-rollback|rollback-toolkit|clear-lock|unlock|force-unlock|menu-self-test|menu-navigation-self-test|menu-render-test|foreground-start|enable-autostart|disable-autostart|service-start|service-stop|service-restart|service-status|setup-production-runtime|convert-to-production|production-runtime-setup|convert-to-dev-runtime|convert-to-development-runtime|production-runtime-status|runtime-mode-status|logs|logs-follow|kvm-guide|kvm-identify|network-status|local-domain-status|local-host-checkpoint|host-dns-checkpoint|host-mapping-checkpoint|local-access-doctor|hosts-command|print-hosts-command|host-dns-guide|local-fixed-ip-guide|fixed-ip-guide|kvm-fixed-ip-guide|host-test|ssl-roadmap|ssl-status|local-ssl-guide|mkcert-guide|trusted-local-ssl-guide|browser-trust-guide|trust-check-guide|ssl-rollback-guide|verify-ssl-rollback|verify-local-ssl|install-local-ssl-cert|replace-local-ssl-cert|create-self-signed-local-cert|self-signed-local-cert|configure-local-ssl|disable-local-ssl|environment-check|where-am-i|site-config|domain-config|change-local-domain|local-domain-wizard|rename-local-site|change-site-domain|set-host-os|host-os|choose-host-os|set-engine|engine|choose-engine|deployment-engine|engine-status|engine-restore|engine-upgrade|engine-rollback|engine-diagnostics|docker-production-setup|docker-prod-setup|docker-production|docker-backup|docker-backup-files|docker-backup-verify|docker-restore|docker-restore-full|docker-restore-db|docker-restore-rehearsal|docker-restore-evidence|docker-offvm-backup|docker-offvm-backup-dry-run|docker-offvm-status|docker-object-config|docker-object-backup-config|docker-object-backup|docker-object-backup-dry-run|docker-object-status|configure-object-backup|object-backup-config|object-config|object-backup|run-object-backup|object-backup-dry-run|object-status|object-backup-status|docker-https-wizard|docker-production-https|docker-https-menu|docker-enable-letsencrypt|docker-letsencrypt|docker-https-letsencrypt|docker-configure-cloudflare-origin|docker-cloudflare-origin|docker-https-cloudflare-origin|docker-https-status|docker-https-rollback|docker-disable-https|docker-production-exposure|docker-exposure-check|docker-custom-image-config|docker-custom-apps|docker-build-custom-image|docker-custom-image-build|docker-deploy-custom-image|docker-custom-image-deploy|docker-custom-image-status|storage-status|storage-debug|expand-root-storage|verify-storage|production-readiness|production-plan|prod-plan|production-domain-plan|prod-domain-plan|public-vm-readiness|public-readiness|production-ssl-plan|prod-ssl-plan|production-firewall-plan|prod-firewall-plan|firewall-hardening-status|firewall-status|hardening-status|vm-firewall-plan|ufw-plan|configure-vm-firewall|local-firewall-profile|local-security-profile|production-firewall-profile|production-security-profile|repair-local-access|firewall-rollback-snapshots|vm-firewall-status|ufw-status|configure-fail2ban|fail2ban-status|security-audit|security-audit-test|security-hardening-wizard|vm-firewall-wizard|ufw-ssh-admin-only|production-ssl-menu|production-https|production-https-menu|configure-production-ssl|production-ssl-wizard|ssl-provider-wizard|ssl-mode-status|ssl-mode-guide|ssl-compatibility|setup-effort-guide|setup-step-count|setup-lifecycle-plan|setup-order-plan|configure-cloudflare-origin-ssl|install-cloudflare-origin-cert|switch-to-cloudflare-origin-ssl|cloudflare-origin-ssl-status|cloudflare-origin-guide|production-ssl-status|disable-production-ssl|production-domain-guide|production-ssl-guide|repair-site-config|site-name-guide|custom-site-guide|multi-env-guide|app-library|apps|list-apps|app-status|app-compatibility|app-compat|app-preflight|install-crm|install-hrms|install-helpdesk|install-telephony|install-insights|install-payments|install-webshop|install-ecommerce|install-builder|install-lms|install-education|install-wiki|install-print-designer|install-drive|install-gameplan|install-lending|install-raven|install-india-compliance|install-gst|install-india-gst|advanced-app-tools|app-advanced-tools|custom-app-tools|install-custom-app|app-install-wizard|app-wizard|app-install-guide|app-rollback-guide|repair-app-registry)
         ACTION="$1"
         shift
         ;;
@@ -1080,6 +1062,7 @@ main() {
     toolkit-rollback|update-toolkit-rollback|rollback-toolkit) rollback_toolkit ;;
     clear-lock|unlock|force-unlock) clear_toolkit_lock ;;
     menu-self-test|menu-navigation-self-test) menu_navigation_self_test ;;
+    menu-render-test) menu_render_test ;;
     first-run|start-here|quickstart|setup-wizard) run_first_run_wizard ;;
     public-vm-guided-setup|public-guided-setup|production-guided-setup) run_public_vm_guided_setup ;;
     public-vm-quickstart|public-setup) run_public_vm_quickstart ;;
