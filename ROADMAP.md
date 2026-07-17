@@ -50,7 +50,7 @@ record for this dimension.
 | **v1.16.0** | **Operations Dashboard + canonical health snapshot**: unified HEALTHY/DEGRADED/CRITICAL/UNKNOWN model; host + ERPNext + engine-aware + protection/DR probes; `dashboard` / `--watch` / `--json`; `health-check` consumes the same snapshot. No auto-healing. See [`docs/HEALTH-ARCHITECTURE.md`](docs/HEALTH-ARCHITECTURE.md). | **implemented** |
 | **v1.17.0** | **Monitoring & incident engine**: `/var/lib/erpnext-dev` metrics history + incidents; threshold transitions; cooldown / would-heal dry-run; CLI + webhook alert hooks; OpenMetrics export. | **implemented** |
 | **v1.17.1** | **Observe hardening**: CPU/iowait samples, cert-expiry days, Docker restart loops, workers/scheduler/queue best-effort; README Docker accuracy; audited `FRAPPE_DOCKER_REF` SHA default. | **implemented** |
-| **v1.17.2** | **Release publish alignment**: assert required GitHub Release Assets + `/releases/latest`; dashboard/incident docs assets; README install race guidance. | **in progress** |
+| **v1.17.2** | **Release publish alignment**: assert required GitHub Release Assets + `/releases/latest`; dashboard/incident docs assets; README install race guidance. | **implemented** |
 | **v1.18.0** | **Guarded auto-healing** (do not rush): modes `monitor` / `safe` / `advanced`; first actions = restart worker, scheduler/runtime, Docker service group, native app stack; cooldowns + locks + recovery verification; **host reboot opt-in last resort only**. | planned |
 | **v1.19.0** | **External watchdog contract**: heartbeat endpoint/file + last-seen; external monitor + provider API abstraction; safe power-cycle policy; incident record after external recovery (frozen guest cannot self-heal). | planned |
 
