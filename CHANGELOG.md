@@ -1,4 +1,7 @@
-## Unreleased
+## v1.17.1 - Observe hardening + Docker pin / docs accuracy
+
+Patch release that closes remaining review gaps after v1.17.0 without enabling
+auto-healing. Still **monitor-only** (guarded healing remains v1.18).
 
 ### Fixed / hardened
 
@@ -10,7 +13,7 @@
   SHA-aware shallow fetch/checkout.
 - **Health observe probes** — CPU busy % + iowait sample; certificate expiry
   days against `HEALTH_HTTPS_*_DAYS`; Docker restart-loop detection; best-effort
-  workers / scheduler / queue depth. Still **monitor-only** (no auto-healing).
+  workers / scheduler / queue depth.
 
 ## v1.17.0 - Monitoring & incident engine
 
