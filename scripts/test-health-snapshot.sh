@@ -44,6 +44,34 @@ assert_eq "rank HEALTHY" "0" "$(health_status_rank HEALTHY)"
 assert_eq "legacy CRITICAL→FAIL" "FAIL" "$(health_legacy_ok_warn CRITICAL)"
 assert_eq "legacy HEALTHY→OK" "OK" "$(health_legacy_ok_warn HEALTHY)"
 
+# CPU / iowait sample (shape)
+cpu_out="$(health_probe_cpu_iowait)"
+IFS='|' read -r c_status _ c_pct c_io <<<"$cpu_out"
+case "$c_status" in
+  HEALTHY|DEGRADED|CRITICAL|UNKNOWN) echo "OK: cpu/iowait status ${c_status}" ;;
+  *) echo "FAIL: cpu/iowait bad status ${c_status}" >&2; fail=$((fail + 1)) ;;
+esac
+[[ "$c_pct" =~ ^[0-9]+$ ]] || { echo "FAIL: cpu percent not numeric: ${c_pct}" >&2; fail=$((fail + 1)); }
+[[ "$c_io" =~ ^[0-9]+$ ]] || { echo "FAIL: iowait percent not numeric: ${c_io}" >&2; fail=$((fail + 1)); }
+
+# Cert days remaining against a short-lived self-signed cert
+tmpdir_cert="$(mktemp -d /tmp/erpnext-dev-cert-test.XXXXXX)"
+openssl req -x509 -newkey rsa:2048 -keyout "${tmpdir_cert}/key.pem" -out "${tmpdir_cert}/cert.pem" \
+  -days 3 -nodes -subj "/CN=health-test.local" >/dev/null 2>&1 || true
+if [[ -f "${tmpdir_cert}/cert.pem" ]]; then
+  days="$(health_cert_days_remaining "${tmpdir_cert}/cert.pem")"
+  if [[ "$days" =~ ^[0-9]+$ ]] && (( days <= 3 && days >= 0 )); then
+    echo "OK: cert days remaining ${days}"
+  else
+    echo "FAIL: cert days unexpected: ${days}" >&2
+    fail=$((fail + 1))
+  fi
+else
+  echo "FAIL: could not generate test certificate" >&2
+  fail=$((fail + 1))
+fi
+rm -rf "$tmpdir_cert"
+
 # Disk probe against real / (shape only)
 disk_out="$(health_probe_disk)"
 IFS='|' read -r d_status d_detail d_pct <<<"$disk_out"

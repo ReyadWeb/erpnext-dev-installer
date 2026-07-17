@@ -49,7 +49,10 @@ DEPLOYMENT_ENGINE="${DEPLOYMENT_ENGINE:-}"
 # Docker engine settings (used only when DEPLOYMENT_ENGINE=docker). See lib/docker.sh.
 DOCKER_WORKDIR="${DOCKER_WORKDIR:-/opt/erpnext-dev/docker}"
 FRAPPE_DOCKER_REPO="${FRAPPE_DOCKER_REPO:-https://github.com/frappe/frappe_docker.git}"
-FRAPPE_DOCKER_REF="${FRAPPE_DOCKER_REF:-main}"
+# Audited immutable default (frappe/frappe_docker @ 2026-07-15). Override with
+# FRAPPE_DOCKER_REF=main (or another ref) only when you intentionally want a
+# moving tip; the resolved SHA is still recorded in erpnext-dev.pins.
+FRAPPE_DOCKER_REF="${FRAPPE_DOCKER_REF:-c004361e790125ed13aaa933d11f7838711a8960}"
 DOCKER_ERPNEXT_IMAGE="${DOCKER_ERPNEXT_IMAGE:-frappe/erpnext:v16.26.2}"
 DOCKER_PROJECT_NAME="${DOCKER_PROJECT_NAME:-erpnext-dev}"
 # Track whether the published port was set via the environment this run, so the

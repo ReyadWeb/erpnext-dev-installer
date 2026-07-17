@@ -53,31 +53,30 @@ sudo erpnext-dev set-engine       # choose native or docker for a fresh setup
 sudo erpnext-dev engine-status    # show the active engine and its settings
 ```
 
-The Docker engine in this release targets local development (install / start /
-stop / status / logs / health / backup / apps). Production runtime, SSL, and
-Debian-native support are on the [roadmap](ROADMAP.md). Native remains the
-release-gated, fully validated path.
+The Docker engine has two modes:
 
-The Docker engine has two modes. **Development** (default, one keystroke) runs
-the disposable upstream `pwd.yml` stack. **Production** (`sudo erpnext-dev
-docker-production-setup`, or `DOCKER_MODE=production`) wraps the official
-upstream `compose.yaml` production base with the shipped MariaDB/Redis overrides,
-a toolkit-generated image pin, and an HTTP proxy override; the Docker Engine
-itself installs from Docker's official signed apt repository, and the exact
-`frappe_docker` commit SHA + image digest are recorded for reproducibility.
-Trusted production HTTPS (Traefik + Let's Encrypt) is being added next.
+- **Development** (default) — disposable upstream `pwd.yml` stack for local
+  testing (install / start / stop / status / logs / health / backup / apps).
+- **Production** (`sudo erpnext-dev docker-production-setup`, or
+  `DOCKER_MODE=production`) — wraps upstream `compose.yaml` with MariaDB/Redis
+  overrides, an immutable image pin, and Traefik HTTPS (Let's Encrypt or
+  Cloudflare Origin CA). The Docker Engine installs from Docker's official
+  signed apt repository; the exact `frappe_docker` commit SHA + ERPNext image
+  digest are recorded under `/opt/erpnext-dev/docker/erpnext-dev.pins`.
 
-The guided Docker install now finishes with the same post-install flow as
-native: it verifies access, prints a host-mapping checkpoint, offers optional
-apps and a first backup, and opens the main menu. Access output shows three
-URLs — a **Local URL** (`http://localhost:PORT` on this machine), a **Network
-URL** (`http://VM_IP:PORT` from your host/LAN), and a **Friendly URL**
-(`http://SITE:PORT`, after you map the domain on your host). If the chosen
-published port is already in use, the toolkit prompts for a free one (or
-auto-picks the next free port under `-y`), persists it, and reuses it for
-`status`/`logs`/`verify-access`. Trusted local HTTPS for the Docker engine
-arrives with the reverse-proxy phase (v1.11.0); until then the stack serves
-over HTTP on the published port.
+Native remains the longest-validated path. Docker **production** compose and
+HTTPS are shipped and release-gated in CI; native **Debian 13** uses the same
+Debian-family install path and is **field-validated** (GitHub has no Debian
+runner). Ubuntu **26.04** runs in integration CI as a non-blocking preview leg
+until the runner is generally available.
+
+The guided Docker install finishes with the same post-install flow as native:
+verify access, host-mapping checkpoint, optional apps / first backup, then the
+main menu. Access output shows three URLs — a **Local URL**
+(`http://localhost:PORT`), a **Network URL** (`http://VM_IP:PORT`), and a
+**Friendly URL** (`http://SITE:PORT` after host mapping). If the published port
+is already in use, the toolkit prompts for a free one (or auto-picks under
+`-y`), persists it, and reuses it for `status` / `logs` / `verify-access`.
 
 ---
 

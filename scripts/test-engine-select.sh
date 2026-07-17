@@ -116,6 +116,13 @@ assert_eq "read back engine" "docker" "$loaded"
 echo "== docker helpers (no daemon needed) =="
 assert_eq "docker site default" "erp.test" "$(docker_site_name)"
 assert_eq "docker site url" "http://localhost:8080" "$(docker_site_url)"
+assert_eq "frappe_docker default is audited SHA" \
+  "c004361e790125ed13aaa933d11f7838711a8960" "$FRAPPE_DOCKER_REF"
+if docker_frappe_ref_is_sha "$FRAPPE_DOCKER_REF"; then
+  pass "frappe_docker default recognized as SHA"
+else
+  note_fail "frappe_docker default should be a SHA"
+fi
 arch="$(host_arch_label)"
 if [[ -n "$arch" ]]; then pass "host arch resolved: ${arch}"; else note_fail "host arch empty"; fi
 os_eval="$(docker_host_os_eval)"
