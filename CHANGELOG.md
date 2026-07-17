@@ -1,6 +1,10 @@
-## Unreleased
+## v1.17.3 - CLI menu UI foundation
 
-### Added (v1.17.3 — CLI menu UI foundation)
+Patch release that upgrades the interactive main menu to a Bash-native polished
+layout (status strip + responsive two-column options) without changing runtime,
+backup, restore, or monitoring behaviour.
+
+### Added
 
 - **`lib/ui.sh`** — Bash-native terminal UI helpers: color / `NO_COLOR` /
   `TERM=dumb`, Unicode/ASCII box drawing, responsive width, status badges.
