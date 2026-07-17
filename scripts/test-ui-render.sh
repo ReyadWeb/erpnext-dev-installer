@@ -81,6 +81,26 @@ else
   pass "--no-color clears status colors"
 fi
 
+# menu_read_choice must receive the typed value (ui_prompt must not shadow __choice).
+choice_file="$(mktemp /tmp/erpnext-dev-menu-choice.XXXXXX)"
+FORCE_NO_COLOR=1
+NO_COLOR=1
+export NO_COLOR FORCE_NO_COLOR
+printf 'q\n' | bash -c '
+  source "'"$ROOT_DIR"'/lib/common.sh"
+  source "'"$ROOT_DIR"'/lib/ui.sh"
+  ui_init
+  menu_read_choice got
+  printf "%s" "$got" > "'"$choice_file"'"
+' >/dev/null
+got="$(cat "$choice_file" 2>/dev/null || true)"
+rm -f "$choice_file"
+if [[ "$got" != "q" ]]; then
+  note_fail "menu_read_choice did not return q (got='${got}') — ui_prompt shadowing regress?"
+else
+  pass "menu_read_choice returns typed selection"
+fi
+
 if (( fail > 0 )); then
   echo "test-ui-render: ${fail} failure(s)" >&2
   echo "----- render output (compact) -----" >&2

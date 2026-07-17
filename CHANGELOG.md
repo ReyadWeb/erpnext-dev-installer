@@ -7,6 +7,9 @@
   `[[ ! -t 1 ]]` cleared `GREEN`/`YELLOW`/`RED` and CRM “OK” (and every other
   `status_line`) looked like plain text. Colors now use a one-time
   `ERPNEXT_DEV_STDOUT_TTY` snapshot taken before the log redirect.
+- **`menu_read_choice` / `ui_prompt` variable shadowing.** Both used a local
+  `__choice`, so `printf -v` never updated the caller — menus saw an empty
+  selection (Production Ops looped on `""` until timeout).
 
 ### Changed (v1.17.4)
 
