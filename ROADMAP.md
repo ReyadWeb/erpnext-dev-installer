@@ -1,6 +1,6 @@
 # ERPNext Developer Toolkit — Roadmap
 
-**Current release:** v1.17.0 (July 2026) — **Monitoring & incident engine**: metrics history + incidents under `/var/lib/erpnext-dev`; would-heal dry-run; CLI/webhook alerts; OpenMetrics. Still no auto-healing (v1.18). See [`docs/HEALTH-ARCHITECTURE.md`](docs/HEALTH-ARCHITECTURE.md).  
+**Current release:** v1.17.1 (July 2026) — **Observe hardening** on top of the v1.17 monitoring engine: CPU/iowait, cert-expiry days, Docker restart loops, workers/scheduler/queue; audited `frappe_docker` SHA default; accurate Docker docs. Still no auto-healing (v1.18). See [`docs/HEALTH-ARCHITECTURE.md`](docs/HEALTH-ARCHITECTURE.md).  
 
 **External review (July 2026):** enterprise-candidate for single-admin Ubuntu VM ops — **9.4 / 10** (**9.6–9.7** after v1.8.2 + v1.9.0 + v1.9.1 + VPS pass)  
 **Full history:** [`CHANGELOG.md`](CHANGELOG.md) · **Security:** [`SECURITY.md`](SECURITY.md) · **Testing:** [`TESTING.md`](TESTING.md)
@@ -49,7 +49,7 @@ record for this dimension.
 | **v1.15.3** | Credentials / Login submenu (`credentials-menu`) + Firefox Snap/Flatpak NSS host-trust helper (`host-firefox-trust-mkcert.sh`). | **implemented** |
 | **v1.16.0** | **Operations Dashboard + canonical health snapshot**: unified HEALTHY/DEGRADED/CRITICAL/UNKNOWN model; host + ERPNext + engine-aware + protection/DR probes; `dashboard` / `--watch` / `--json`; `health-check` consumes the same snapshot. No auto-healing. See [`docs/HEALTH-ARCHITECTURE.md`](docs/HEALTH-ARCHITECTURE.md). | **implemented** |
 | **v1.17.0** | **Monitoring & incident engine**: `/var/lib/erpnext-dev` metrics history + incidents; threshold transitions; cooldown / would-heal dry-run; CLI + webhook alert hooks; OpenMetrics export. | **implemented** |
-| **post-v1.17** | **Observe hardening**: CPU/iowait samples, cert-expiry days, Docker restart loops, workers/scheduler/queue best-effort; README Docker accuracy; audited `FRAPPE_DOCKER_REF` SHA default. | **in progress** |
+| **v1.17.1** | **Observe hardening**: CPU/iowait samples, cert-expiry days, Docker restart loops, workers/scheduler/queue best-effort; README Docker accuracy; audited `FRAPPE_DOCKER_REF` SHA default. | **implemented** |
 | **v1.18.0** | **Guarded auto-healing**: monitor / safe / advanced modes; recovery ladder; rate limits + AUTO-HEALING LOCKED; recovery verification. Safe = default; host reboot opt-in only. | planned |
 | **v1.19.0** | **External watchdog foundation**: guest heartbeat contract; Case B (VM-down) external/provider recovery; optional `RuntimeWatchdogSec=` guidance; CloudPanel stub. | planned |
 
