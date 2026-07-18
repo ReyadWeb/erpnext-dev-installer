@@ -63,10 +63,17 @@ SHELLCHECK_FILE_TIMEOUT="${SHELLCHECK_FILE_TIMEOUT:-180}"
 
 run_sc() {
   local target="$1"
+  local args=(-S warning)
+  # erpnext-dev.sh sources every module. `shellcheck -x` on it re-analyzes the
+  # whole tree and has hung/cancelled CI for minutes. Modules are checked
+  # individually with -x below; the entrypoint is checked without -x.
+  if [[ "$target" != "erpnext-dev.sh" ]]; then
+    args=(-x -S warning)
+  fi
   if command -v timeout >/dev/null 2>&1; then
-    timeout "${SHELLCHECK_FILE_TIMEOUT}" shellcheck -x -S warning "$target"
+    timeout "${SHELLCHECK_FILE_TIMEOUT}" shellcheck "${args[@]}" "$target"
   else
-    shellcheck -x -S warning "$target"
+    shellcheck "${args[@]}" "$target"
   fi
 }
 
