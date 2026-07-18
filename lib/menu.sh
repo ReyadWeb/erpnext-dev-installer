@@ -34,6 +34,34 @@ menu_json_string_field() {
   sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$file" 2>/dev/null | head -n 1
 }
 
+menu_map_local_https_word() {
+  # Prefer recognizing mkcert / self-signed from snapshot detail on local VMs.
+  local status="${1:-}" detail="${2:-}"
+  local n d
+  n="$(printf '%s' "$status" | tr '[:lower:]' '[:upper:]')"
+  d="$(printf '%s' "$detail" | tr '[:upper:]' '[:lower:]')"
+  case "$n" in
+    ""|UNKNOWN|INFO)
+      printf 'None'
+      return 0
+      ;;
+  esac
+  if [[ "$d" == *mkcert* ]]; then
+    printf 'mkcert'
+    return 0
+  fi
+  if [[ "$d" == *self-signed* ]]; then
+    printf 'Self-signed'
+    return 0
+  fi
+  case "$n" in
+    HEALTHY|OK) printf 'OK' ;;
+    DEGRADED|WARN) printf 'Warn' ;;
+    CRITICAL|FAIL) printf 'Fail' ;;
+    *) printf '%s' "$status" ;;
+  esac
+}
+
 menu_map_health_word() {
   # Map canonical HEALTHY/DEGRADED/CRITICAL (or legacy OK/WARN/FAIL) to short badge words.
   local kind="$1" raw="$2"
@@ -92,7 +120,7 @@ menu_map_health_word() {
 load_menu_status_fast() {
   # Populate MENU_STATUS_* from cached snapshot / light files only.
   local metrics="${HEALTH_LIB_DIR:-/var/lib/erpnext-dev}/metrics/current.json"
-  local overall https backup offvm restore runtime site
+  local overall https https_detail backup offvm restore runtime site
 
   MENU_STATUS_SITE="${PRODUCTION_DOMAIN:-${SITE_NAME:-unknown}}"
   if declare -F is_public_vm_workflow >/dev/null 2>&1 && is_public_vm_workflow 2>/dev/null; then
@@ -117,16 +145,32 @@ load_menu_status_fast() {
     [[ -n "$site" ]] && MENU_STATUS_SITE="$site"
     overall="$(menu_json_string_field "$metrics" overall_status || true)"
     https="$(menu_json_string_field "$metrics" https || true)"
+    https_detail="$(menu_json_string_field "$metrics" https_detail || true)"
     backup="$(menu_json_string_field "$metrics" backup || true)"
     offvm="$(menu_json_string_field "$metrics" offsite || true)"
     restore="$(menu_json_string_field "$metrics" restore_rehearsal || true)"
     runtime="$(menu_json_string_field "$metrics" runtime_state || true)"
     [[ -n "$overall" ]] && MENU_STATUS_HEALTH="$(menu_map_health_word health "$overall")"
-    [[ -n "$https" ]] && MENU_STATUS_HTTPS="$(menu_map_health_word https "$https")"
+    if [[ -n "$https" ]]; then
+      if [[ "${MENU_STATUS_MODE}" == "local" ]]; then
+        MENU_STATUS_HTTPS="$(menu_map_local_https_word "$https" "$https_detail")"
+      else
+        MENU_STATUS_HTTPS="$(menu_map_health_word https "$https")"
+      fi
+    fi
     [[ -n "$backup" ]] && MENU_STATUS_BACKUPS="$(menu_map_health_word backup "$backup")"
     [[ -n "$offvm" ]] && MENU_STATUS_OFFVM="$(menu_map_health_word offvm "$offvm")"
     [[ -n "$restore" ]] && MENU_STATUS_RESTORE="$(menu_map_health_word restore "$restore")"
     [[ -n "$runtime" ]] && MENU_STATUS_RUNTIME="$(menu_map_health_word runtime "$runtime")"
+  fi
+
+  # Local HTTPS: light file/cert check when snapshot cache is missing or still Unknown.
+  if [[ "${MENU_STATUS_MODE}" == "local" ]] && [[ "${MENU_STATUS_HTTPS}" == "Unknown" ]]; then
+    if declare -F ssl_local_https_menu_badge >/dev/null 2>&1; then
+      MENU_STATUS_HTTPS="$(ssl_local_https_menu_badge 2>/dev/null || echo None)"
+    else
+      MENU_STATUS_HTTPS="None"
+    fi
   fi
 
   # Go-live record is a tiny env file — safe and fast.

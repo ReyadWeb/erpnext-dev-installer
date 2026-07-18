@@ -216,7 +216,7 @@ ui_box_line() {
 ui_status_color() {
   local value="$1"
   case "$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')" in
-    ok|running|active|verified|rehearsed|recorded|healthy|complete)
+    ok|running|active|verified|rehearsed|recorded|healthy|complete|mkcert|self-signed|selfsigned)
       printf 'green'
       ;;
     warn|warning|degraded|attention|unknown|planned)
@@ -225,7 +225,7 @@ ui_status_color() {
     fail|failed|critical|missing|inactive|error)
       printf 'red'
       ;;
-    local|n/a|na|info)
+    local|none|n/a|na|info)
       printf 'muted'
       ;;
     *)

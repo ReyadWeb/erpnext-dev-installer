@@ -2356,6 +2356,42 @@ ssl_is_configured() {
   return 0
 }
 
+# Classify local HTTPS for status strip / health snapshot: none|mkcert|self-signed|configured
+ssl_local_https_kind() {
+  local cert_path issuer
+  if ! ssl_is_configured 2>/dev/null; then
+    printf 'none'
+    return 0
+  fi
+  cert_path="$(ssl_cert_path 2>/dev/null || true)"
+  issuer=""
+  if declare -F certificate_issuer_for_file >/dev/null 2>&1; then
+    issuer="$(certificate_issuer_for_file "$cert_path" 2>/dev/null || true)"
+  fi
+  if [[ -z "$issuer" ]] && [[ -n "$cert_path" && -f "$cert_path" ]]; then
+    issuer="$(openssl x509 -in "$cert_path" -noout -issuer 2>/dev/null | sed 's/^issuer=//' || true)"
+  fi
+  if printf '%s' "$issuer" | grep -qi 'mkcert'; then
+    printf 'mkcert'
+    return 0
+  fi
+  if ssl_cert_is_self_signed "$cert_path" 2>/dev/null; then
+    printf 'self-signed'
+    return 0
+  fi
+  printf 'configured'
+}
+
+# Short menu badge for local HTTPS (no full health snapshot required).
+ssl_local_https_menu_badge() {
+  case "$(ssl_local_https_kind 2>/dev/null || echo none)" in
+    mkcert) printf 'mkcert' ;;
+    self-signed) printf 'Self-signed' ;;
+    configured) printf 'OK' ;;
+    *) printf 'None' ;;
+  esac
+}
+
 ssl_cert_is_self_signed() {
   local cert_path="$1" issuer subject
   [[ -n "$cert_path" && -f "$cert_path" ]] || return 1

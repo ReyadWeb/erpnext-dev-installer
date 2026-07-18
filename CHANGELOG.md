@@ -10,6 +10,9 @@
   `scripts/check-release-doc-alignment.sh` keeps banners aligned.
 - **Local Go-live badge:** main-menu status strip shows `Go-live: Local` on
   local VMs (production sign-off does not apply) instead of orange `Unknown`.
+- **Local HTTPS badge:** status strip / health snapshot recognize configured
+  mkcert or self-signed local SSL (`HTTPS: mkcert` / `Self-signed` / `None`)
+  instead of leaving HTTPS as `Unknown` on local VMs.
 
 ## v1.18.0 - Security hardening closure
 
