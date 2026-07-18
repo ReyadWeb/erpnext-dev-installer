@@ -1,3 +1,18 @@
+## v1.17.9 - Menu space: shorter labels + smarter columns
+
+Patch release that keeps boxed menus readable on typical SSH widths by raising
+the two-column threshold, adding a fit-based single-column fallback, and
+shortening high-traffic option titles.
+
+### Changed
+
+- **Layout:** two-column only at ≥100 cols; oversized labels force single-column
+  even on wide terminals (`ui_menu_labels_fit_two_column`).
+- **Shorter labels:** main menu, App Library/Wizard, Local/Production HTTPS,
+  Off-VM/Backups, Final QA, and related submenu headers (detail stays in
+  footers/subtitles).
+- Hermetic `scripts/test-ui-render.sh` covers 80 / 100 / 120 cols and fit fallback.
+
 ## v1.17.8 - Finish boxed submenu coverage
 
 Patch release that converts remaining option menus still on `====` / plain

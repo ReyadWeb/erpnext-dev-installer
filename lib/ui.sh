@@ -123,15 +123,40 @@ ui_layout_mode() {
     printf 'wide'
     return 0
   fi
-  # Two-column from 80 cols upward (typical SSH / laptop terminals). Only very
-  # narrow panels stay single-column.
-  if (( ${UI_COLS:-100} < 80 )); then
+  # Two-column from 100 cols upward. 80–99 col SSH panels stay single-column
+  # so long option labels remain readable without heavy truncation.
+  if (( ${UI_COLS:-100} < 100 )); then
     printf 'compact'
   elif (( ${UI_COLS:-100} < 115 )); then
     printf 'medium'
   else
     printf 'wide'
   fi
+}
+
+# True when every menu label fits a two-column cell at the current panel width.
+# Prefix budget covers "[nn] " (up to 5 digits + brackets + space).
+ui_menu_labels_fit_two_column() {
+  local width left_width right_width cell item parsed label
+  width="$(ui_panel_width)"
+  left_width=$(( width / 2 - 4 ))
+  right_width=$(( width - left_width - 7 ))
+  (( left_width < 24 )) && left_width=24
+  (( right_width < 24 )) && right_width=24
+  cell="$left_width"
+  (( right_width < cell )) && cell="$right_width"
+  for item in "$@"; do
+    parsed="$(ui_menu_item_parts "$item" || true)"
+    if [[ -n "$parsed" ]]; then
+      label="${parsed#*|}"
+    else
+      label="$item"
+    fi
+    if (( ${#label} + 6 > cell )); then
+      return 1
+    fi
+  done
+  return 0
 }
 
 ui_c() {
@@ -265,6 +290,14 @@ ui_render_boxed_menu() {
   half=$(( (total + 1) / 2 ))
   width="$(ui_panel_width)"
   mode="$(ui_layout_mode)"
+
+  # Fit-based fallback: force single-column when any label would truncate in
+  # two-column cells (unless the caller forced two columns).
+  if [[ "$mode" != "compact" && "${MENU_FORCE_TWO_COLUMNS:-false}" != "true" ]]; then
+    if ! ui_menu_labels_fit_two_column "${items[@]}"; then
+      mode="compact"
+    fi
+  fi
 
   if [[ "$mode" == "compact" || "${MENU_FORCE_ONE_COLUMN:-false}" == "true" ]]; then
     ui_box_line top "$width"

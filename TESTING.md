@@ -22,6 +22,18 @@ sudo erpnext-dev toolkit-rollback   # return to previous signed slot if needed
 Expected: install slot is `main` or `vmain` (not overwriting signed `v1.17.4`);
 rollback restores the prior tag. Hermetic: `scripts/test-update-channel.sh`.
 
+## v1.17.9 shorter labels + smarter columns
+
+Hermetic (no sudo / no install):
+
+```bash
+scripts/test-ui-render.sh
+```
+
+Expects single-column at `COLUMNS=80`, two-column at `100`/`120` with `[1]` /
+`[10]` paired, fit-based single-column for oversized labels, and shortened main
+labels (`Setup wizard`, `Local HTTPS`, `Ops dashboard`).
+
 ## v1.17.7 status strip + boxed submenus
 
 Hermetic (no sudo / no install):

@@ -7,21 +7,21 @@ _ERPNEXT_DEV_MENU_LOADED=1
 
 # number|label
 MAIN_MENU_ITEMS=(
-  "1|Start here / setup wizard"
+  "1|Setup wizard"
   "2|Public VM quickstart"
   "3|Local VM quickstart"
   "4|Status"
   "5|Start service"
   "6|Stop service"
   "7|Verify access"
-  "8|Local VM HTTPS / SSL"
-  "9|Production HTTPS / SSL"
+  "8|Local HTTPS"
+  "9|Production HTTPS"
   "10|Security profiles"
-  "11|Backup / maintenance"
+  "11|Backups"
   "12|Optional apps"
   "13|Advanced"
   "14|Final QA"
-  "15|Operations dashboard"
+  "15|Ops dashboard"
   "16|Production operations"
   "17|Help"
 )
