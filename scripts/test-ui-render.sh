@@ -36,7 +36,7 @@ if ! ./erpnext-dev.sh menu-render-test >"$tmp" 2>/tmp/erpnext-dev-ui-render.err;
 fi
 
 grep -q "ERPNext Developer Toolkit" "$tmp" || note_fail "missing toolkit title"
-grep -q "Start here / setup wizard" "$tmp" || note_fail "missing Start here item"
+grep -q "Setup wizard" "$tmp" || note_fail "missing Setup wizard item"
 grep -q "Production operations" "$tmp" || note_fail "missing Production operations item"
 grep -q "Choose an option" "$tmp" || note_fail "missing Choose an option prompt"
 grep -qE '\[q\]|q\) Quit' "$tmp" || note_fail "missing quit affordance"
@@ -52,11 +52,13 @@ export MENU_FORCE_ONE_COLUMN=false
 unset MENU_FORCE_TWO_COLUMNS
 tmp2="$(mktemp /tmp/erpnext-dev-ui-render-wide.XXXXXX)"
 ./erpnext-dev.sh menu-render-test >"$tmp2" 2>/dev/null || note_fail "wide menu-render-test failed"
-grep -q "Operations dashboard" "$tmp2" || note_fail "wide layout missing Operations dashboard"
+grep -q "Ops dashboard" "$tmp2" || note_fail "wide layout missing Ops dashboard"
 if ! grep -qE '\[1\].*\[10\]' "$tmp2"; then
   note_fail "expected two-column row with [1] and [10] at COLUMNS=100"
   echo "----- wide render -----" >&2
   cat "$tmp2" >&2 || true
+else
+  pass "two-column menu at COLUMNS=100"
 fi
 grep -q "Go-live:" "$tmp2" || note_fail "wide layout missing Go-live status badge"
 # Status badges must wrap: Go-live must not share a line with HTTPS.
@@ -70,34 +72,68 @@ if grep -q $'\033' "$tmp2"; then
 fi
 rm -f "$tmp2"
 
-# 80-col terminals must stay two-column (threshold was previously 90 → single-col).
+# 80-col terminals stay single-column (threshold raised to 100 in v1.17.9).
 export COLUMNS=80
 export MENU_TERMINAL_COLS=80
 export MENU_FORCE_ONE_COLUMN=false
 unset MENU_FORCE_TWO_COLUMNS
 tmp3="$(mktemp /tmp/erpnext-dev-ui-render-80.XXXXXX)"
 ./erpnext-dev.sh menu-render-test >"$tmp3" 2>/dev/null || note_fail "80-col menu-render-test failed"
-if ! grep -qE '\[1\].*\[10\]' "$tmp3"; then
-  note_fail "expected two-column menu at COLUMNS=80"
+if grep -qE '\[1\].*\[10\]' "$tmp3"; then
+  note_fail "expected single-column menu at COLUMNS=80 (no [1]/[10] pair)"
   echo "----- 80-col render -----" >&2
   cat "$tmp3" >&2 || true
+else
+  pass "single-column menu at COLUMNS=80"
 fi
+grep -q "Setup wizard" "$tmp3" || note_fail "80-col missing Setup wizard"
 rm -f "$tmp3"
+
+# 120-col stays two-column.
+export COLUMNS=120
+export MENU_TERMINAL_COLS=120
+export MENU_FORCE_ONE_COLUMN=false
+unset MENU_FORCE_TWO_COLUMNS
+tmp4="$(mktemp /tmp/erpnext-dev-ui-render-120.XXXXXX)"
+./erpnext-dev.sh menu-render-test >"$tmp4" 2>/dev/null || note_fail "120-col menu-render-test failed"
+if ! grep -qE '\[1\].*\[10\]' "$tmp4"; then
+  note_fail "expected two-column menu at COLUMNS=120"
+  echo "----- 120-col render -----" >&2
+  cat "$tmp4" >&2 || true
+else
+  pass "two-column menu at COLUMNS=120"
+fi
+rm -f "$tmp4"
+
+# Fit-based fallback: oversized labels force single-column even at wide width.
+# shellcheck source=lib/ui.sh disable=SC1091
+source "$ROOT_DIR/lib/ui.sh"
+export COLUMNS=120 MENU_TERMINAL_COLS=120
+unset MENU_FORCE_ONE_COLUMN MENU_FORCE_TWO_COLUMNS
+UI_FORCE_ASCII=1
+ui_init
+fit_tmp="$(mktemp /tmp/erpnext-dev-ui-fit.XXXXXX)"
+ui_render_boxed_menu \
+  "1|Short" \
+  "2|This label is intentionally far too long to fit beside another column cell at normal panel widths" \
+  >"$fit_tmp"
+if grep -qE '\[1\].*\[2\]' "$fit_tmp"; then
+  note_fail "fit-based fallback did not force single-column for oversized labels"
+  cat "$fit_tmp" >&2 || true
+else
+  pass "fit-based single-column for oversized labels"
+fi
+rm -f "$fit_tmp"
 
 # Pre-tee snapshot helper: when only ERPNEXT_DEV_TTY_COLS is set (no MENU/COLUMNS),
 # ui_detect_terminal_cols must still return that width (simulates post-tee menu).
-# shellcheck source=lib/ui.sh disable=SC1091
-source "$ROOT_DIR/lib/ui.sh"
 unset MENU_TERMINAL_COLS COLUMNS
 export ERPNEXT_DEV_TTY_COLS=100
-# Bypass live stty by pointing MENU override through a function-local path:
-# call detector with MENU_TERMINAL_COLS cleared and a fake empty tty read — if
-# /dev/tty exists on the runner, prefer asserting the snapshot export path.
 (
   unset MENU_TERMINAL_COLS COLUMNS
   export ERPNEXT_DEV_TTY_COLS=100
   detected="$(ui_detect_terminal_cols)"
-  # Accept either live stty width or the snapshot/default (>=80 for two-col intent).
+  # Accept either live stty width or the snapshot/default (>=80 for usable menus).
   if ! [[ "$detected" =~ ^[0-9]+$ ]] || (( detected < 80 )); then
     note_fail "ui_detect_terminal_cols returned unusable width: ${detected}"
   else

@@ -288,7 +288,7 @@ ui_next() {
 }
 
 # Print where the user is in the menu tree and how to reopen this screen later.
-# Example: menu_location_note "Main menu > 8) Local VM HTTPS / SSL > 1) Local SSL Wizard" "local-ssl-wizard"
+# Example: menu_location_note "Main menu > 8) Local HTTPS > 1) SSL Wizard" "local-ssl-wizard"
 menu_location_note() {
   local path="${1:-}"
   local reopen_cmd="${2:-}"

@@ -208,7 +208,7 @@ production_ops_https_menu() {
     print_two_column_menu \
       "1) Production SSL status" \
       "2) SSL mode status" \
-      "3) Production HTTPS / SSL menu" \
+      "3) Production HTTPS menu" \
       "4) Cloudflare Origin CA status" \
       "5) Cloudflare checklist" \
       "6) SSL compatibility guide"
@@ -275,7 +275,7 @@ production_ops_wizard() {
     production_ops_summary
     echo
     print_two_column_menu \
-      "1) Operations dashboard (canonical health)" \
+      "1) Ops dashboard (canonical health)" \
       "2) System health and readiness" \
       "3) Services and recovery" \
       "4) Local backups" \

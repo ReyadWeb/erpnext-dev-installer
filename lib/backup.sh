@@ -1978,16 +1978,16 @@ EOF_RESTORE_PULL
 restore_rehearsal_wizard() {
   require_sudo
   while true; do
-    ui_submenu_header "Restore Rehearsal Wizard" \
+    ui_submenu_header "Restore Rehearsal" \
       "Disposable restore VM only — not for first production restore"
     print_two_column_menu \
       "1) Restore VM preflight" \
-      "2) Generate restore SSH key" \
+      "2) Generate restore key" \
       "3) Pull off-VM backup" \
       "4) Verify pulled backup" \
-      "5) Restore latest complete backup set" \
-      "6) Post-restore status/access checks" \
-      "7) Print backup-server cleanup reminder"
+      "5) Restore latest backup set" \
+      "6) Post-restore checks" \
+      "7) Cleanup reminder"
     menu_footer
     local restore_choice=""
     menu_read_choice restore_choice
@@ -2740,18 +2740,18 @@ off_vm_backup_wizard() {
     ui_submenu_header "Off-VM Backup" "Rsync target, keys, and restore rehearsal"
     print_two_column_menu \
       "1) Off-VM backup plan" \
-      "2) Guided off-VM backup setup" \
+      "2) Guided setup" \
       "3) Generate backup SSH key" \
       "4) Configure rsync target" \
-      "5) Off-VM backup dry run" \
+      "5) Off-VM dry run" \
       "6) Run off-VM backup" \
-      "7) Off-VM backup status" \
-      "8) Disable off-VM backup config" \
-      "9) Prepare this server as backup target" \
-      "10) Restore rehearsal wizard" \
-      "11) Generate restore VM key" \
-      "12) Add restore key on backup server" \
-      "13) Remove restore key on backup server"
+      "7) Off-VM status" \
+      "8) Disable config" \
+      "9) Prepare backup server" \
+      "10) Restore rehearsal" \
+      "11) Generate restore key" \
+      "12) Add restore key" \
+      "13) Remove restore key"
     menu_footer
     local off_choice=""
     menu_read_choice off_choice
@@ -2778,19 +2778,19 @@ off_vm_backup_wizard() {
 
 backup_hardening_wizard() {
   while true; do
-    ui_submenu_header "Backup / Restore Hardening" "Local backup, schedule, retention, off-VM"
+    ui_submenu_header "Backup Hardening" "Local backup, schedule, retention, off-VM"
     print_two_column_menu \
-      "1) Create database + files backup" \
+      "1) DB + files backup" \
       "2) Backup status" \
       "3) Verify latest backup" \
-      "4) Off-VM backup guide" \
+      "4) Off-VM guide" \
       "5) Restore rehearsal guide" \
       "6) Production checklist" \
       "7) List backups" \
-      "8) Scheduled backup plan" \
-      "9) Configure scheduled backups" \
-      "10) Scheduled backup status" \
-      "11) Backup retention plan" \
+      "8) Schedule plan" \
+      "9) Configure schedule" \
+      "10) Schedule status" \
+      "11) Retention plan" \
       "12) Retention status" \
       "13) Cleanup dry run"
     menu_footer
@@ -2819,22 +2819,22 @@ backup_hardening_wizard() {
 
 run_backup_maintenance_menu() {
   while true; do
-    ui_submenu_header "Backup / Restore / Maintenance" "Local backups, restore, and scheduled jobs"
+    ui_submenu_header "Backups" "Local backups, restore, and scheduled jobs"
     print_two_column_menu \
-      "1) Create database backup" \
-      "2) Create database + files backup" \
+      "1) Database backup" \
+      "2) DB + files backup" \
       "3) Backup status" \
       "4) Verify latest backup" \
-      "5) Off-VM backup guide" \
+      "5) Off-VM guide" \
       "6) Restore rehearsal guide" \
       "7) List backups" \
-      "8) Restore database backup" \
-      "9) Restore database + files backup" \
-      "10) Scheduled backup status" \
-      "11) Configure scheduled backups" \
-      "12) Disable scheduled backups" \
-      "13) Backup retention status" \
-      "14) Cleanup old backups dry run" \
+      "8) Restore database" \
+      "9) Restore DB + files" \
+      "10) Schedule status" \
+      "11) Configure schedule" \
+      "12) Disable schedule" \
+      "13) Retention status" \
+      "14) Cleanup dry run" \
       "15) Maintenance tasks"
     menu_footer
     local backup_choice=""

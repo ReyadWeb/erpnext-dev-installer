@@ -747,18 +747,18 @@ final_qa_wizard() {
   require_sudo
 
   while true; do
-    ui_submenu_header "Final QA / Release Readiness" \
+    ui_submenu_header "Final QA" \
       "Compact checks before production handoff or release validation"
     print_two_column_menu \
-      "1) Release readiness summary" \
+      "1) Readiness summary" \
       "2) Command audit" \
       "3) Production checklist" \
       "4) Backup verify" \
       "5) Release notes draft" \
-      "6) Create support bundle" \
+      "6) Support bundle" \
       "7) Restore rehearsal status" \
-      "8) Health monitoring status" \
-      "9) Go-live validation status"
+      "8) Health status" \
+      "9) Go-live status"
     menu_footer
     local choice=""
     menu_read_choice choice

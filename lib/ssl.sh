@@ -1270,7 +1270,7 @@ production_ssl_wizard() {
   provider="${ctx%%|*}"; ctx="${ctx#*|}"
   dns_ip="${ctx%%|*}"; ctx="${ctx#*|}"
   vm_ip="$ctx"
-  ui_submenu_header "Production SSL Provider Wizard" \
+  ui_submenu_header "SSL Provider" \
     "Choose how this public ERPNext VM should handle HTTPS"
   status_line "Recommended mode" "INFO" "$mode"
   status_line "Active provider" "INFO" "$provider"
@@ -1278,11 +1278,11 @@ production_ssl_wizard() {
   echo "Reason: $detail"
   echo
   print_two_column_menu \
-    "1) Let's Encrypt certificate directly on this VM" \
-    "2) Cloudflare Origin CA certificate for Cloudflare Full (strict)" \
-    "3) Show current production SSL status" \
-    "4) Show Cloudflare Origin CA guide" \
-    "5) Show SSL mode guide/status"
+    "1) Let's Encrypt on this VM" \
+    "2) Cloudflare Origin CA" \
+    "3) Production SSL status" \
+    "4) Cloudflare Origin guide" \
+    "5) SSL mode guide"
   menu_footer
   menu_read_choice choice
   case "$choice" in
@@ -2784,7 +2784,7 @@ verify_ssl_rollback() {
 # shellcheck disable=SC2120 # back_target is an optional caller override with a default
 run_local_ssl_wizard() {
   local back_target="${1:-return}"
-  local back_label="Local VM HTTPS / SSL"
+  local back_label="Local HTTPS"
   if [[ "$back_target" == "main" ]]; then
     back_label="Main menu"
   elif [[ "$back_target" == "guided" ]]; then
@@ -2793,9 +2793,9 @@ run_local_ssl_wizard() {
     back_label="Continue guided setup"
   fi
   while true; do
-    ui_submenu_header "Local SSL Wizard" \
+    ui_submenu_header "SSL Wizard" \
       "Local domains such as ${SITE_NAME} · public domains: production-ssl-menu"
-    menu_location_note "Main menu > 8) Local VM HTTPS / SSL > 1) Local SSL Wizard" "local-ssl-wizard"
+    menu_location_note "Main menu > 8) Local HTTPS > 1) SSL Wizard" "local-ssl-wizard"
     echo "Already finished a step? Re-run the same option — completed work is detected where possible."
     echo
     print_two_column_menu \
@@ -2817,39 +2817,39 @@ run_local_ssl_wizard() {
         create_self_signed_local_cert
         configure_local_ssl
         verify_local_ssl || true
-        pause_after_screen "Press Enter to return to Local SSL Wizard..."
+        pause_after_screen "Press Enter to return to SSL Wizard..."
         ;;
       2)
         run_trusted_mkcert_setup
-        pause_after_screen "Press Enter to return to Local SSL Wizard..."
+        pause_after_screen "Press Enter to return to SSL Wizard..."
         ;;
       3)
         install_local_ssl_cert
-        pause_after_screen "Press Enter to return to Local SSL Wizard..."
+        pause_after_screen "Press Enter to return to SSL Wizard..."
         ;;
       4)
         configure_local_ssl
-        pause_after_screen "Press Enter to return to Local SSL Wizard..."
+        pause_after_screen "Press Enter to return to SSL Wizard..."
         ;;
       5)
         verify_local_ssl
-        pause_after_screen "Press Enter to return to Local SSL Wizard..."
+        pause_after_screen "Press Enter to return to SSL Wizard..."
         ;;
       6)
         show_ssl_status
-        pause_after_screen "Press Enter to return to Local SSL Wizard..."
+        pause_after_screen "Press Enter to return to SSL Wizard..."
         ;;
       7)
         show_browser_trust_check_guide
-        pause_after_screen "Press Enter to return to Local SSL Wizard..."
+        pause_after_screen "Press Enter to return to SSL Wizard..."
         ;;
       8)
         disable_local_ssl
-        pause_after_screen "Press Enter to return to Local SSL Wizard..."
+        pause_after_screen "Press Enter to return to SSL Wizard..."
         ;;
       9)
         configure_local_vm_firewall
-        pause_after_screen "Press Enter to return to Local SSL Wizard..."
+        pause_after_screen "Press Enter to return to SSL Wizard..."
         ;;
       b|B|"")
         if [[ "$back_target" == "main" ]]; then
@@ -2868,18 +2868,18 @@ show_production_ssl_menu() {
   local back_target="${1:-return}"
   local back_label="Main menu"
   while true; do
-    ui_submenu_header "Production HTTPS / SSL" \
+    ui_submenu_header "Production HTTPS" \
       "Public domains only · local .test HTTPS: Main menu > 8"
-    menu_location_note "Main menu > 9) Production HTTPS / SSL" "production-ssl-menu"
+    menu_location_note "Main menu > 9) Production HTTPS" "production-ssl-menu"
     echo
     print_two_column_menu \
-      "1) Production SSL Wizard" \
-      "2) Production SSL Status" \
-      "3) Production SSL Plan" \
-      "4) Production SSL Guide" \
-      "5) Production Domain Guide" \
+      "1) SSL Wizard" \
+      "2) SSL Status" \
+      "3) SSL Plan" \
+      "4) SSL Guide" \
+      "5) Domain Guide" \
       "6) Public VM Readiness" \
-      "7) Configure Let's Encrypt SSL" \
+      "7) Let's Encrypt SSL" \
       "8) Cloudflare Origin SSL" \
       "9) Cloudflare Origin Status" \
       "10) SSL Mode Status" \
@@ -2919,11 +2919,28 @@ show_local_ssl_menu() {
   local back_target="${1:-return}"
   local back_label="Main menu"
   while true; do
-    ui_submenu_header "Local VM HTTPS / SSL" \
-      "Local domains such as ${SITE_NAME} · day-to-day: [1] Local SSL Wizard"
-    menu_location_note "Main menu > 8) Local VM HTTPS / SSL" "local-ssl-menu"
+    ui_submenu_header "Local HTTPS" \
+      "Local domains such as ${SITE_NAME} · day-to-day: [1] SSL Wizard"
+    menu_location_note "Main menu > 8) Local HTTPS" "local-ssl-menu"
     echo
-    print_two_column_menu       "1) Local SSL Wizard"       "2) Local SSL Status"       "3) Local SSL Guide"       "4) Trusted mkcert Guide"       "5) Browser Trust Check"       "6) Install/Replace Cert"       "7) Verify Local SSL"       "8) Create Self-Signed Cert"       "9) Configure Local SSL"       "10) Disable Local SSL"       "11) Verify SSL Rollback"       "12) Change Local Domain"       "13) Local Domain / Host DNS Status"       "14) Local Access Doctor"       "15) Print Host /etc/hosts Command"       "16) SSL/HTTPS Roadmap"       "17) Local Security Profile"
+    print_two_column_menu \
+      "1) SSL Wizard" \
+      "2) SSL Status" \
+      "3) SSL Guide" \
+      "4) mkcert Guide" \
+      "5) Browser Trust Check" \
+      "6) Install Cert" \
+      "7) Verify Local SSL" \
+      "8) Self-Signed Cert" \
+      "9) Configure Local SSL" \
+      "10) Disable Local SSL" \
+      "11) Rollback Check" \
+      "12) Change Local Domain" \
+      "13) Domain / DNS" \
+      "14) Local Access Doctor" \
+      "15) Hosts Command" \
+      "16) SSL/HTTPS Roadmap" \
+      "17) Security Profile"
     menu_footer back "$back_label"
     local ssl_choice=""
     menu_read_choice ssl_choice

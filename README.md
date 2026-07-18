@@ -18,7 +18,7 @@ It supports two setup paths:
 > the path to **9.8+** are in [`ROADMAP.md`](ROADMAP.md). This README focuses on
 > installation, operations, and usage.
 
-**Current release:** v1.17.8 · **Readiness:** ~9.5/10 for single-admin local/public VM
+**Current release:** v1.17.9 · **Readiness:** ~9.5/10 for single-admin local/public VM
 (after VPS production validation). v1.10.0 turns the toolkit into a **multi-engine**
 platform: choose a **native** VM install (default, unchanged) or a **Docker**
 engine that wraps the official `frappe_docker`, behind the same `erpnext-dev` CLI.
@@ -115,7 +115,7 @@ is already in use, the toolkit prompts for a free one (or auto-picks under
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar && \
-VERSION="v1.17.8" && \
+VERSION="v1.17.9" && \
 BASE="https://github.com/ReyadWeb/erpnext-dev-toolkit/releases/download/${VERSION}" && \
 cd ~ && \
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz" && \
@@ -138,7 +138,7 @@ Or install step by step ([details below](#install-and-verify)):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar
-VERSION="v1.17.8"
+VERSION="v1.17.9"
 BASE="https://github.com/ReyadWeb/erpnext-dev-toolkit/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz"
 tar -xzf "erpnext-dev-${VERSION}.tar.gz"
@@ -283,7 +283,7 @@ list `sudo`).
 
 ```bash
 sudo apt-get update && sudo apt-get install -y curl ca-certificates tar && \
-VERSION="v1.17.8" && \
+VERSION="v1.17.9" && \
 BASE="https://github.com/ReyadWeb/erpnext-dev-toolkit/releases/download/${VERSION}" && \
 cd ~ && \
 curl -fsSLO "${BASE}/erpnext-dev-${VERSION}.tar.gz" && \
@@ -329,7 +329,7 @@ sudo erpnext-dev local-ssl-wizard        # option 2 = trusted mkcert (stay in wi
 sudo erpnext-dev local-access-doctor
 ```
 
-From the interactive menu that is **Main menu > 8) Local VM HTTPS / SSL > 1) Local SSL Wizard**.
+From the interactive menu that is **Main menu > 8) Local HTTPS > 1) SSL Wizard**.
 Press `b` to go back one level; reopen anytime with the command above (or
 `sudo erpnext-dev local-ssl-menu` for the parent screen). Re-running a wizard
 option continues safely when that step is already done.
@@ -823,8 +823,8 @@ sudo erpnext-dev ssl-mode-guide
 Local VM: `local-ssl-wizard`, `verify-local-ssl`, `change-local-domain`,
 `disable-local-ssl`. Production: `production-ssl-wizard`,
 `configure-cloudflare-origin-ssl`, `production-ssl-status`,
-`disable-production-ssl`. The main menu separates **Local VM HTTPS / SSL** from
-**Production HTTPS / SSL** — use local HTTPS only for `.test` domains.
+`disable-production-ssl`. The main menu separates **Local HTTPS** from
+**Production HTTPS** — use local HTTPS only for `.test` domains.
 
 ---
 

@@ -1261,11 +1261,32 @@ run_app_install_wizard() {
 
   while true; do
     app_wizard_preflight "$bench_dir"
-    ui_submenu_header "App Installation Wizard" \
+    ui_submenu_header "App Wizard" \
       "Choose one app. Status and guide tools are listed first."
-    print_two_column_menu       "1) Installed apps / status"       "2) Compatibility"       "3) CRM [official]"       "4) HR / HRMS [official]"       "5) Education [official]"       "6) Payments [official]"       "7) Webshop / E-Commerce [official]"       "8) Builder [official]"       "9) Learning / LMS [official]"       "10) Wiki [official]"       "11) Print Designer [official]"       "12) Drive [official]"       "13) Gameplan [official]"       "14) Lending [official]"       "15) Raven Chat [community]"       "16) Insights [official]"       "17) Telephony [official]"       "18) Helpdesk [official]"       "19) India Compliance [community]"       "20) Advanced tools"       "21) Rollback guide"
+    print_two_column_menu \
+      "1) Installed apps" \
+      "2) Compatibility" \
+      "3) CRM" \
+      "4) HRMS" \
+      "5) Education" \
+      "6) Payments" \
+      "7) Webshop" \
+      "8) Builder" \
+      "9) LMS" \
+      "10) Wiki" \
+      "11) Print Designer" \
+      "12) Drive" \
+      "13) Gameplan" \
+      "14) Lending" \
+      "15) Raven" \
+      "16) Insights" \
+      "17) Telephony" \
+      "18) Helpdesk" \
+      "19) India Compliance" \
+      "20) Advanced tools" \
+      "21) Rollback"
     echo
-    ui_text muted "Install one app at a time. [official]=Frappe; [community]=third-party."
+    ui_text muted "Install one app at a time. official=Frappe; community=third-party."
     printf '\n'
     ui_text muted "The wizard will offer a backup checkpoint first."
     printf '\n'
@@ -1484,13 +1505,37 @@ show_advanced_app_tools_menu() {
 
 show_app_library_menu() {
   while true; do
-    ui_submenu_header "App Installation Library" \
+    ui_submenu_header "App Library" \
       "Install an app, or use status / guide tools."
-    print_two_column_menu       "1) Wizard"       "2) Installed apps / status"       "3) Compatibility"       "4) Installed apps"       "5) Guide"       "6) Rollback guide"       "7) CRM [official]"       "8) HR / HRMS [official]"       "9) Education [official]"       "10) Payments [official]"       "11) Webshop / E-Commerce [official]"       "12) Builder [official]"       "13) Learning / LMS [official]"       "14) Wiki [official]"       "15) Print Designer [official]"       "16) Drive [official]"       "17) Gameplan [official]"       "18) Lending [official]"       "19) Raven Chat [community]"       "20) Helpdesk [official]"       "21) Telephony [official]"       "22) Insights [official]"       "23) India Compliance [community]"       "24) Advanced tools"
+    print_two_column_menu \
+      "1) Wizard" \
+      "2) Installed apps" \
+      "3) Compatibility" \
+      "4) Installed apps list" \
+      "5) Guide" \
+      "6) Rollback" \
+      "7) CRM" \
+      "8) HRMS" \
+      "9) Education" \
+      "10) Payments" \
+      "11) Webshop" \
+      "12) Builder" \
+      "13) LMS" \
+      "14) Wiki" \
+      "15) Print Designer" \
+      "16) Drive" \
+      "17) Gameplan" \
+      "18) Lending" \
+      "19) Raven" \
+      "20) Helpdesk" \
+      "21) Telephony" \
+      "22) Insights" \
+      "23) India Compliance" \
+      "24) Advanced tools"
     echo
     ui_text muted "Notes: one app at a time; keep a backup checkpoint."
     printf '\n'
-    ui_text muted "[official]=Frappe Technologies; [community]=third-party open source."
+    ui_text muted "official=Frappe Technologies; community=third-party open source."
     printf '\n'
     menu_footer
     local app_choice=""
