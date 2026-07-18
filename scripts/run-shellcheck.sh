@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
+# Lint toolkit shell sources with shellcheck.
+# Supports SKIP_SHELLCHECK=1 (CI runs this once, then validate-release skips).
+# Parallel by default so GitHub runners finish before concurrency/cancel kills the job.
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+
+if [[ "${SKIP_SHELLCHECK:-0}" == "1" ]]; then
+  echo "shellcheck skipped (SKIP_SHELLCHECK=1)"
+  exit 0
+fi
 
 if ! command -v shellcheck >/dev/null 2>&1; then
   echo "shellcheck is not installed" >&2
@@ -56,7 +64,26 @@ for target in "${targets[@]}"; do
     echo "missing shellcheck target: $target" >&2
     exit 1
   }
-  shellcheck -x -S warning "$target"
 done
+
+# Per-file timeout (seconds). A hung shellcheck must not cancel the whole release.
+SHELLCHECK_FILE_TIMEOUT="${SHELLCHECK_FILE_TIMEOUT:-120}"
+# Parallelism: keep modest on 2-core GitHub runners.
+SHELLCHECK_JOBS="${SHELLCHECK_JOBS:-2}"
+
+shellcheck_one() {
+  local target="$1"
+  echo "shellcheck: ${target}"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${SHELLCHECK_FILE_TIMEOUT}" shellcheck -x -S warning "$target"
+  else
+    shellcheck -x -S warning "$target"
+  fi
+}
+export -f shellcheck_one
+export SHELLCHECK_FILE_TIMEOUT
+
+printf '%s\n' "${targets[@]}" \
+  | xargs -r -n1 -P "${SHELLCHECK_JOBS}" -I{} bash -c 'shellcheck_one "$@"' _ {}
 
 echo "shellcheck passed for ${#targets[@]} file(s)"
