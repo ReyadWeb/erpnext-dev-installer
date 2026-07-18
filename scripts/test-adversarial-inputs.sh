@@ -86,13 +86,17 @@ pass "is_usable_vm_ip adversarial cases"
 policy_out="$(scripts/release-signing-policy.sh 'v1.2.3;rm' 1)" || true
 [[ "$policy_out" == "sign" ]] || note_fail "metachar tag with key should still print sign/publish (got ${policy_out})"
 # Stable regex must not match injection strings
-if [[ 'v1.2.3;rm' =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+tag_bad_semi='v1.2.3;rm'
+tag_bad_sub='v1.2.3$(id)'
+tag_ok='v1.2.3'
+stable_re='^v[0-9]+\.[0-9]+\.[0-9]+$'
+if [[ "$tag_bad_semi" =~ $stable_re ]]; then
   note_fail "stable tag regex matched injection string"
 fi
-if [[ 'v1.2.3$(id)' =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if [[ "$tag_bad_sub" =~ $stable_re ]]; then
   note_fail "stable tag regex matched command substitution"
 fi
-[[ 'v1.2.3' =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || note_fail "benign stable tag rejected by regex"
+[[ "$tag_ok" =~ $stable_re ]] || note_fail "benign stable tag rejected by regex"
 pass "release tag shape adversarial cases"
 
 # --- restore rehearsal sanitize strips metacharacters / path tricks ---
