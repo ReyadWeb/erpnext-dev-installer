@@ -130,10 +130,13 @@ load_menu_status_fast() {
   fi
 
   # Go-live record is a tiny env file — safe and fast.
+  # Local VMs do not use production go-live sign-off; show Local instead of Unknown.
   if declare -F go_live_recorded_ok >/dev/null 2>&1 && go_live_recorded_ok 2>/dev/null; then
     MENU_STATUS_GOLIVE="Recorded"
   elif [[ -n "${GO_LIVE_RECORD_FILE:-}" && -r "${GO_LIVE_RECORD_FILE}" ]]; then
     MENU_STATUS_GOLIVE="Partial"
+  elif [[ "${MENU_STATUS_MODE}" == "local" ]]; then
+    MENU_STATUS_GOLIVE="Local"
   fi
 }
 
