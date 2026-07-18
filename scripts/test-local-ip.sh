@@ -36,11 +36,14 @@ mkdir -p "${LOCAL_IP_NETPLAN_DIR}"
 is_usable_vm_ip() {
   local ip="$1"
   [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
-  case "$ip" in 127.*|169.254.*|0.*) return 1 ;; esac
+  case "$ip" in 127.* | 169.254.* | 0.*) return 1 ;; esac
   return 0
 }
 require_sudo() { return 0; }
-fail() { echo "FAIL: $*" >&2; exit 1; }
+fail() {
+  echo "FAIL: $*" >&2
+  exit 1
+}
 status_line() { printf '%s|%s|%s\n' "$1" "$2" "$3"; }
 warn() { echo "WARN: $*" >&2; }
 toolkit_cmd() { printf 'erpnext-dev %s' "$1"; }
