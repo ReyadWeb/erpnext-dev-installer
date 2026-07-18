@@ -62,6 +62,8 @@ else
 fi
 grep -q "Go-live:" "$tmp2" || note_fail "wide layout missing Go-live status badge"
 grep -qE 'Go-live:[[:space:]]*Local' "$tmp2" || note_fail "local mode should show Go-live: Local (not Unknown)"
+grep -qE 'HTTPS:[[:space:]]*(None|mkcert|Self-signed|OK)' "$tmp2" \
+  || note_fail "local mode should show HTTPS as None/mkcert/Self-signed/OK (not Unknown)"
 # Status badges must wrap: Go-live must not share a line with HTTPS.
 if grep -E 'HTTPS:.*Go-live:' "$tmp2" >/dev/null 2>&1; then
   note_fail "Go-live still on the same status row as HTTPS (overflow risk)"

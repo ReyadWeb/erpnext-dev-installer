@@ -145,6 +145,26 @@ health_cooldown_tick
 health_cooldown_tick
 assert_eq "would_heal after threshold" "restart_web_runtime" "${SNAPSHOT_WOULD_HEAL}"
 
+# Local HTTPS probe: recognize mkcert / self-signed / none (stubs; no real nginx).
+is_public_vm_workflow() { return 1; }
+ssl_local_https_kind() { printf 'mkcert'; }
+https_out="$(health_probe_https)"
+assert_eq "local https mkcert status" "HEALTHY" "${https_out%%|*}"
+[[ "${https_out#*|}" == *mkcert* ]] || {
+  echo "FAIL: local https detail should mention mkcert: ${https_out}" >&2
+  fail=$((fail + 1))
+}
+ssl_local_https_kind() { printf 'self-signed'; }
+https_out="$(health_probe_https)"
+assert_eq "local https self-signed status" "HEALTHY" "${https_out%%|*}"
+[[ "${https_out#*|}" == *self-signed* ]] || {
+  echo "FAIL: local https detail should mention self-signed: ${https_out}" >&2
+  fail=$((fail + 1))
+}
+ssl_local_https_kind() { printf 'none'; }
+https_out="$(health_probe_https)"
+assert_eq "local https none status" "UNKNOWN" "${https_out%%|*}"
+
 if ((fail > 0)); then
   echo "test-health-snapshot: ${fail} failure(s)" >&2
   exit 1

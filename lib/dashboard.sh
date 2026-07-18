@@ -688,11 +688,24 @@ health_cert_days_remaining() {
 }
 
 health_probe_https() {
-  local pair status detail cert_path days expiry_status="HEALTHY"
+  local pair status detail cert_path days expiry_status="HEALTHY" kind
   if is_public_vm_workflow 2>/dev/null; then
     pair="$(production_ssl_overall_status 2>/dev/null || echo 'WARN|not confirmed')"
   else
-    pair="INFO|local mode; production HTTPS not required"
+    # Local / dev: recognize mkcert or self-signed when configured; otherwise
+    # UNKNOWN (optional for local — does not drag overall protection status).
+    kind="none"
+    if declare -F ssl_local_https_kind >/dev/null 2>&1; then
+      kind="$(ssl_local_https_kind 2>/dev/null || echo none)"
+    elif declare -F ssl_is_configured >/dev/null 2>&1 && ssl_is_configured 2>/dev/null; then
+      kind="configured"
+    fi
+    case "$kind" in
+      mkcert) pair="HEALTHY|mkcert local HTTPS" ;;
+      self-signed) pair="HEALTHY|self-signed local HTTPS" ;;
+      configured) pair="HEALTHY|local HTTPS configured" ;;
+      *) pair="UNKNOWN|local HTTPS not configured" ;;
+    esac
   fi
   status="$(health_status_normalize "${pair%%|*}")"
   detail="${pair#*|}"
@@ -718,7 +731,10 @@ health_probe_https() {
       else
         detail="${detail}; cert ${days}d remaining"
       fi
-      status="$(health_status_worst "$status" "$expiry_status")"
+      # Expiry only worsens an already-configured local/prod HTTPS status.
+      if [[ "$status" != "UNKNOWN" ]]; then
+        status="$(health_status_worst "$status" "$expiry_status")"
+      fi
     fi
   fi
   printf '%s|%s' "$status" "$detail"
