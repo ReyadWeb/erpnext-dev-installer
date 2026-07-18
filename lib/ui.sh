@@ -225,6 +225,9 @@ ui_status_color() {
     fail|failed|critical|missing|inactive|error)
       printf 'red'
       ;;
+    local|n/a|na|info)
+      printf 'muted'
+      ;;
     *)
       printf 'muted'
       ;;

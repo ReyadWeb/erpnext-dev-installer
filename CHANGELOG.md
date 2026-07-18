@@ -8,6 +8,8 @@
   are still publishing. Exact pin example remains for reproducible installs.
   Hermetic: `scripts/test-resolve-latest-release-tag.sh`;
   `scripts/check-release-doc-alignment.sh` keeps banners aligned.
+- **Local Go-live badge:** main-menu status strip shows `Go-live: Local` on
+  local VMs (production sign-off does not apply) instead of orange `Unknown`.
 
 ## v1.18.0 - Security hardening closure
 
