@@ -8,10 +8,10 @@ submenus use the same boxed `[n]` two-column UI as the main menu.
 - **Status strip overflow:** badge fields (`HTTPS` … `Go-live`) split across two
   padded rows so `Go-live` no longer spills past the right border on typical
   80–100 column terminals.
-- **Release CI cancel during shellcheck:** concurrency no longer cancels
-  tag/release `workflow_call` runs; shellcheck is parallel with per-file
-  timeouts; `validate-release` skips a duplicate shellcheck pass when CI
-  already ran it (`SKIP_SHELLCHECK=1`).
+- **Release CI cancel during shellcheck:** removed workflow `concurrency`
+  cancel-in-progress (it aborted tag/main shellcheck with “operation was
+  canceled”); CI installs upstream shellcheck; per-file timeouts;
+  `validate-release` skips a duplicate pass (`SKIP_SHELLCHECK=1`).
 
 ### Changed
 

@@ -13,11 +13,9 @@ on:
 permissions:
   contents: read
 
-# Only cancel in-progress PR runs. Tag/release workflow_call and main pushes
-# must not be cancelled mid-shellcheck (that was aborting v1.17.7 publish).
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+# NOTE: No workflow concurrency group. cancel-in-progress previously aborted
+# shellcheck mid-run on tag releases and main pushes (v1.17.7 publish failed
+# with "The operation was canceled" on the shellcheck step).
 
 jobs:
   validate-release:
@@ -37,6 +35,7 @@ jobs:
           curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${sc_ver}/shellcheck-${sc_ver}.linux.x86_64.tar.xz" \
             | sudo tar -xJ -C /usr/local/bin --strip-components=1 "shellcheck-${sc_ver}/shellcheck"
           shellcheck --version
+          command -v shellcheck
 
       - name: Run shellcheck
         run: scripts/run-shellcheck.sh
