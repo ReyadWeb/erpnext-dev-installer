@@ -1,5 +1,3 @@
-## Unreleased
-
 ## v1.18.1 - Local VM Stable IP foundation
 
 Patch release that keeps `erp.test` / local HTTPS reliable when the guest IP
