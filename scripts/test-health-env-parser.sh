@@ -40,6 +40,9 @@ reset_policy_defaults() {
   HEALTH_COOLDOWN_SEC=600
   HEALTH_HISTORY_MAX_LINES=2016
   HEALTH_INCIDENT_KEEP=50
+  HEALTH_HEALING_MODE=monitor
+  HEALTH_HEALING_MAX_FAILURES=3
+  HEALTH_HEALING_MAX_ACTIONS=5
 }
 
 # --- benign policy applies ---
@@ -125,6 +128,26 @@ health_load_policy
 [[ "$HEALTH_COOLDOWN_SEC" == "111" ]] || note_fail "owner-matching 600 file should apply for non-root tests (got ${HEALTH_COOLDOWN_SEC})"
 pass "permission gate"
 export HEALTH_ENV_SKIP_OWNER_CHECK=1
+
+# --- healing mode allowlist ---
+reset_policy_defaults
+HEALTH_HEALING_MODE=monitor
+cat >"$HEALTH_ENV_FILE" <<'EOF'
+HEALTH_HEALING_MODE=safe
+HEALTH_HEALING_MAX_ACTIONS=7
+EOF
+chmod 600 "$HEALTH_ENV_FILE"
+health_load_policy
+[[ "$HEALTH_HEALING_MODE" == "safe" ]] || note_fail "HEALING_MODE safe not applied"
+[[ "$HEALTH_HEALING_MAX_ACTIONS" == "7" ]] || note_fail "HEALING_MAX_ACTIONS not applied"
+cat >"$HEALTH_ENV_FILE" <<'EOF'
+HEALTH_HEALING_MODE=reboot-everything
+EOF
+chmod 600 "$HEALTH_ENV_FILE"
+HEALTH_HEALING_MODE=monitor
+health_load_policy
+[[ "$HEALTH_HEALING_MODE" == "monitor" ]] || note_fail "invalid HEALING_MODE must be rejected"
+pass "healing mode allowlist"
 
 # --- source must not appear in load path (static check) ---
 if grep -nE 'source[[:space:]]+"?\$\{?HEALTH_ENV' lib/dashboard.sh; then

@@ -41,6 +41,7 @@ targets=(
   lib/install.sh
   lib/ops.sh
   lib/dashboard.sh
+  lib/healing.sh
   lib/menu.sh
   lib/security.sh
   lib/update.sh
@@ -63,6 +64,7 @@ targets=(
   scripts/test-adversarial-inputs.sh
   scripts/test-update-channel.sh
   scripts/test-local-ip.sh
+  scripts/test-healing.sh
   scripts/release-signing-policy.sh
   scripts/assert-github-release-assets.sh
 )

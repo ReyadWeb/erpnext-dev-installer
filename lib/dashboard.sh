@@ -1,6 +1,7 @@
 # shellcheck shell=bash
-# Canonical health snapshot, Operations Dashboard (v1.16), and monitoring /
-# incident engine (v1.17). No auto-healing actions. See docs/HEALTH-ARCHITECTURE.md.
+# Canonical health snapshot, Operations Dashboard (v1.16), monitoring /
+# incident engine (v1.17), and healing policy knobs for guarded auto-healing
+# (v1.19; execute path in lib/healing.sh). See docs/HEALTH-ARCHITECTURE.md.
 # Sourced by the toolkit entry point; do not execute directly.
 
 [[ -n "${_ERPNEXT_DEV_DASHBOARD_LOADED:-}" ]] && return 0
@@ -41,6 +42,12 @@ _ERPNEXT_DEV_DASHBOARD_LOADED=1
 : "${HEALTH_ENV_SKIP_OWNER_CHECK:=0}"
 # Allow http:// webhooks only when explicitly enabled (local test hooks).
 : "${HEALTH_ALERT_WEBHOOK_ALLOW_HTTP:=0}"
+# Healing mode defaults (execute path honors these via lib/healing.sh).
+: "${HEALTH_HEALING_MODE:=monitor}"
+: "${HEALTH_HEALING_MAX_FAILURES:=3}"
+: "${HEALTH_HEALING_MAX_ACTIONS:=5}"
+: "${HEALTH_HEALING_ACTION_WINDOW_SEC:=3600}"
+: "${HEALTH_HEALING_VERIFY_WAIT_SEC:=5}"
 
 # True when KEY is an allowlisted health.env override (never arbitrary shell).
 health_env_is_known_key() {
@@ -59,7 +66,9 @@ health_env_is_known_key() {
     HEALTH_IOWAIT_DEGRADED_PERCENT|HEALTH_IOWAIT_CRITICAL_PERCENT|\
     HEALTH_DOCKER_RESTART_DEGRADED|HEALTH_DOCKER_RESTART_CRITICAL|\
     HEALTH_QUEUE_DEGRADED|HEALTH_QUEUE_CRITICAL|\
-    HEALTH_SCHEDULER_STALE_HOURS|HEALTH_HTTP_TIMEOUT_SEC|HEALTH_CPU_SAMPLE_SEC)
+    HEALTH_SCHEDULER_STALE_HOURS|HEALTH_HTTP_TIMEOUT_SEC|HEALTH_CPU_SAMPLE_SEC|\
+    HEALTH_HEALING_MODE|HEALTH_HEALING_MAX_FAILURES|HEALTH_HEALING_MAX_ACTIONS|\
+    HEALTH_HEALING_ACTION_WINDOW_SEC|HEALTH_HEALING_VERIFY_WAIT_SEC)
       return 0
       ;;
     *)
@@ -106,11 +115,19 @@ health_env_validate_value() {
     HEALTH_ALERT_WEBHOOK_ALLOW_HTTP)
       [[ "$value" == "0" || "$value" == "1" ]] || return 1
       ;;
+    HEALTH_HEALING_MODE)
+      case "$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')" in
+        monitor | safe | advanced) return 0 ;;
+        *) return 1 ;;
+      esac
+      ;;
     HEALTH_CPU_SAMPLE_SEC)
       [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] || return 1
       ;;
     HEALTH_*_PERCENT|HEALTH_*_HOURS|HEALTH_*_DAYS|HEALTH_*_SEC|HEALTH_*_THRESHOLD|\
-    HEALTH_HISTORY_MAX_LINES|HEALTH_INCIDENT_KEEP|HEALTH_DOCKER_RESTART_*|HEALTH_QUEUE_*)
+    HEALTH_HISTORY_MAX_LINES|HEALTH_INCIDENT_KEEP|HEALTH_DOCKER_RESTART_*|HEALTH_QUEUE_*|\
+    HEALTH_HEALING_MAX_FAILURES|HEALTH_HEALING_MAX_ACTIONS)
+      # HEALTH_HEALING_*_SEC keys match HEALTH_*_SEC above.
       [[ "$value" =~ ^[0-9]+$ ]] || return 1
       ;;
     *)
@@ -190,6 +207,11 @@ health_env_apply_assignment() {
     HEALTH_SCHEDULER_STALE_HOURS) HEALTH_SCHEDULER_STALE_HOURS="$value" ;;
     HEALTH_HTTP_TIMEOUT_SEC) HEALTH_HTTP_TIMEOUT_SEC="$value" ;;
     HEALTH_CPU_SAMPLE_SEC) HEALTH_CPU_SAMPLE_SEC="$value" ;;
+    HEALTH_HEALING_MODE) HEALTH_HEALING_MODE="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')" ;;
+    HEALTH_HEALING_MAX_FAILURES) HEALTH_HEALING_MAX_FAILURES="$value" ;;
+    HEALTH_HEALING_MAX_ACTIONS) HEALTH_HEALING_MAX_ACTIONS="$value" ;;
+    HEALTH_HEALING_ACTION_WINDOW_SEC) HEALTH_HEALING_ACTION_WINDOW_SEC="$value" ;;
+    HEALTH_HEALING_VERIFY_WAIT_SEC) HEALTH_HEALING_VERIFY_WAIT_SEC="$value" ;;
     *) return 1 ;;
   esac
   return 0
@@ -912,9 +934,13 @@ health_snapshot_collect() {
   pair="$(health_probe_restore_rehearsal)"; SNAPSHOT_REHEARSAL_STATUS="${pair%%|*}"; SNAPSHOT_REHEARSAL_DETAIL="${pair#*|}"
   pair="$(health_probe_toolkit_integrity)"; SNAPSHOT_INTEGRITY_STATUS="${pair%%|*}"; SNAPSHOT_INTEGRITY_DETAIL="${pair#*|}"
 
-  SNAPSHOT_HEALING_MODE="monitor"
+  SNAPSHOT_HEALING_MODE="$(printf '%s' "${HEALTH_HEALING_MODE:-monitor}" | tr '[:upper:]' '[:lower:]')"
+  case "$SNAPSHOT_HEALING_MODE" in
+    monitor | safe | advanced) ;;
+    *) SNAPSHOT_HEALING_MODE="monitor" ;;
+  esac
   SNAPSHOT_HEALING_STATE="observing"
-  SNAPSHOT_HEALING_DETAIL="Monitoring active; auto-healing actions deferred to v1.18"
+  SNAPSHOT_HEALING_DETAIL="Monitoring active; healing mode=${SNAPSHOT_HEALING_MODE}"
   SNAPSHOT_WOULD_HEAL="none"
   SNAPSHOT_HTTP_FAIL_STREAK="0"
   SNAPSHOT_OVERALL_FAIL_STREAK="0"
@@ -1053,6 +1079,8 @@ health_cooldown_tick() {
   local state_file="${HEALTH_LIB_DIR}/healing/state.json"
   local now http_streak overall_streak last_action_at cooldown_until would_heal
   local prev_http_streak=0 prev_overall_streak=0
+  local keep_last_action="" keep_last_result="" keep_locked="false" keep_lock_reason=""
+  local keep_actions=0 keep_window=0 keep_fail=0 keep_last_exec=0 keep_state="" keep_detail=""
   now="$(date +%s)"
   health_ensure_lib_dirs
 
@@ -1060,9 +1088,24 @@ health_cooldown_tick() {
     prev_http_streak="$(sed -n 's/.*"http_fail_streak"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$state_file" | head -n 1)"
     prev_overall_streak="$(sed -n 's/.*"overall_fail_streak"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$state_file" | head -n 1)"
     last_action_at="$(sed -n 's/.*"last_would_heal_at"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$state_file" | head -n 1)"
+    keep_last_action="$(sed -n 's/.*"last_action"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$state_file" | head -n 1)"
+    keep_last_result="$(sed -n 's/.*"last_action_result"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$state_file" | head -n 1)"
+    keep_locked="$(sed -n 's/.*"locked"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' "$state_file" | head -n 1)"
+    keep_lock_reason="$(sed -n 's/.*"lock_reason"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$state_file" | head -n 1)"
+    keep_actions="$(sed -n 's/.*"actions_in_window"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$state_file" | head -n 1)"
+    keep_window="$(sed -n 's/.*"window_started_at"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$state_file" | head -n 1)"
+    keep_fail="$(sed -n 's/.*"consecutive_action_failures"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$state_file" | head -n 1)"
+    keep_last_exec="$(sed -n 's/.*"last_action_at"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$state_file" | head -n 1)"
+    keep_state="$(sed -n 's/.*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$state_file" | head -n 1)"
+    keep_detail="$(sed -n 's/.*"detail"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$state_file" | head -n 1)"
     [[ "$prev_http_streak" =~ ^[0-9]+$ ]] || prev_http_streak=0
     [[ "$prev_overall_streak" =~ ^[0-9]+$ ]] || prev_overall_streak=0
     [[ "$last_action_at" =~ ^[0-9]+$ ]] || last_action_at=0
+    [[ "$keep_locked" == "true" || "$keep_locked" == "false" ]] || keep_locked="false"
+    [[ "$keep_actions" =~ ^[0-9]+$ ]] || keep_actions=0
+    [[ "$keep_window" =~ ^[0-9]+$ ]] || keep_window=0
+    [[ "$keep_fail" =~ ^[0-9]+$ ]] || keep_fail=0
+    [[ "$keep_last_exec" =~ ^[0-9]+$ ]] || keep_last_exec=0
   else
     last_action_at=0
   fi
@@ -1079,7 +1122,9 @@ health_cooldown_tick() {
 
   would_heal="none"
   cooldown_until=$(( last_action_at + HEALTH_COOLDOWN_SEC ))
-  if (( now >= cooldown_until )); then
+  if [[ "$keep_locked" == "true" ]]; then
+    would_heal="locked"
+  elif (( now >= cooldown_until )); then
     if (( http_streak >= HEALTH_CONSECUTIVE_FAIL_THRESHOLD )); then
       would_heal="restart_web_runtime"
       last_action_at="$now"
@@ -1095,22 +1140,34 @@ health_cooldown_tick() {
   SNAPSHOT_HTTP_FAIL_STREAK="$http_streak"
   SNAPSHOT_OVERALL_FAIL_STREAK="$overall_streak"
   SNAPSHOT_WOULD_HEAL="$would_heal"
-  if [[ "$would_heal" == "restart_web_runtime" || "$would_heal" == "restart_app_stack" ]]; then
-    SNAPSHOT_HEALING_DETAIL="Would heal (dry-run): ${would_heal} — not executed until v1.18"
+  if [[ "$would_heal" == "locked" ]]; then
+    SNAPSHOT_HEALING_DETAIL="${keep_detail:-AUTO-HEALING LOCKED — run healing-unlock}"
+  elif [[ "$would_heal" == "restart_web_runtime" || "$would_heal" == "restart_app_stack" ]]; then
+    SNAPSHOT_HEALING_DETAIL="Candidate action: ${would_heal}"
   elif [[ "$would_heal" == "cooldown" ]]; then
-    SNAPSHOT_HEALING_DETAIL="Cooldown active; next dry-run suggestion after ${HEALTH_COOLDOWN_SEC}s"
+    SNAPSHOT_HEALING_DETAIL="Cooldown active; next action after ${HEALTH_COOLDOWN_SEC}s"
   else
-    SNAPSHOT_HEALING_DETAIL="Monitoring active; streaks http=${http_streak} overall=${overall_streak} (threshold ${HEALTH_CONSECUTIVE_FAIL_THRESHOLD})"
+    SNAPSHOT_HEALING_DETAIL="Observing; streaks http=${http_streak} overall=${overall_streak} (threshold ${HEALTH_CONSECUTIVE_FAIL_THRESHOLD})"
   fi
 
   {
     printf '{\n'
     printf '  "updated_at": %s,\n' "$now"
-    printf '  "mode": ' ; json_escape "monitor" ; printf ',\n'
+    printf '  "mode": ' ; json_escape "$(printf '%s' "${HEALTH_HEALING_MODE:-monitor}" | tr '[:upper:]' '[:lower:]')" ; printf ',\n'
+    printf '  "state": ' ; json_escape "${keep_state:-observing}" ; printf ',\n'
+    printf '  "detail": ' ; json_escape "${SNAPSHOT_HEALING_DETAIL}" ; printf ',\n'
     printf '  "http_fail_streak": %s,\n' "$http_streak"
     printf '  "overall_fail_streak": %s,\n' "$overall_streak"
     printf '  "would_heal": ' ; json_escape "$would_heal" ; printf ',\n'
     printf '  "last_would_heal_at": %s,\n' "$last_action_at"
+    printf '  "last_action": ' ; json_escape "${keep_last_action}" ; printf ',\n'
+    printf '  "last_action_result": ' ; json_escape "${keep_last_result}" ; printf ',\n'
+    printf '  "last_action_at": %s,\n' "$keep_last_exec"
+    printf '  "actions_in_window": %s,\n' "$keep_actions"
+    printf '  "window_started_at": %s,\n' "$keep_window"
+    printf '  "consecutive_action_failures": %s,\n' "$keep_fail"
+    printf '  "locked": %s,\n' "$keep_locked"
+    printf '  "lock_reason": ' ; json_escape "${keep_lock_reason}" ; printf ',\n'
     printf '  "cooldown_sec": %s\n' "${HEALTH_COOLDOWN_SEC}"
     printf '}\n'
   } >"$state_file"
@@ -1158,6 +1215,9 @@ health_monitor_after_snapshot() {
 
   # Cooldown/would-heal before incident so incident can record would_heal
   health_cooldown_tick
+  if declare -F healing_maybe_execute >/dev/null 2>&1; then
+    healing_maybe_execute
+  fi
   health_history_append
 
   if [[ -n "$prev" ]]; then
@@ -1393,7 +1453,11 @@ render_operations_dashboard_screen() {
   ui_section_open "Monitoring & auto-healing"
   dashboard_info_row "Mode" "${SNAPSHOT_HEALING_MODE:-monitor}"
   dashboard_info_row "State" "${SNAPSHOT_HEALING_STATE:-observing}"
-  dashboard_info_row "Would heal" "${SNAPSHOT_WOULD_HEAL:-none} (dry-run)"
+  if [[ "${SNAPSHOT_HEALING_MODE:-monitor}" == "monitor" ]]; then
+    dashboard_info_row "Would heal" "${SNAPSHOT_WOULD_HEAL:-none} (dry-run)"
+  else
+    dashboard_info_row "Action" "${SNAPSHOT_WOULD_HEAL:-none}"
+  fi
   dashboard_info_row "HTTP streak" "${SNAPSHOT_HTTP_FAIL_STREAK:-0} / ${HEALTH_CONSECUTIVE_FAIL_THRESHOLD:-3}"
   dashboard_info_row "Overall streak" "${SNAPSHOT_OVERALL_FAIL_STREAK:-0} / ${HEALTH_CONSECUTIVE_FAIL_THRESHOLD:-3}"
   dashboard_info_row "Note" "${SNAPSHOT_HEALING_DETAIL:-}"
@@ -1404,8 +1468,8 @@ render_operations_dashboard_screen() {
   fi
   ui_row_plain "History: ${HEALTH_LIB_DIR:-/var/lib/erpnext-dev}/metrics/history.jsonl"
   ui_row_plain "Incidents: $(toolkit_cmd incidents 2>/dev/null || echo erpnext-dev incidents)"
-  ui_row_plain "OpenMetrics: $(toolkit_cmd health-metrics 2>/dev/null || echo erpnext-dev health-metrics)"
-  ui_row_plain "Actions execute in v1.18 — observe/detect/record/alert only."
+  ui_row_plain "Healing: $(toolkit_cmd healing-status 2>/dev/null || echo erpnext-dev healing-status)"
+  ui_row_plain "Default is monitor-only; enable with healing-enable-safe."
   ui_section_close
 
   printf '\n'
@@ -1441,7 +1505,7 @@ dashboard_render_test() {
   SNAPSHOT_GENERATED_AT="2026-07-17T18:06:26Z"
   SNAPSHOT_HEALING_MODE="monitor"
   SNAPSHOT_HEALING_STATE="observing"
-  SNAPSHOT_HEALING_DETAIL="Observe only until v1.18"
+  SNAPSHOT_HEALING_DETAIL="Observe only (monitor mode)"
   SNAPSHOT_WOULD_HEAL="none"
   SNAPSHOT_HTTP_FAIL_STREAK="2"
   SNAPSHOT_OVERALL_FAIL_STREAK="1"

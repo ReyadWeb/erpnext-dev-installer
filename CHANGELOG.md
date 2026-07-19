@@ -1,3 +1,15 @@
+## Unreleased
+
+### Added
+
+- **Guarded auto-healing MVP** ([#60](https://github.com/ReyadWeb/erpnext-dev-toolkit/issues/60)):
+  `HEALTH_HEALING_MODE=monitor|safe|advanced` (default monitor), execute path for
+  `restart_web_runtime` / `restart_app_stack` with cooldown, max-actions window,
+  lockout after repeated failures, before/after recovery verification, and
+  healing incidents. Operator CLI: `healing-status`, `healing-enable-safe`,
+  `healing-disable`, `healing-unlock`. Module: `lib/healing.sh`. Hermetic:
+  `scripts/test-healing.sh`.
+
 ## v1.18.3 - Frontend asset readiness gaps
 
 Patch release that closes remaining “unstyled login after ready” holes with

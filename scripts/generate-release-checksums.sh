@@ -26,6 +26,7 @@ checksum_files=(
   lib/install.sh
   lib/ops.sh
   lib/dashboard.sh
+  lib/healing.sh
   lib/menu.sh
   lib/security.sh
   lib/update.sh
