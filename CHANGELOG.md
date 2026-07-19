@@ -8,6 +8,9 @@
   instead of burning the full READY_TIMEOUT. Guided install uses the same path.
   Disable with `AUTO_REPAIR_ASSETS=0` or delay with `ASSET_AUTO_REPAIR_AFTER`
   (seconds, default 30).
+- **Install-time asset existence check:** after `bench build`, require
+  `website.bundle.*.css` under `sites/assets`; rebuild once and fail the install
+  if it is still missing (closes the “wait a while and it appears” race).
 
 ## v1.19.4 - GET asset probes and socket.io CI assert
 
