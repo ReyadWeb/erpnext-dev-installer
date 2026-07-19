@@ -656,7 +656,7 @@ verify_access() {
 
   # Same gate as wait-ready: HTML can 200 before CSS and JS both exist.
   if declare -F probe_login_frontend_assets >/dev/null 2>&1; then
-    local probe_out="" probe_rc=0 css_path="" css_head="" js_path="" js_head=""
+    local probe_out="" probe_rc=0 css_path="" js_path=""
     if port_listens 443; then
       probe_out="$(probe_login_frontend_assets "https://${SITE_NAME}/login" "$SITE_NAME" 443 "127.0.0.1")" && probe_rc=0 || probe_rc=$?
     elif port_listens 8000; then
@@ -664,7 +664,7 @@ verify_access() {
     else
       probe_rc=2
     fi
-    IFS='|' read -r css_path css_head js_path js_head <<<"$probe_out"
+    IFS='|' read -r css_path _ js_path _ <<<"$probe_out"
     if [[ "$probe_rc" -eq 0 ]]; then
       status_line "Static assets" "OK" "CSS+JS ready (${css_path##*/}, ${js_path##*/})"
     elif [[ "$probe_rc" -eq 1 ]]; then
