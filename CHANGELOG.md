@@ -1,4 +1,7 @@
-## Unreleased
+## v1.19.5 - Auto-rebuild missing login assets
+
+Patch release that stops fresh installs from sitting on `assets: wait` / unstyled
+login until something eventually builds the missing CSS/JS bundles.
 
 ### Fixed
 
