@@ -1,4 +1,7 @@
-## Unreleased
+## v1.19.3 - Dual CSS+JS browser-ready gate
+
+Patch release that requires both CSS and JS login Link preloads before declaring
+the UI browser-ready (closes JS-OK/CSS-404 false readiness).
 
 ### Fixed
 
