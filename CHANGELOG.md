@@ -1,3 +1,14 @@
+## Unreleased
+
+### Changed
+
+- **Stable release CI gate:** tag releases run native install smoke on
+  **Ubuntu 24.04 only** (plus Docker legs). `ubuntu-26.04` is canary-only
+  (weekly schedule / manual dispatch, or `run_experimental_os: true`) so a
+  preview/asset flake cannot paint the release as “Some checks were not
+  successful.” Follow-up: fix the 26.04 login CSS 404 / `yarn` build failure
+  seen on v1.19.10, then restore it as a hard gate.
+
 ## v1.19.10 - Frappe-aligned frontend assets
 
 Patch release that re-grounds login CSS/JS on official Frappe/ERPNext contracts

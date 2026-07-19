@@ -76,7 +76,7 @@ Summary of what the active roadmap builds on. Detailed notes live in [`CHANGELOG
 
 | Gap | Stance | Next step |
 |-----|--------|-----------|
-| Ubuntu 26.04 | Non-blocking preview runner | Hard gate after runner GA |
+| Ubuntu 26.04 | Canary only (weekly/manual); omitted from tag release checks | Fix asset/build canary failure, then hard-gate on release |
 | Debian 13 native | Field-validated | Disposable VPS validation and/or self-hosted runner |
 
 ---

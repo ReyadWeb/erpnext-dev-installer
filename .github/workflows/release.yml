@@ -7,6 +7,8 @@ name: Release (gate, sign & publish)
 #
 # publish `needs: [validate, integration]`, so a release is NEVER published unless
 # both the static gate and the full disposable-VM integration run succeed first.
+# Native OS gate is Ubuntu 24.04 (+ Docker legs). ubuntu-26.04 is omitted from
+# this workflow_call (canary via schedule/dispatch) so tag checks stay all-green.
 #
 # Signing policy:
 #   - Stable tags (vX.Y.Z)            -> signing is REQUIRED; the job fails if the

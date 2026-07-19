@@ -447,8 +447,17 @@ Ubuntu 26.04 / sudo-rs. CI must **capture output to a file, then grep** — neve
 Hermetic regression: `scripts/test-install-self-path.sh` (wired into
 `validate-release.sh`).
 
-The 26.04 matrix leg stays **non-blocking** until the preview runner reaches GA;
-then flip `experimental: false` in `.github/workflows/integration.yml`.
+**Release vs canary (stable gate):** tag releases (`release.yml` → `workflow_call`)
+run **only** `ubuntu-24.04` plus Docker legs so GitHub checks stay all-green.
+`ubuntu-26.04` is **canary-only**: weekly `schedule`, manual `workflow_dispatch`
+(default on), or `workflow_call` with `run_experimental_os: true`. When present it
+stays `continue-on-error` (`matrix.experimental`).
+
+**Known canary failure (v1.19.10):** browser-asset hard gate — login CSS bundles
+404 (`ASSET_FILE_MISSING`) and `yarn run production` failed during
+`wait-ready` repair. Do **not** promote 26.04 to a release hard gate until weekly
+canaries are green; then include it in the release matrix and flip
+`experimental: false` in `.github/workflows/integration.yml`.
 
 ### v1.9.2 cross-platform local host support (host-mapping regression matrix)
 
