@@ -278,8 +278,12 @@ ensure_bench_services_for_site_commands() {
       ok "Bench services are ready for ${context} (HTTP + static assets)."
       return 0
     fi
-    warn "Ports are up for ${context}, but HTTP/static assets are not ready yet. Waiting..."
-    wait_for_erpnext_ready || return 1
+    # Do not block mid-flow ops (clear-cache, post-restore) on a full ready wait —
+    # that races asset rebuilds and broke restore CI. Surface clearly; callers that
+    # need a hard gate use wait-ready / wait-frontend-assets / repair-frontend-assets.
+    warn "Ports are up for ${context}, but HTTP/static assets are not ready yet."
+    echo "  If the UI looks unstyled: $(toolkit_cmd repair-frontend-assets)"
+    echo "  Or wait: $(toolkit_cmd wait-frontend-assets)"
     return 0
   fi
 
