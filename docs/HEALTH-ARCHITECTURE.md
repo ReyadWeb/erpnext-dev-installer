@@ -5,7 +5,7 @@ Architecture of record for ERPNext-aware operations observability in the
 document defines the model before automation is allowed to act.
 
 Related: [`ROADMAP.md`](../ROADMAP.md) · [`lib/dashboard.sh`](../lib/dashboard.sh) ·
-[`lib/health.sh`](../lib/health.sh)
+[`lib/healing.sh`](../lib/healing.sh) · [`lib/health.sh`](../lib/health.sh)
 
 ---
 
@@ -63,7 +63,7 @@ Legacy health-check rows that used `OK` / `WARN` map to `HEALTHY` / `DEGRADED`
    (running/total, unhealthy, restarting, max RestartCount loop detection).
 4. **Protection / DR** — HTTPS + certificate days remaining (thresholded),
    firewall, Fail2Ban, backup ages/verify, restore rehearsal, toolkit
-   integrity, healing mode / would-heal dry-run (actions in v1.19).
+   integrity, healing mode / would-heal (execute when mode is `safe`/`advanced`).
 
 ---
 
@@ -87,7 +87,10 @@ Level 6  External watchdog / provider recovery (outside guest)
 | `safe` | Component + stack restarts; **never** host reboot (recommended default when healing ships) |
 | `advanced` | Explicit opt-in; adds guarded reboot under policy |
 
-v1.16 always reports mode `monitor` and state `not_armed` (no automation).
+Default remains `monitor`. Operators enable execution with
+`erpnext-dev healing-enable-safe` (writes `HEALTH_HEALING_MODE=safe` into
+`health.env`). `advanced` shares the safe restart ladder in v1.19.0 (no host
+reboot yet).
 
 ### Five safety controls (non-negotiable for v1.19+)
 
@@ -97,8 +100,10 @@ v1.16 always reports mode `monitor` and state `not_armed` (no automation).
 4. **Max actions per window** — then `AUTO-HEALING LOCKED` (manual review).
 5. **Recovery verification** — every action records before/after and success/failure.
 
-Root-run policy files (`health.env`, future healing policy) must use a **strict
-allowlist parser** (v1.18.0) — never `source` as shell — before healing is armed.
+Root-run policy files (`health.env`) must use a **strict allowlist parser**
+(v1.18.0) — never `source` as shell — before healing is armed. Healing knobs:
+`HEALTH_HEALING_MODE`, `HEALTH_HEALING_MAX_FAILURES`, `HEALTH_HEALING_MAX_ACTIONS`,
+`HEALTH_HEALING_ACTION_WINDOW_SEC`, `HEALTH_HEALING_VERIFY_WAIT_SEC`.
 
 ---
 
@@ -110,7 +115,7 @@ allowlist parser** (v1.18.0) — never `source` as shell — before healing is a
 | `/etc/erpnext-dev/health-check.state` | Compat summary for existing readers (dual-written from snapshot) |
 | `/var/lib/erpnext-dev/metrics/` | `current.json`, rolling `history.jsonl` |
 | `/var/lib/erpnext-dev/incidents/` | Incident JSON records + `latest.json` |
-| `/var/lib/erpnext-dev/healing/` | Cooldown / would-heal dry-run state (actions execute in v1.19) |
+| `/var/lib/erpnext-dev/healing/` | Cooldown, would-heal / last action, lockout state (`state.json`) |
 
 Core toolkit has **no Prometheus dependency**. `erpnext-dev health-metrics`
 emits OpenMetrics text for optional scrapers.
@@ -122,13 +127,17 @@ On every `dashboard` / `health-check` / `health-snapshot` run:
 1. Append a compact sample to `metrics/history.jsonl` (pruned to
    `HEALTH_HISTORY_MAX_LINES`, default 2016).
 2. Update `healing/state.json` consecutive-failure streaks and a **would-heal**
-   suggestion when the threshold is met (never restarts services).
-3. If overall status **transitions** into DEGRADED/CRITICAL (or recovers to
+   suggestion when the threshold is met.
+3. If mode is `safe`/`advanced` and not locked, execute the candidate restart,
+   verify recovery, record a `healing_action` incident, and lock on repeated
+   failure or max-actions window.
+4. If overall status **transitions** into DEGRADED/CRITICAL (or recovers to
    HEALTHY), write an incident under `incidents/` and optionally alert.
-4. Alerts: `logger` + stderr; optional POST to `HEALTH_ALERT_WEBHOOK_URL`
+5. Alerts: `logger` + stderr; optional POST to `HEALTH_ALERT_WEBHOOK_URL`
    when `HEALTH_ALERT_ON` matches (`CRITICAL` default).
 
-CLI: `incidents`, `incident-show`, `health-history`, `health-metrics`.
+CLI: `incidents`, `incident-show`, `health-history`, `health-metrics`,
+`healing-status`, `healing-enable-safe`, `healing-disable`, `healing-unlock`.
 
 ---
 
@@ -139,9 +148,9 @@ CLI: `incidents`, `incident-show`, `health-history`, `health-metrics`.
 | **v1.16.0** | Canonical snapshot + Operations Dashboard (`dashboard`, `--watch`, `--json`) |
 | **v1.17.0** | Persistent history, incidents, threshold engine, alert hooks, OpenMetrics |
 | **v1.18.0** | Security hardening for root policy files (safe `health.env` parser) before healing |
-| **v1.18.1–.2** | Local IP stability + frontend asset readiness gaps (see ROADMAP) |
+| **v1.18.1–.3** | Local IP stability + repo governance + frontend asset readiness (see ROADMAP) |
 | **v1.19.0** | Guarded auto-healing MVP (modes + ladder + locks) |
-| **v1.19.1** | Auto-healing hardening (policy, audit, dashboard, unlock) |
+| **v1.19.1** | Auto-healing hardening (dedicated policy, audit, richer dashboard) |
 | **v1.20.0** | External watchdog / heartbeat contract for CloudPanel |
 
 Do not ship monitoring and automatic reboot in one release. Close root config

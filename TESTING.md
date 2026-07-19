@@ -39,6 +39,23 @@ CODEOWNERS coverage for security/release paths, and adversarial rejection of
 shell metacharacters in health.env / IP / tag helpers. CI also runs
 `.github/workflows/security-analysis.yml` (CodeQL Actions + adversarial suite).
 
+## v1.19.0 Guarded auto-healing MVP
+
+Hermetic (no sudo / no service restarts; uses `HEALTH_HEALING_SIMULATE=1`):
+
+```bash
+scripts/test-healing.sh
+scripts/test-health-snapshot.sh
+scripts/test-health-env-parser.sh
+```
+
+Expects monitor-only default (no execute), safe-mode simulated restart with
+healing incident + recovery verification, lockout after consecutive failures,
+and `HEALTH_HEALING_MODE` allowlist parsing. Field: leave mode `monitor` until
+ready; then `sudo erpnext-dev healing-enable-safe` and confirm
+`healing-status` / dashboard healing rows. Unlock with `healing-unlock` after
+manual review.
+
 ## v1.18.1 Local VM Stable IP foundation
 
 Hermetic (no sudo / no real Netplan apply):

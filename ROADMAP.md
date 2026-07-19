@@ -30,7 +30,7 @@ The toolkit is past “installer” status. It is a **single-node ERPNext/Frappe
 | Local VM Stable IP CLI + docs | Shipped (v1.18.1) |
 | Repo governance / Scorecard P0 | Shipped (v1.18.2) |
 | Frontend asset verify/wait/repair | Shipped (v1.18.3) |
-| Guarded auto-healing | **Not shipped** (next: v1.19.0) |
+| Guarded auto-healing | **In progress** (v1.19.0) |
 
 ### Maturity (single-admin dedicated VM)
 
@@ -212,11 +212,13 @@ v1.23.0  Documentation and launch polish
 
 **Controls:** action registry, cooldowns, max-actions window, lockout after repeated failure, before/after incident records, recovery verification. See [`docs/HEALTH-ARCHITECTURE.md`](docs/HEALTH-ARCHITECTURE.md).
 
+**Commands:** `healing-status`, `healing-enable-safe`, `healing-disable`, `healing-unlock`.
+
 **Acceptance**
-- [ ] Healing disabled unless explicitly enabled.
-- [ ] Every action creates an incident + cooldown bookkeeping.
-- [ ] Repeated failure locks healing until manual review.
-- [ ] Recovery verification records whether the action worked.
+- [x] Healing disabled unless explicitly enabled.
+- [x] Every action creates an incident + cooldown bookkeeping.
+- [x] Repeated failure locks healing until manual review.
+- [x] Recovery verification records whether the action worked.
 
 ---
 
@@ -224,13 +226,13 @@ v1.23.0  Documentation and launch polish
 
 **Goal:** Make the first healing implementation production-safe.
 
-**Scope:** simulation mode; healing policy file with the **same safe parser pattern** as v1.18.0; per-action enable/disable; healing audit log; dashboard healing section; alert on lockout.
+**Scope:** dedicated healing policy file with the **same safe parser pattern** as v1.18.0; per-action enable/disable; healing audit log; richer dashboard healing section; alert on lockout. (`HEALTH_HEALING_SIMULATE` exists for hermetic tests.)
 
-**Commands (illustrative):** `healing-status`, `healing-policy`, `healing-enable-safe`, `healing-disable`, `healing-unlock`, `healing-history`.
+**Commands (illustrative):** `healing-policy`, `healing-history` (status/enable/disable/unlock shipped in v1.19.0).
 
 **Acceptance**
-- [ ] Operator can inspect policy and disable healing instantly.
-- [ ] Dashboard shows last action + lockout state.
+- [ ] Operator can inspect a dedicated policy file and disable healing instantly.
+- [ ] Dashboard shows last action + lockout state (basic rows ship in v1.19.0).
 - [ ] Alerts include healing action and result.
 
 ---
