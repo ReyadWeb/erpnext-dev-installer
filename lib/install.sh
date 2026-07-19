@@ -549,6 +549,17 @@ echo "==> Running migrate/build/clear-cache"
 
 bench --site "${SITE_NAME}" migrate
 bench build
+# Frappe sometimes finishes "bench build" while release bundles are still
+# missing ("Assets for Release … don't exist"). Re-run once if the login CSS
+# bundle is absent so wait-ready does not start against HTTP 404s.
+if ! ls sites/assets/frappe/dist/css/website.bundle.*.css >/dev/null 2>&1; then
+  echo "WARN: website CSS missing after first bench build — rebuilding once"
+  bench build
+fi
+if ! ls sites/assets/frappe/dist/css/website.bundle.*.css >/dev/null 2>&1; then
+  echo "ERROR: website CSS still missing after rebuild. Login will be unstyled."
+  exit 1
+fi
 bench --site "${SITE_NAME}" clear-cache
 EOF_USER
 
