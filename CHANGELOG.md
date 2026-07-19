@@ -1,4 +1,7 @@
-## Unreleased
+## v1.19.4 - GET asset probes and socket.io CI assert
+
+Patch release that stops wait-ready asset flaps (GET vs HEAD) and hardens the
+Ubuntu 26.04 production socket.io assert.
 
 ### Fixed
 
