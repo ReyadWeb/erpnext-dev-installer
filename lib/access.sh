@@ -360,7 +360,7 @@ probe_one_static_asset() {
   local resolve_ip="${4:-}"
   local scheme="${5:-https}"
   local bench_dir="${6:-}"
-  local asset_url metrics http_code size_download content_type url_effective
+  local asset_url metrics http_code size_download content_type
   local fs_path="" class="OK" curl_args=()
 
   [[ -n "$asset_path" && -n "$host_name" && -n "$port" && -n "$resolve_ip" ]] || return 1
@@ -372,13 +372,13 @@ probe_one_static_asset() {
   fi
 
   curl_args=(-k -sS -L --max-redirs 5 --max-time 15 -o /dev/null \
-    -w '%{http_code}|%{size_download}|%{content_type}|%{url_effective}')
+    -w '%{http_code}|%{size_download}|%{content_type}')
   if [[ -n "$host_name" && -n "$port" && -n "$resolve_ip" ]]; then
     curl_args+=(--resolve "${host_name}:${port}:${resolve_ip}")
   fi
 
   metrics="$(curl "${curl_args[@]}" "$asset_url" 2>/dev/null || true)"
-  IFS='|' read -r http_code size_download content_type url_effective <<<"${metrics:-|||}"
+  IFS='|' read -r http_code size_download content_type <<<"${metrics:-||}"
   http_code="${http_code:-000}"
   size_download="${size_download:-0}"
 
