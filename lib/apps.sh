@@ -1166,10 +1166,17 @@ run_post_app_validation() {
     status_line "Bench web" "WARN" "port 8000 not listening"
   fi
 
+  if bench_static_assets_ready 2>/dev/null; then
+    status_line "Static assets" "OK" "login CSS/JS probe passed"
+  else
+    status_line "Static assets" "WARN" "login CSS/JS not ready — run repair-frontend-assets"
+  fi
+
   echo
   echo "Next checks:"
   echo "  $(toolkit_cmd app-status)"
   echo "  $(toolkit_cmd doctor)"
+  echo "  $(toolkit_cmd verify-frontend-assets)"
   echo "  $(toolkit_cmd verify-access)"
 
   if [[ "$app_name" == "education" ]]; then
@@ -1415,7 +1422,12 @@ install_frappe_app() {
   ensure_bench_services_for_site_commands "post-app clear-cache for ${display}" || fail "Bench services were not ready for cache cleanup."
   run_as_frappe "cd '${bench_dir}' && bench --site '${SITE_NAME}' clear-cache"
 
-  restart_erpnext_service || warn "${display} installed, but the service could not be restarted automatically."
+  restart_erpnext_service || fail "${display} installed, but the service could not be restarted automatically."
+  if ! bench_static_assets_ready 2>/dev/null; then
+    warn "${display} installed, but login static assets are not ready yet."
+    echo "Repair: $(toolkit_cmd repair-frontend-assets)"
+    echo "Wait:   $(toolkit_cmd wait-frontend-assets)"
+  fi
 
   ok "${display} installation workflow completed"
   show_installed_apps

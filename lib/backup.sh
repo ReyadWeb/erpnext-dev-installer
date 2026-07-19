@@ -326,13 +326,20 @@ run_post_restore_maintenance() {
     echo "Run manually after reviewing the logs:"
     echo "  $(toolkit_cmd logs)"
     echo "  $(toolkit_cmd migrate)"
-    echo "  $(toolkit_cmd build)"
-    echo "  $(toolkit_cmd clear-cache)"
+    echo "  $(toolkit_cmd repair-frontend-assets)"
+    echo "  $(toolkit_cmd verify-frontend-assets)"
     echo "  $(toolkit_cmd verify-access)"
     return 1
   fi
 
   restart_erpnext_service || warn "Post-restore maintenance completed, but service restart could not be verified automatically."
+  if ! bench_static_assets_ready 2>/dev/null; then
+    warn "Post-restore: login static assets are not ready yet."
+    echo "Repair: $(toolkit_cmd repair-frontend-assets)"
+    echo "Wait:   $(toolkit_cmd wait-frontend-assets)"
+  else
+    status_line "Static assets" "OK" "login CSS/JS probe passed"
+  fi
   ok "Post-restore maintenance completed"
 }
 
@@ -520,8 +527,11 @@ run_maintenance_menu() {
       "2) Build assets" \
       "3) Clear cache" \
       "4) Restart ERPNext service" \
-      "5) Run safe repair" \
-      "6) Show recent service logs"
+      "5) Verify frontend assets" \
+      "6) Wait for frontend assets" \
+      "7) Repair frontend assets" \
+      "8) Run safe repair" \
+      "9) Show recent service logs"
     menu_footer
     local maintenance_choice=""
     menu_read_choice maintenance_choice
@@ -531,8 +541,11 @@ run_maintenance_menu() {
       2) maintenance_build; pause_after_screen "Press Enter to return to Maintenance..." ;;
       3) maintenance_clear_cache; pause_after_screen "Press Enter to return to Maintenance..." ;;
       4) maintenance_restart; pause_after_screen "Press Enter to return to Maintenance..." ;;
-      5) run_repair; pause_after_screen "Press Enter to return to Maintenance..." ;;
-      6) show_erpnext_service_logs; pause_after_screen "Press Enter to return to Maintenance..." ;;
+      5) verify_frontend_assets; pause_after_screen "Press Enter to return to Maintenance..." ;;
+      6) wait_frontend_assets; pause_after_screen "Press Enter to return to Maintenance..." ;;
+      7) repair_frontend_assets; pause_after_screen "Press Enter to return to Maintenance..." ;;
+      8) run_repair; pause_after_screen "Press Enter to return to Maintenance..." ;;
+      9) show_erpnext_service_logs; pause_after_screen "Press Enter to return to Maintenance..." ;;
       b|B|"") return 0 ;;
       q|Q) exit 0 ;;
       *) warn "Invalid option" ;;

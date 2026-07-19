@@ -443,16 +443,15 @@ is published. Denying the approval blocks signing and publishing.
 OpenSSF Scorecard findings are triaged in epic
 [#82](https://github.com/ReyadWeb/erpnext-dev-toolkit/issues/82). Stance:
 
-| Finding | Stance |
+| Finding | Stance (live Scorecard ~7.1 after v1.18.2) |
 |---------|--------|
-| **Token-Permissions** (workflow-level write) | **Fixed:** [`.github/workflows/release.yml`](.github/workflows/release.yml) uses workflow `contents: read`; only the `publish` job keeps `contents: write` (required for `gh release create/upload/edit`). |
-| **Token-Permissions** (publish job write) | **Accepted:** narrowly scoped release publish permission; do not remove to chase a perfect Scorecard score. |
-| **Branch-Protection** | Classic protection on `main` is required (PR, status checks, no force-push/delete). `enforce_admins` stays **false** for solo-maintainer emergency merges — Scorecard may still warn until a second maintainer or a conscious enforce-admins flip. |
-| **Code-Review** | **Accepted** for a single maintainer: PR + mandatory CI, no fake second reviewers. Revisit when a second trusted maintainer exists (approvals + CODEOWNERS hard gate). |
-| **SAST** | ShellCheck remains the Bash gate. CodeQL analyzes **GitHub Actions** workflows (Bash is unsupported). Hermetic adversarial-input tests cover dangerous config/CLI inputs. |
-| **Fuzzing** | Not integrating Scorecard fuzz ecosystems for Bash; adversarial suite is the practical substitute. |
-| **Maintained** | Informational for young/active repos — no artificial commits. |
-| **CII-Best-Practices** | Not a vulnerability; enroll for the OpenSSF Best Practices badge later (after technical controls). |
+| **Token-Permissions** | **Fixed (10/10).** Workflow `contents: read`; publish job keeps `write` (Scorecard still *warns* on that job — intentional). |
+| **Branch-Protection** | **~8/10 (practical max for solo).** Force-push/delete blocked; PR + up-to-date + expanded required checks (incl. CodeQL / adversarial); `require_last_push_approval` on. Tier 4 needs **2 reviewers + CODEOWNERS hard gate** — not enabled until a second maintainer (`enforce_admins` stays false so emergency admin merge remains possible). |
+| **Code-Review** | **Accepted (0/10)** for a single maintainer: PR + mandatory CI, no fake second reviewers. |
+| **SAST** | **Partial (7/10).** CodeQL for Actions is detected; score rises as more PRs run `security-analysis.yml`. ShellCheck + adversarial suite remain the Bash gates (Scorecard does not count them as SAST). |
+| **Fuzzing** | **Accepted (0/10).** No OSS-Fuzz for Bash; adversarial-input suite is the substitute. |
+| **Maintained** | **Informational (0/10).** Repo created within 90 days — Scorecard cannot pass this yet; no artificial commits. |
+| **CII-Best-Practices** | **Deferred.** Enroll at [bestpractices.dev](https://www.bestpractices.dev/) after more production field evidence; not a vulnerability. |
 
 Related in-repo controls: expanded [`.github/CODEOWNERS`](.github/CODEOWNERS),
 [`.github/workflows/security-analysis.yml`](.github/workflows/security-analysis.yml),

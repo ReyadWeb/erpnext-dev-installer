@@ -1,3 +1,18 @@
+## Unreleased
+
+### Added
+
+- **Frontend asset readiness commands** ([#59](https://github.com/ReyadWeb/erpnext-dev-toolkit/issues/59)):
+  `verify-frontend-assets`, `wait-frontend-assets`, `repair-frontend-assets`;
+  login CSS/JS probe rejects `Content-Length: 0`; optional-app / restore /
+  Docker ready paths surface asset failures clearly. Hermetic:
+  `scripts/test-static-asset-probe.sh`.
+
+### Security
+
+- Scorecard follow-up: document live scores; `main` requires
+  `require_last_push_approval` plus CodeQL / adversarial status checks.
+
 ## v1.18.2 - Repository security & governance hardening
 
 Patch release that hardens GitHub Actions token scope, branch-protection
