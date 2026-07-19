@@ -772,22 +772,34 @@ docker_runtime_logs() {
   docker_compose logs --tail 160
 }
 
-# Poll the published HTTP endpoint until the site answers or timeout elapses.
+# Poll published HTTP until ping + login static assets answer (or timeout).
 docker_ready() {
-  local url deadline now
+  local url deadline now site probe_rc=1
+  site="$(docker_site_name 2>/dev/null || echo localhost)"
   url="http://localhost:${DOCKER_PUBLISH_PORT}/api/method/ping"
   deadline=$(( $(date +%s) + DOCKER_READY_TIMEOUT ))
-  log "Waiting for ERPNext to answer on http://localhost:${DOCKER_PUBLISH_PORT}"
+  log "Waiting for ERPNext ping + static assets on http://localhost:${DOCKER_PUBLISH_PORT}"
   while :; do
-    if curl -fsS -o /dev/null --max-time 5 "$url" 2>/dev/null; then
-      ok "ERPNext is responding on port ${DOCKER_PUBLISH_PORT}"
-      return 0
+    if curl -fsS -o /dev/null --max-time 5 -H "Host: ${site}" "$url" 2>/dev/null; then
+      set +e
+      probe_login_static_asset \
+        "http://${site}:${DOCKER_PUBLISH_PORT}/login" \
+        "$site" \
+        "${DOCKER_PUBLISH_PORT}" \
+        "127.0.0.1" >/dev/null
+      probe_rc=$?
+      set -e
+      if [[ "$probe_rc" -eq 0 ]]; then
+        ok "ERPNext is responding on port ${DOCKER_PUBLISH_PORT} (HTTP + static assets)."
+        return 0
+      fi
     fi
     now="$(date +%s)"
     if [[ "$now" -ge "$deadline" ]]; then
-      warn "ERPNext did not respond within ${DOCKER_READY_TIMEOUT}s."
+      warn "ERPNext did not become fully ready within ${DOCKER_READY_TIMEOUT}s."
       echo "Next steps:"
       echo "  Status:       $(toolkit_cmd engine-status)"
+      echo "  Assets:       $(toolkit_cmd verify-frontend-assets)"
       echo "  Logs:         $(toolkit_cmd logs)"
       echo "  Diagnostics:  $(toolkit_cmd doctor)"
       echo "  Cold start?   Increase DOCKER_READY_TIMEOUT (current ${DOCKER_READY_TIMEOUT}s) and retry."
@@ -2525,7 +2537,7 @@ docker_host_mapping_checkpoint() {
 # Docker engine access verification (parity with native verify_access).
 docker_verify_access() {
   require_sudo
-  local site code url
+  local site code url probe_rc=1
   site="$(docker_site_name)"
   url="http://localhost:${DOCKER_PUBLISH_PORT}/api/method/ping"
 
@@ -2546,6 +2558,20 @@ docker_verify_access() {
     200|401|403) status_line "Published port" "OK" "http://localhost:${DOCKER_PUBLISH_PORT} (HTTP ${code})" ;;
     "") status_line "Published port" "WARN" "no response on http://localhost:${DOCKER_PUBLISH_PORT}" ;;
     *) status_line "Published port" "WARN" "HTTP ${code} on http://localhost:${DOCKER_PUBLISH_PORT}" ;;
+  esac
+
+  set +e
+  probe_login_static_asset \
+    "http://${site}:${DOCKER_PUBLISH_PORT}/login" \
+    "$site" \
+    "${DOCKER_PUBLISH_PORT}" \
+    "127.0.0.1" >/dev/null
+  probe_rc=$?
+  set -e
+  case "$probe_rc" in
+    0) status_line "Static assets" "OK" "login CSS/JS probe passed" ;;
+    2) status_line "Static assets" "WARN" "no Link preload on login — try $(toolkit_cmd repair-frontend-assets)" ;;
+    *) status_line "Static assets" "WARN" "login CSS/JS not ready — try $(toolkit_cmd repair-frontend-assets)" ;;
   esac
 
   docker_print_access

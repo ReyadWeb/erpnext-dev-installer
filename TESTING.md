@@ -4,6 +4,26 @@
 
 ---
 
+## v1.18.3 frontend asset readiness
+
+Hermetic:
+
+```bash
+scripts/test-static-asset-probe.sh
+```
+
+On a VM after install/restart/app install/restore:
+
+```bash
+sudo erpnext-dev verify-frontend-assets
+sudo erpnext-dev wait-frontend-assets
+# if assets FAIL:
+sudo erpnext-dev repair-frontend-assets
+```
+
+Expect `Static assets: OK` with a `/assets/...css|js` path. Empty
+`Content-Length: 0` responses must fail the probe.
+
 ## v1.18.2 repository security & governance
 
 Hermetic:

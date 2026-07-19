@@ -176,15 +176,27 @@ extract_link_asset_path() {
     | head -n 1 || true
 }
 
-# Probe that the login page's preloaded CSS/JS asset returns 2xx/3xx.
-# Prints "asset_path|status_line" when a Link asset path was found.
+# True when HEAD headers do not declare an empty body. Missing Content-Length is
+# OK (chunked / omitted); only an explicit Content-Length: 0 fails the gate.
+asset_headers_nonempty() {
+  local headers="${1:-}"
+  local cl
+  cl="$(printf '%s\n' "$headers" | tr -d '\r' | awk 'tolower($1)=="content-length:"{print $2; exit}')"
+  [[ -z "$cl" ]] && return 0
+  [[ "$cl" =~ ^[0-9]+$ ]] || return 0
+  ((cl > 0))
+}
+
+# Probe that the login page's preloaded CSS/JS asset returns 2xx/3xx and is not
+# an empty body (Content-Length: 0). Prints "asset_path|status_line" when a Link
+# asset path was found.
 # Return codes: 0 = asset OK, 1 = path found but not OK, 2 = no Link asset path.
 probe_login_static_asset() {
   local url="${1:-}"
   local host_name="${2:-}"
   local port="${3:-}"
   local resolve_ip="${4:-}"
-  local headers asset_path asset_url asset_head
+  local headers asset_path asset_url asset_headers asset_head
 
   [[ -n "$url" && -n "$host_name" && -n "$port" && -n "$resolve_ip" ]] || return 2
 
@@ -200,9 +212,10 @@ probe_login_static_asset() {
     asset_url="http://${host_name}:${port}${asset_path}"
   fi
 
-  asset_head="$(curl_head_status "$asset_url" "$host_name" "$port" "$resolve_ip" || true)"
+  asset_headers="$(curl_response_headers "$asset_url" "$host_name" "$port" "$resolve_ip" || true)"
+  asset_head="$(printf '%s\n' "$asset_headers" | awk 'NR==1 {print; exit}')"
   printf '%s|%s\n' "$asset_path" "${asset_head:-}"
-  if http_status_ok "$asset_head"; then
+  if http_status_ok "$asset_head" && asset_headers_nonempty "$asset_headers"; then
     return 0
   fi
   return 1

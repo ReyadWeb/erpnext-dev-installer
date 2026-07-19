@@ -191,9 +191,9 @@ v1.23.0  Documentation and launch polish
 - Repair path: rebuild assets, clear cache, reload services, re-verify.
 
 **Acceptance**
-- [ ] Fresh local install does not print final ready until assets pass (already true for wait-ready; reconfirm).
-- [ ] Paths that previously skipped the probe now wait or fail clearly.
-- [ ] Repair command rebuilds/verifies and explains failures.
+- [x] Fresh local install does not print final ready until assets pass (`wait_for_erpnext_ready` / `docker_ready`).
+- [x] Paths that previously skipped the probe now wait or fail clearly (ensure_bench, optional-app, restore, Docker verify).
+- [x] Repair command rebuilds/verifies and explains failures (`repair-frontend-assets`).
 
 ---
 

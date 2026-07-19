@@ -162,9 +162,101 @@ wait_for_erpnext_ready() {
   echo "  sudo systemctl status ${ERPNEXT_SERVICE_NAME} --no-pager -l"
   echo
   echo "If only assets stay on wait, rebuild and clear cache, then retry:"
-  echo "  $(toolkit_cmd clear-cache)"
-  echo "  READY_TIMEOUT=${timeout} $(toolkit_cmd wait-ready)"
-  echo "  (or increase READY_TIMEOUT and rerun wait-ready)"
+  echo "  $(toolkit_cmd repair-frontend-assets)"
+  echo "  READY_TIMEOUT=${timeout} $(toolkit_cmd wait-frontend-assets)"
+  echo "  (or: READY_TIMEOUT=${timeout} $(toolkit_cmd wait-ready))"
+  return 1
+}
+
+# One-shot frontend asset status (login Link CSS/JS). Exit 0 when OK.
+verify_frontend_assets() {
+  local probe_out="" probe_rc=0 asset_path="" asset_head=""
+  local mode="http"
+
+  require_site_environment >/dev/null || true
+
+  ui_box_start "Frontend assets"
+  status_line "Site" "INFO" "${SITE_NAME}"
+
+  if port_listens 443; then
+    mode="https"
+    set +e
+    probe_out="$(probe_login_static_asset "https://${SITE_NAME}/login" "$SITE_NAME" 443 "127.0.0.1")"
+    probe_rc=$?
+    set -e
+  elif port_listens 8000; then
+    set +e
+    probe_out="$(probe_login_static_asset "http://${SITE_NAME}:8000/login" "$SITE_NAME" 8000 "127.0.0.1")"
+    probe_rc=$?
+    set -e
+  else
+    status_line "Static assets" "FAIL" "neither :443 nor :8000 is listening"
+    echo
+    echo "Start the stack, then re-check:"
+    echo "  $(toolkit_cmd start)"
+    echo "  $(toolkit_cmd wait-ready)"
+    ui_box_end
+    return 1
+  fi
+
+  asset_path="${probe_out%%|*}"
+  asset_head="${probe_out#*|}"
+  status_line "Probe mode" "INFO" "${mode}"
+
+  case "$probe_rc" in
+    0)
+      status_line "Static assets" "OK" "${asset_path} (${asset_head})"
+      ui_next "$(toolkit_cmd wait-frontend-assets)" "$(toolkit_cmd repair-frontend-assets)" "$(toolkit_cmd verify-access)"
+      ui_box_end
+      return 0
+      ;;
+    2)
+      status_line "Static assets" "FAIL" "login response has no Link preload for CSS/JS"
+      ;;
+    *)
+      status_line "Static assets" "FAIL" "${asset_path:-unknown} (${asset_head:-no status})"
+      ;;
+  esac
+
+  echo
+  echo "Repair path:"
+  echo "  $(toolkit_cmd repair-frontend-assets)"
+  echo "  $(toolkit_cmd wait-frontend-assets)"
+  ui_box_end
+  return 1
+}
+
+# Wait until login static assets pass (ports + HTTP + assets), same gate as wait-ready.
+wait_frontend_assets() {
+  wait_for_erpnext_ready "$@"
+}
+
+# Rebuild assets, clear cache, restart, and re-verify the login CSS/JS probe.
+repair_frontend_assets() {
+  require_sudo
+  require_site_environment >/dev/null || fail "Site/bench environment is required before repairing frontend assets."
+
+  ui_box_start "Repair frontend assets"
+  status_line "Site" "INFO" "${SITE_NAME}"
+  echo
+  log "Building assets (bench build)"
+  maintenance_build || fail "bench build failed; fix the build error, then retry $(toolkit_cmd repair-frontend-assets)."
+  log "Clearing site cache"
+  maintenance_clear_cache || fail "clear-cache failed after build."
+  log "Restarting ERPNext service"
+  restart_erpnext_service || fail "Service restart failed after asset rebuild."
+  echo
+  if bench_static_assets_ready; then
+    status_line "Static assets" "OK" "login CSS/JS probe passed"
+    ok "Frontend assets repaired and verified."
+    ui_next "$(toolkit_cmd verify-frontend-assets)" "$(toolkit_cmd verify-access)" "$(toolkit_cmd doctor)"
+    ui_box_end
+    return 0
+  fi
+  status_line "Static assets" "FAIL" "probe still failing after rebuild"
+  err "Assets still failing after build/clear-cache/restart."
+  echo "Check: $(toolkit_cmd logs) · $(toolkit_cmd verify-frontend-assets) · $(toolkit_cmd verify-local-ssl)"
+  ui_box_end
   return 1
 }
 
@@ -182,7 +274,12 @@ ensure_bench_services_for_site_commands() {
   fi
 
   if systemctl is-active --quiet "${ERPNEXT_SERVICE_NAME}" && bench_ports_ready; then
-    ok "Bench services are ready for ${context}."
+    if bench_http_ready && bench_static_assets_ready; then
+      ok "Bench services are ready for ${context} (HTTP + static assets)."
+      return 0
+    fi
+    warn "Ports are up for ${context}, but HTTP/static assets are not ready yet. Waiting..."
+    wait_for_erpnext_ready || return 1
     return 0
   fi
 
