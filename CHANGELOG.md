@@ -1,4 +1,8 @@
-## Unreleased
+## v1.19.11 - Stale assets_json fix + stable release CI gate
+
+Patch release for the field failure where login HTML advertised ghost hashed
+bundles (404) while the real files on disk returned 200, plus a cleaner
+release-check signal (no red experimental ubuntu-26.04 on tags).
 
 ### Fixed
 
