@@ -321,14 +321,26 @@ if ! grep -q 'evict_redis_assets_json_keys' "${ROOT_DIR}/lib/access.sh"; then
 else
   echo "OK: hard redis assets_json eviction helper present"
 fi
-if ! grep -q '^settle_stack_after_local_https()' "${ROOT_DIR}/lib/service.sh"; then
+if ! grep -q '^settle_local_stack()' "${ROOT_DIR}/lib/service.sh"; then
+  echo "FAIL: missing settle_local_stack (clear assets_json + restart)" >&2
+  fail=$((fail + 1))
+elif ! grep -q 'clear_bench_assets_json_cache' "${ROOT_DIR}/lib/service.sh"; then
+  echo "FAIL: settle_local_stack must clear assets_json (reboot-equivalent)" >&2
+  fail=$((fail + 1))
+elif ! grep -q '^settle_stack_after_install()' "${ROOT_DIR}/lib/service.sh"; then
+  echo "FAIL: missing settle_stack_after_install (pre-HTTPS settle)" >&2
+  fail=$((fail + 1))
+elif ! grep -q 'settle_stack_after_install' "${ROOT_DIR}/lib/install.sh"; then
+  echo "FAIL: install.sh must call settle_stack_after_install after local install" >&2
+  fail=$((fail + 1))
+elif ! grep -q '^settle_stack_after_local_https()' "${ROOT_DIR}/lib/service.sh"; then
   echo "FAIL: missing settle_stack_after_local_https (post-HTTPS reboot workaround)" >&2
   fail=$((fail + 1))
 elif ! grep -q 'settle_stack_after_local_https' "${ROOT_DIR}/lib/ssl.sh"; then
   echo "FAIL: ssl.sh must call settle_stack_after_local_https after trusted mkcert" >&2
   fail=$((fail + 1))
 else
-  echo "OK: post-HTTPS settle wired into trusted mkcert setup"
+  echo "OK: post-install + post-HTTPS settle wired (assets_json clear + restart)"
 fi
 # wait-ready must prefer Frappe local :8000 over :443
 if ! grep -A25 '^bench_static_assets_ready()' "${ROOT_DIR}/lib/service.sh" | grep -q 'port_listens 8000'; then

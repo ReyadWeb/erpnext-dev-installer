@@ -1,3 +1,19 @@
+## v1.19.13 - Post-install settle before HTTPS
+
+Patch release so local guided install clears Redis `assets_json` and restarts
+ERPNext before any browser/HTTPS step (no guest reboot for styled Sign In).
+
+### Fixed
+
+- **Post-install settle before HTTPS (reboot-equivalent):** after a local guided
+  install, clear Redis `assets_json` (`:13000`), restart ERPNext (+ nginx if
+  active), and re-run `wait-ready` **before** stable-IP / HTTPS prompts. Field
+  on v1.19.12: `http://SITE:8000/login` stayed unstyled (all hashed CSS/JS 404)
+  until a full guest reboot — reboot wipes `redis_cache`; a service-only
+  post-HTTPS bounce did not. Shared `settle_local_stack` powers both post-install
+  and post-mkcert settle. Guided copy clarifies Sign In is expected; Setup Wizard
+  follows Administrator login.
+
 ## v1.19.12 - Post-HTTPS settle before browser URLs
 
 Patch release so trusted local HTTPS always settles ERPNext + nginx and

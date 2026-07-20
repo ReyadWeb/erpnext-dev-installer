@@ -725,40 +725,61 @@ restart_erpnext_service() {
   fi
 }
 
-# After local HTTPS nginx is written, bounce ERPNext + nginx then wait-ready.
-# Field (v1.19.11): VM Static assets OK while the host browser still looked wrong
-# until a full guest reboot — usually because the post-HTTPS settle restart was
-# skipped. This is that settle, and it must run before we print browser URLs.
-# Sets LOCAL_HTTPS_STACK_SETTLED=1 so the guided checkpoint can skip a duplicate.
-settle_stack_after_local_https() {
+# Soft-bounce ERPNext (or docker/production runtime) without nesting
+# wait_for_erpnext_ready / restart_erpnext_service (those recurse into wait).
+_soft_restart_erpnext_runtime() {
+  if deployment_engine_is_docker; then
+    log "Restarting docker compose services"
+    if declare -F docker_compose >/dev/null 2>&1; then
+      docker_compose restart || return 1
+      return 0
+    fi
+    return 1
+  fi
+  if declare -F runtime_is_production >/dev/null 2>&1 && runtime_is_production && \
+     declare -F production_runtime_configured >/dev/null 2>&1 && production_runtime_configured; then
+    log "Restarting production runtime"
+    $SUDO "$(supervisorctl_bin)" restart all >/dev/null 2>&1 || return 1
+    return 0
+  fi
+  if service_exists; then
+    log "Restarting ERPNext service"
+    $SUDO systemctl restart "${ERPNEXT_SERVICE_NAME}" || return 1
+    return 0
+  fi
+  if declare -F create_erpnext_service >/dev/null 2>&1; then
+    create_erpnext_service || true
+    $SUDO systemctl restart "${ERPNEXT_SERVICE_NAME}" || return 1
+    return 0
+  fi
+  return 1
+}
+
+# Clear Redis assets_json + bounce ERPNext (+ nginx if up) + wait-ready.
+# Field: host browser stayed unstyled until a full guest reboot even when
+# wait-ready had passed — reboot wipes redis_cache (:13000); a service-only
+# restart does not. Must run after install (before HTTPS) and again after
+# trusted mkcert. reason= is a short log label only.
+settle_local_stack() {
   require_sudo
+  local reason="${1:-local stack}"
   local rc=0
 
   echo
-  log "Settling stack after local HTTPS (ERPNext + nginx restart)"
-  echo "Required so the host browser matches VM asset probes (reboot workaround)."
+  log "Settling stack after ${reason} (clear assets_json + ERPNext restart)"
+  echo "Required so the host browser matches VM probes (replaces guest reboot)."
 
-  if deployment_engine_is_docker; then
-    if declare -F docker_runtime_restart >/dev/null 2>&1; then
-      docker_runtime_restart || rc=1
-    fi
-  elif declare -F runtime_is_production >/dev/null 2>&1 && runtime_is_production && \
-       declare -F production_runtime_configured >/dev/null 2>&1 && production_runtime_configured; then
-    log "Restarting production runtime after local HTTPS"
-    $SUDO "$(supervisorctl_bin)" restart all >/dev/null 2>&1 || rc=1
-  else
-    if service_exists; then
-      log "Restarting ERPNext service"
-      $SUDO systemctl restart "${ERPNEXT_SERVICE_NAME}" || rc=1
-    elif declare -F create_erpnext_service >/dev/null 2>&1; then
-      create_erpnext_service || true
-      $SUDO systemctl restart "${ERPNEXT_SERVICE_NAME}" || rc=1
-    fi
+  # Reboot-equivalent for ghost hashes: DEL assets_json on redis_cache :13000.
+  if declare -F clear_bench_assets_json_cache >/dev/null 2>&1; then
+    clear_bench_assets_json_cache || \
+      warn "Could not clear assets_json cache; continuing with service restart"
   fi
+
+  _soft_restart_erpnext_runtime || rc=1
 
   if systemctl list-unit-files nginx.service >/dev/null 2>&1 || \
      systemctl is-active --quiet nginx 2>/dev/null; then
-    log "Restarting nginx (local HTTPS)"
+    log "Restarting nginx"
     if $SUDO systemctl restart nginx; then
       ok "nginx restarted"
     else
@@ -771,14 +792,35 @@ settle_stack_after_local_https() {
     wait_for_erpnext_ready || rc=1
   fi
 
-  LOCAL_HTTPS_STACK_SETTLED=1
-  export LOCAL_HTTPS_STACK_SETTLED
+  LOCAL_STACK_SETTLED=1
+  export LOCAL_STACK_SETTLED
   if [[ "$rc" -eq 0 ]]; then
-    ok "Stack settled after local HTTPS (ready for host browser)."
+    ok "Stack settled after ${reason} (ready for host browser)."
   else
-    warn "Settle after local HTTPS did not fully succeed; check $(toolkit_cmd status)"
+    warn "Settle after ${reason} did not fully succeed; check $(toolkit_cmd status)"
   fi
   return "$rc"
+}
+
+# After core install / before guided HTTPS: mandatory settle (not skippable).
+settle_stack_after_install() {
+  settle_local_stack "install" || return 1
+  LOCAL_INSTALL_STACK_SETTLED=1
+  export LOCAL_INSTALL_STACK_SETTLED
+  return 0
+}
+
+# After local HTTPS nginx is written: settle again, then print browser URLs.
+# Sets LOCAL_HTTPS_STACK_SETTLED=1 so the guided checkpoint can skip a duplicate.
+settle_stack_after_local_https() {
+  settle_local_stack "local HTTPS" || {
+    LOCAL_HTTPS_STACK_SETTLED=1
+    export LOCAL_HTTPS_STACK_SETTLED
+    return 1
+  }
+  LOCAL_HTTPS_STACK_SETTLED=1
+  export LOCAL_HTTPS_STACK_SETTLED
+  return 0
 }
 
 show_erpnext_service_status() {
