@@ -256,6 +256,14 @@ scripts/test-install-self-path.sh >/tmp/erpnext-dev-install-self.$$ 2>&1 || {
 rm -f /tmp/erpnext-dev-install-self.$$
 pass "install-self path resolution passed"
 
+scripts/test-legacy-modular-bootstrap.sh >/tmp/erpnext-dev-legacy-bootstrap.$$ 2>&1 || {
+  cat /tmp/erpnext-dev-legacy-bootstrap.$$
+  rm -f /tmp/erpnext-dev-legacy-bootstrap.$$
+  fail "test-legacy-modular-bootstrap.sh failed"
+}
+rm -f /tmp/erpnext-dev-legacy-bootstrap.$$
+pass "legacy modular bootstrap recovery passed"
+
 scripts/test-engine-select.sh >/tmp/erpnext-dev-engine-select.$$ 2>&1 || {
   cat /tmp/erpnext-dev-engine-select.$$
   rm -f /tmp/erpnext-dev-engine-select.$$

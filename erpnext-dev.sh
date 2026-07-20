@@ -11,7 +11,7 @@ IFS=$'\n\t'
 # ============================================================
 
 APP_NAME="ERPNext Developer Toolkit"
-SCRIPT_VERSION="1.19.11"
+SCRIPT_VERSION="1.19.15"
 
 FRAPPE_USER="${FRAPPE_USER:-frappe}"
 FRAPPE_HOME="/home/${FRAPPE_USER}"
@@ -213,6 +213,234 @@ ERPNEXT_ALLOW_UNSAFE_INSTALL="${ERPNEXT_ALLOW_UNSAFE_INSTALL:-false}"
 _ERPNEXT_DEV_REAL="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || printf '%s' "${BASH_SOURCE[0]}")"
 _ERPNEXT_DEV_ROOT="$(cd "$(dirname "${_ERPNEXT_DEV_REAL}")" && pwd)"
 ERPNEXT_DEV_ENTRY_SCRIPT="${_ERPNEXT_DEV_REAL}"
+
+# Compatibility bridge for installations created by the legacy single-file
+# self-updater. That updater could replace /opt/erpnext-dev/erpnext-dev.sh with a
+# modular entry script without installing lib/, leaving the CLI unable to start.
+# When that exact partial layout is detected, recover from the signed bundle for
+# this script version, promote it into the atomic releases/<tag> layout, and
+# re-exec from the verified tree. Normal source checkouts and arbitrary missing
+# files never trigger network recovery.
+_ERPNEXT_DEV_BOOTSTRAP_SIGNING_FINGERPRINT_DEFAULT="BFC10C79427CF73496EA6F5A30BFD17DD559C8B6"
+
+_erpnext_dev_required_lib_files() {
+  printf '%s\n' \
+    common.sh ui.sh config.sh access.sh local_ip.sh frappe.sh support.sh backup.sh ssl.sh firewall.sh \
+    apps.sh health.sh storage.sh service.sh status.sh docker.sh engine.sh install.sh ops.sh \
+    dashboard.sh healing.sh menu.sh security.sh update.sh
+}
+
+_erpnext_dev_missing_lib_files() {
+  local lib_file
+  while IFS= read -r lib_file; do
+    [[ -f "${_ERPNEXT_DEV_ROOT}/lib/${lib_file}" ]] || printf '%s\n' "$lib_file"
+  done < <(_erpnext_dev_required_lib_files)
+}
+
+_erpnext_dev_bootstrap_signature_ok() {
+  local tree="$1"
+  local sums="${tree}/SHA256SUMS"
+  local sig="${tree}/SHA256SUMS.asc"
+  local pubkey="${tree}/docs/erpnext-dev-signing-key.asc"
+  local gnupg key_fpr valid_fpr status
+  local expected_fpr="${TOOLKIT_BOOTSTRAP_SIGNING_FINGERPRINT:-${_ERPNEXT_DEV_BOOTSTRAP_SIGNING_FINGERPRINT_DEFAULT}}"
+
+  [[ -f "$sums" && -f "$sig" && -f "$pubkey" ]] || return 1
+  command -v gpg >/dev/null 2>&1 || return 1
+
+  key_fpr="$(gpg --batch --with-colons --show-keys "$pubkey" 2>/dev/null | awk -F: '$1 == "fpr" { print $10; exit }')"
+  [[ -n "$key_fpr" && "$key_fpr" == "$expected_fpr" ]] || return 1
+
+  gnupg="$(mktemp -d "${TMPDIR:-/tmp}/erpnext-dev-bootstrap-gpg.XXXXXX")" || return 1
+  chmod 700 "$gnupg" 2>/dev/null || true
+  if ! GNUPGHOME="$gnupg" gpg --batch --quiet --import "$pubkey" >/dev/null 2>&1; then
+    rm -rf "$gnupg"
+    return 1
+  fi
+
+  status="$(GNUPGHOME="$gnupg" gpg --batch --status-fd 1 --verify "$sig" "$sums" 2>/dev/null || true)"
+  rm -rf "$gnupg"
+  valid_fpr="$(printf '%s\n' "$status" | awk '$2 == "VALIDSIG" { print $3; exit }')"
+  [[ -n "$valid_fpr" && "$valid_fpr" == "$expected_fpr" ]]
+}
+
+_erpnext_dev_bootstrap_failure_help() {
+  local missing="$1"
+  cat >&2 <<EOF
+ERROR: This installation has a modular erpnext-dev.sh but is missing required libraries:
+${missing}
+
+The legacy single-file updater created an incomplete /opt installation.
+Automatic recovery from the signed v${SCRIPT_VERSION} release bundle was not possible.
+
+Recovery from a trusted local checkout:
+  cd /path/to/erpnext-dev-toolkit
+  sudo install -d -m 0755 "$(dirname "${INSTALLER_CANONICAL_PATH}")/lib"
+  sudo cp -a lib/. "$(dirname "${INSTALLER_CANONICAL_PATH}")/lib/"
+  sudo chmod 0755 "${INSTALLER_CANONICAL_PATH}"
+  sudo chmod 0644 "$(dirname "${INSTALLER_CANONICAL_PATH}")"/lib/*.sh
+  sudo erpnext-dev version
+EOF
+}
+
+_erpnext_dev_recover_legacy_modular_install() {
+  local missing stable_root current_entry version_tag release_base workdir bundle tree
+  local releases_dir new_release current_tmp entry_tmp name lib_file tar_entry
+
+  missing="$(_erpnext_dev_missing_lib_files)"
+  [[ -n "$missing" ]] || return 0
+
+  stable_root="$(dirname "${INSTALLER_CANONICAL_PATH}")"
+
+  # Only self-heal the canonical installed entry. A source checkout with missing
+  # files should fail loudly instead of silently downloading code into the tree.
+  [[ "${_ERPNEXT_DEV_ROOT}" == "$stable_root" ]] || {
+    _erpnext_dev_bootstrap_failure_help "$missing"
+    return 1
+  }
+
+  # If an atomic release is already present, prefer it over the network.
+  current_entry="${stable_root}/current/erpnext-dev.sh"
+  if [[ -x "$current_entry" && -f "${stable_root}/current/lib/common.sh" ]]; then
+    exec "$current_entry" "$@"
+  fi
+
+  if [[ ! -w "$stable_root" ]]; then
+    echo "ERROR: ${stable_root} is not writable. Re-run the command with sudo." >&2
+    _erpnext_dev_bootstrap_failure_help "$missing"
+    return 1
+  fi
+
+  command -v curl >/dev/null 2>&1 || {
+    echo "ERROR: curl is required for legacy modular recovery." >&2
+    _erpnext_dev_bootstrap_failure_help "$missing"
+    return 1
+  }
+  command -v tar >/dev/null 2>&1 || {
+    echo "ERROR: tar is required for legacy modular recovery." >&2
+    _erpnext_dev_bootstrap_failure_help "$missing"
+    return 1
+  }
+  command -v sha256sum >/dev/null 2>&1 || {
+    echo "ERROR: sha256sum is required for legacy modular recovery." >&2
+    _erpnext_dev_bootstrap_failure_help "$missing"
+    return 1
+  }
+  command -v gpg >/dev/null 2>&1 || {
+    echo "ERROR: gpg is required to verify the signed recovery bundle." >&2
+    _erpnext_dev_bootstrap_failure_help "$missing"
+    return 1
+  }
+
+  version_tag="v${SCRIPT_VERSION}"
+  release_base="${TOOLKIT_RELEASE_GITHUB:-https://github.com/ReyadWeb/erpnext-dev-toolkit}/releases/download/${version_tag}"
+  workdir="$(mktemp -d "${stable_root}/.legacy-bootstrap.XXXXXX")" || return 1
+  bundle="${workdir}/erpnext-dev-${version_tag}.tar.gz"
+
+  echo "INFO: Incomplete legacy toolkit install detected; recovering ${version_tag} from its signed release bundle." >&2
+  if ! curl -fsSL "${release_base}/erpnext-dev-${version_tag}.tar.gz" -o "$bundle"; then
+    rm -rf "$workdir"
+    echo "ERROR: Could not download the signed ${version_tag} release bundle." >&2
+    _erpnext_dev_bootstrap_failure_help "$missing"
+    return 1
+  fi
+
+  # Reject absolute paths and traversal before extraction.
+  while IFS= read -r tar_entry; do
+    case "$tar_entry" in
+      /*|../*|*/../*|*/..)
+        rm -rf "$workdir"
+        echo "ERROR: Unsafe path detected in recovery bundle: ${tar_entry}" >&2
+        return 1
+        ;;
+    esac
+  done < <(tar -tzf "$bundle")
+
+  if ! tar -C "$workdir" -xzf "$bundle"; then
+    rm -rf "$workdir"
+    echo "ERROR: Could not extract the recovery bundle." >&2
+    return 1
+  fi
+
+  tree="${workdir}/erpnext-dev-${version_tag}"
+  if [[ ! -d "$tree" || ! -f "${tree}/erpnext-dev.sh" || ! -f "${tree}/SHA256SUMS" ]]; then
+    rm -rf "$workdir"
+    echo "ERROR: Recovery bundle layout is incomplete." >&2
+    return 1
+  fi
+
+  if ! (cd "$tree" && sha256sum -c SHA256SUMS >/dev/null); then
+    rm -rf "$workdir"
+    echo "ERROR: Recovery bundle checksum verification failed." >&2
+    return 1
+  fi
+
+  if ! _erpnext_dev_bootstrap_signature_ok "$tree"; then
+    rm -rf "$workdir"
+    echo "ERROR: Recovery bundle signature verification failed." >&2
+    return 1
+  fi
+
+  bash -n "${tree}/erpnext-dev.sh" || {
+    rm -rf "$workdir"
+    echo "ERROR: Recovered entry script failed syntax validation." >&2
+    return 1
+  }
+  while IFS= read -r lib_file; do
+    [[ -f "${tree}/lib/${lib_file}" ]] || {
+      rm -rf "$workdir"
+      echo "ERROR: Signed recovery bundle is missing lib/${lib_file}." >&2
+      return 1
+    }
+    bash -n "${tree}/lib/${lib_file}" || {
+      rm -rf "$workdir"
+      echo "ERROR: Recovered lib/${lib_file} failed syntax validation." >&2
+      return 1
+    }
+  done < <(_erpnext_dev_required_lib_files)
+
+  releases_dir="${stable_root}/releases"
+  new_release="${releases_dir}/${version_tag}"
+  mkdir -p "$releases_dir" || {
+    rm -rf "$workdir"
+    return 1
+  }
+  rm -rf "$new_release"
+  mv -T "$tree" "$new_release" || {
+    rm -rf "$workdir"
+    return 1
+  }
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    chown -R root:root "$new_release" 2>/dev/null || true
+  fi
+
+  current_tmp="${stable_root}/.current.bootstrap.$$"
+  ln -sfn "releases/${version_tag}" "$current_tmp"
+  mv -T "$current_tmp" "${stable_root}/current"
+
+  entry_tmp="${stable_root}/.entry.bootstrap.$$"
+  ln -sfn "current/erpnext-dev.sh" "$entry_tmp"
+  mv -T "$entry_tmp" "${stable_root}/erpnext-dev.sh"
+
+  for name in lib SHA256SUMS SHA256SUMS.asc RELEASE-MANIFEST.txt docs; do
+    [[ -e "${stable_root}/current/${name}" ]] || continue
+    rm -rf "${stable_root:?}/${name}"
+    ln -sfn "current/${name}" "${stable_root}/${name}"
+  done
+
+  if mkdir -p "$(dirname "${TOOLKIT_CLI_PATH}")" 2>/dev/null; then
+    ln -sfn "${stable_root}/erpnext-dev.sh" "${TOOLKIT_CLI_PATH}" 2>/dev/null || true
+  fi
+
+  rm -rf "$workdir"
+  echo "OK: Recovered the complete signed ${version_tag} toolkit and migrated to the atomic release layout." >&2
+  exec "${stable_root}/current/erpnext-dev.sh" "$@"
+}
+
+if [[ -n "$(_erpnext_dev_missing_lib_files)" ]]; then
+  _erpnext_dev_recover_legacy_modular_install "$@" || exit 1
+fi
+
 if [[ ! -f "${_ERPNEXT_DEV_ROOT}/lib/common.sh" ]]; then
   echo "ERROR: Missing toolkit library: ${_ERPNEXT_DEV_ROOT}/lib/common.sh" >&2
   exit 1

@@ -1,9 +1,9 @@
 # ERPNext Developer Toolkit — Roadmap
 
-**Current release:** v1.19.11 (July 2026)  
+**Current release:** v1.19.15 (July 2026)  
 **Theme for v1.18–v1.23:** security closure → local IP stability → repo governance → asset-readiness gaps → guarded auto-healing (v1.19+) → panel readiness.  
-**Next up:** field-validate the v1.19.10 frontend-asset closure and v1.19.11 page UX, then continue to v1.20.0.  
-**Deferred:** v1.20.0 External Watchdog until v1.19.10 + v1.19.11 are field-validated.
+**Next up:** v1.20.0 External Watchdog, after v1.19.15 field validation.  
+**Deferred:** v1.20.0 until v1.19.15 is field-validated.
 
 **Public roadmap board:** https://github.com/users/ReyadWeb/projects/3  
 **Milestones / issues:** tracked on GitHub so progress stays visible (see [docs/ROADMAP-BOARD.md](docs/ROADMAP-BOARD.md)).
@@ -23,7 +23,7 @@ The toolkit is past “installer” status. It is a **single-node ERPNext/Frappe
 | Backup / off-VM / restore rehearsal | Shipped |
 | Release signing + gated publish | Shipped |
 | Operations dashboard + monitoring | Shipped (v1.16–v1.17; **monitor-only**) |
-| CLI boxed menus / page lifecycle / status strip | Shipped (through v1.19.11) |
+| CLI boxed menus / status strip | Shipped (through v1.17.9) |
 | Browser wait-ready asset probe | Shipped (v1.15.1 / v1.17.6 core gate) |
 | Root-run `health.env` safety | Shipped (v1.18.0 allowlist parser + ownership gate) |
 | Off-VM strict SSH host keys | Shipped (v1.18.0; opt-in strict mode) |
@@ -58,7 +58,7 @@ The toolkit is past “installer” status. It is a **single-node ERPNext/Frappe
 
 ---
 
-## Shipped foundation (through v1.19.11)
+## Shipped foundation (through v1.19.15)
 
 Summary of what the active roadmap builds on. Detailed notes live in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -95,8 +95,12 @@ v1.19.1  Auto-healing hardening
 v1.19.8  Browser asset consistency closure (P0)
 v1.19.9  Bare HTTP port-80 browser path (P0)
 v1.19.10 Frappe-aligned frontend assets (P0)
-v1.19.11 CLI page UX architecture (P1)           ← current
-v1.20.0  External watchdog foundation            ← deferred until 1.19.10+1.19.11
+v1.19.11 Stale assets_json Redis :13000 + CI gate
+v1.19.12 Post-HTTPS settle before browser URLs
+v1.19.13 Post-install settle before HTTPS
+v1.19.14 redis_cache FLUSHDB settle (ghost CSS)
+v1.19.15 CLI UX + ShellCheck + modular recovery ← current
+v1.20.0  External watchdog foundation            ← deferred until 1.19.15
 v1.21.0  CloudPanel / agent API foundation
 v1.22.0  Real VPS validation matrix (bounded)
 v1.23.0  Documentation and launch polish
@@ -291,26 +295,22 @@ v1.23.0  Documentation and launch polish
 - [x] `frappe-asset-checklist` + doctor prefer Frappe `:8000` path.
 - [ ] Field: styled login on `http://SITE:8000/login` before trusting HTTPS.
 
-### v1.19.11 — CLI Page UX Architecture (P1)
+### v1.19.15 — CLI Page UX + ShellCheck + modular recovery (P1)
 
-**Status:** Shipped as **v1.19.11**; field validation recommended. Epic [#108](https://github.com/ReyadWeb/erpnext-dev-toolkit/issues/108).
+**Status:** Shipped as **v1.19.15**. Epic [#108](https://github.com/ReyadWeb/erpnext-dev-toolkit/issues/108).
 
-**Goal:** One interactive page lifecycle (clear → result → pause → parent) using existing `lib/ui.sh`; direct CLI stays print-and-exit; credentials become a focused secret page.
+**Goal:** One interactive page lifecycle (clear → result → pause → parent) using existing `lib/ui.sh`; direct CLI stays print-and-exit; credentials become a focused secret page; unblock ShellCheck; recover legacy script-only `/opt` installs.
 
 **Shipped**
-- Numbered interactive selections clear only the live TTY before rendering the selected result/action page; log capture and direct CLI output are not cleared.
-- Result pages use one compact return footer: **Enter = back to parent**, **q/Q = quit**.
-- High-use menus now pause after direct actions instead of immediately redrawing over the result.
-- 80-column terminals use two columns whenever labels fit; genuinely narrow terminals and long-label menus still fall back to one column automatically.
-- Main-menu labels are shorter (`Start here`, `Production setup`, `Apps`, `Dashboard`, `Production ops`) and the 80-column status strip is split into calmer rows.
-- Credentials are a focused page: short menu labels, concise safe login overview, and `credentials-show` prints only the ERPNext and MariaDB credential fields to `/dev/tty` rather than dumping the full generated environment file.
-- Hermetic UI tests cover 80-column two-column rendering, 70-column fallback, `NO_COLOR`, and q/Q handling on the result-page footer.
+- Numbered interactive selections clear only the live TTY; result pages pause with Enter/q.
+- `MENU_NO_CLEAR` exported from `menu_render_test` (SC2034 / validate-release gate).
+- Legacy modular bootstrap recovers missing `lib/` from the signed `SCRIPT_VERSION` bundle.
 
 ---
 
 ### v1.20.0 — External Watchdog Foundation
 
-**Status:** Deferred until v1.19.10 + v1.19.11 are field-validated.
+**Status:** Deferred until v1.19.15 is field-validated.
 
 **Goal:** Contract for Case B — frozen, powered-off, or unreachable VM (cannot self-heal from inside).
 

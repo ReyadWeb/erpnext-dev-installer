@@ -34,6 +34,7 @@ checksum_files=(
   scripts/run-shellcheck.sh
   scripts/check-module-consistency.sh
   scripts/build-release-bundle.sh
+  scripts/test-legacy-modular-bootstrap.sh
   scripts/host-firefox-trust-mkcert.sh
   scripts/frappe-frontend-asset-checklist.sh
   RELEASE-MANIFEST.txt
