@@ -1,5 +1,14 @@
 ## Unreleased
 
+### Fixed
+
+- **Stale `assets_json` on bench Redis :13000:** after build/repair, hard-`DEL`
+  `*assets_json*` on `redis_cache` from `common_site_config` (not host `:6379`).
+  If `sites/assets/assets.json` hashes do not exist on disk, remove the stale
+  map so the next build/request can regenerate. Fixes HTML advertising ghost
+  hashes (e.g. `frappe-web.bundle.KBEZG2UV.js`) while real files on disk 200.
+- **wait-ready prefers `:8000`:** probe Frappe local first, then `:443`.
+
 ### Changed
 
 - **Stable release CI gate:** tag releases run native install smoke on
