@@ -1,9 +1,9 @@
 # ERPNext Developer Toolkit — Roadmap
 
-**Current release:** v1.19.10 (July 2026)  
+**Current release:** v1.19.11 (July 2026)  
 **Theme for v1.18–v1.23:** security closure → local IP stability → repo governance → asset-readiness gaps → guarded auto-healing (v1.19+) → panel readiness.  
-**Next up:** v1.19.11 — CLI Page UX Architecture (P1), after v1.19.10 field validation.  
-**Deferred:** v1.20.0 External Watchdog until v1.19.10 + v1.19.11 are field-validated.
+**Next up:** v1.19.12 — CLI Page UX Architecture (P1), after v1.19.11 field validation.  
+**Deferred:** v1.20.0 External Watchdog until v1.19.11 + v1.19.12 are field-validated.
 
 **Public roadmap board:** https://github.com/users/ReyadWeb/projects/3  
 **Milestones / issues:** tracked on GitHub so progress stays visible (see [docs/ROADMAP-BOARD.md](docs/ROADMAP-BOARD.md)).
@@ -58,7 +58,7 @@ The toolkit is past “installer” status. It is a **single-node ERPNext/Frappe
 
 ---
 
-## Shipped foundation (through v1.19.10)
+## Shipped foundation (through v1.19.11)
 
 Summary of what the active roadmap builds on. Detailed notes live in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -94,9 +94,10 @@ v1.19.0  Guarded auto-healing MVP
 v1.19.1  Auto-healing hardening
 v1.19.8  Browser asset consistency closure (P0)
 v1.19.9  Bare HTTP port-80 browser path (P0)
-v1.19.10 Frappe-aligned frontend assets (P0)     ← current
-v1.19.11 CLI page UX architecture (P1)
-v1.20.0  External watchdog foundation            ← deferred until 1.19.10+1.19.11
+v1.19.10 Frappe-aligned frontend assets (P0)
+v1.19.11 Stale assets_json Redis :13000 + CI gate ← current
+v1.19.12 CLI page UX architecture (P1)
+v1.20.0  External watchdog foundation            ← deferred until 1.19.11+1.19.12
 v1.21.0  CloudPanel / agent API foundation
 v1.22.0  Real VPS validation matrix (bounded)
 v1.23.0  Documentation and launch polish
