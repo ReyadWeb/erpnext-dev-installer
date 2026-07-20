@@ -234,7 +234,6 @@ else
   note_fail "result-page footer q handling failed"
 fi
 
-
 # v1.19.16 information architecture: Advanced and Access are grouped routing menus,
 # not the former 50-item / 29-item flat command indexes.
 adv_tmp="$(mktemp /tmp/erpnext-dev-ui-advanced.XXXXXX)"
