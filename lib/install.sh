@@ -1019,6 +1019,21 @@ run_guided_setup() {
   else
     ok "ERPNext installation workflow finished successfully."
   fi
+
+  # Local installs: clear Redis assets_json + restart before any browser/HTTPS
+  # step. Field (v1.19.12): host :8000 login stayed unstyled until guest reboot
+  # even before HTTPS — reboot wipes redis_cache; wait-ready alone did not.
+  if ! is_public_vm_workflow && declare -F settle_stack_after_install >/dev/null 2>&1 && \
+     { port_listens 443 || port_listens 8000; }; then
+    if settle_stack_after_install; then
+      ok "Post-install settle complete — open http://${SITE_NAME}:8000/login (styled Sign In)."
+    else
+      warn "Post-install settle did not fully succeed; fix assets before HTTPS."
+      echo "  $(toolkit_cmd repair-frontend-assets)"
+      echo "  $(toolkit_cmd wait-ready)"
+    fi
+  fi
+
   echo "Verifying access state..."
   verify_access
   post_core_install_checkpoint
@@ -1074,62 +1089,33 @@ local_guided_stable_ip_checkpoint() {
   fi
 }
 
-# Confirm the install by bouncing ERPNext (+ nginx when HTTPS is active).
-# Field reports: a VM reboot after static IP often cleared post-install flakiness;
-# a targeted service restart is the same settle step without rebooting the guest.
-# When trusted mkcert just ran settle_stack_after_local_https, skip the prompt
-# (that path must not be skippable — it replaces the reboot workaround).
+# Confirm settle ran (install and/or post-HTTPS). Those paths are mandatory and
+# already clear assets_json + restart + wait-ready — do not offer a skippable
+# second bounce that operators can dismiss while the browser is still wrong.
 local_guided_service_settle_checkpoint() {
   [[ -t 0 ]] || return 0
   [[ "$ASSUME_YES" -eq 1 ]] && return 0
 
-  if [[ "${LOCAL_HTTPS_STACK_SETTLED:-0}" == "1" ]]; then
+  if [[ "${LOCAL_HTTPS_STACK_SETTLED:-0}" == "1" ]] || \
+     [[ "${LOCAL_INSTALL_STACK_SETTLED:-0}" == "1" ]] || \
+     [[ "${LOCAL_STACK_SETTLED:-0}" == "1" ]]; then
     echo
-    ok "Stack already settled after local HTTPS (ERPNext + nginx + wait-ready)."
-    echo "No second restart needed. Optional: $(toolkit_cmd restart)"
+    ok "Stack already settled (assets_json cleared + ERPNext restart + wait-ready)."
+    echo "Host check: http://${SITE_NAME}:8000/login (styled Sign In). Optional: $(toolkit_cmd restart)"
     return 0
   fi
 
-  local reply
+  # Should not happen after run_guided_setup; recover without a skippable prompt.
   echo
-  ui_box_start "Local setup: confirm install (service restart)"
-  echo "Restart ERPNext (and nginx if local HTTPS is active) to settle the stack."
-  echo "This is the guided equivalent of rebooting services after a fresh install."
-  echo "Do not skip if the host browser still looks unstyled after HTTPS."
+  ui_box_start "Local setup: settling stack"
+  echo "Clearing assets_json and restarting ERPNext (reboot workaround)."
   ui_box_end
-  echo
-  read -r -p "Restart ERPNext services now to confirm the install? [Y/n]: " reply
-  reply="${reply:-Y}"
-  if [[ ! "$reply" =~ ^[Yy]$ ]]; then
-    warn "Skipped settle restart. If the host login looks wrong, run:"
-    echo "  $(toolkit_cmd restart)"
-    echo "  $(toolkit_cmd wait-ready)"
-    return 0
-  fi
-
-  if declare -F settle_stack_after_local_https >/dev/null 2>&1 && \
-     systemctl is-active --quiet nginx 2>/dev/null; then
-    settle_stack_after_local_https || warn "Settle did not fully succeed; check $(toolkit_cmd status)"
-    return 0
-  fi
-
-  if declare -F restart_erpnext_service >/dev/null 2>&1; then
-    restart_erpnext_service || warn "ERPNext restart did not fully succeed; check $(toolkit_cmd status)"
+  if declare -F settle_stack_after_install >/dev/null 2>&1; then
+    settle_stack_after_install || warn "Settle did not fully succeed; check $(toolkit_cmd status)"
+  elif declare -F settle_local_stack >/dev/null 2>&1; then
+    settle_local_stack "guided recover" || warn "Settle did not fully succeed; check $(toolkit_cmd status)"
   else
-    warn "restart helper unavailable; run: $(toolkit_cmd restart)"
-    return 0
-  fi
-
-  if systemctl is-active --quiet nginx 2>/dev/null; then
-    log "Restarting nginx (local HTTPS)"
-    if $SUDO systemctl restart nginx; then
-      ok "nginx restarted"
-      if declare -F wait_for_erpnext_ready >/dev/null 2>&1; then
-        wait_for_erpnext_ready || warn "Ready check after nginx restart did not pass yet."
-      fi
-    else
-      warn "nginx restart failed; check: systemctl status nginx"
-    fi
+    warn "Settle helper unavailable; run: $(toolkit_cmd restart) && $(toolkit_cmd wait-ready)"
   fi
 }
 
@@ -1145,9 +1131,11 @@ local_guided_followups() {
 
   ui_box_start "Local setup: guided follow-up steps"
   echo "ERPNext is installed. Prefer http://${SITE_NAME}:8000/login (not the raw IP)."
-  echo "Field check before HTTPS: open http://${SITE_NAME}:8000/login (styled?)."
-  echo "After trusted HTTPS, the toolkit settles ERPNext+nginx automatically, then"
-  echo "open https://${SITE_NAME}/login (hard refresh). Do not skip wait-ready."
+  echo "Expected first page: Sign In (not the Setup Wizard). Log in as Administrator"
+  echo "to reach the Setup Wizard. Host /etc/hosts must map ${SITE_NAME} first."
+  echo "Before HTTPS: http://${SITE_NAME}:8000/login should already be styled"
+  echo "(post-install settle clears assets_json + restarts ERPNext)."
+  echo "After trusted HTTPS: auto-settle again, then https://${SITE_NAME}/login."
   echo "Guided order: stable IP → HTTPS (auto-settle) → credentials → security → apps."
   ui_box_end
 

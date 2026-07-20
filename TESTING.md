@@ -1,6 +1,6 @@
 # Testing guide
 
-**Current release:** v1.19.12 · See [`ROADMAP.md`](ROADMAP.md) for what is CI-proven vs what requires field validation.
+**Current release:** v1.19.13 · See [`ROADMAP.md`](ROADMAP.md) for what is CI-proven vs what requires field validation.
 
 ---
 
@@ -176,6 +176,11 @@ Open in the **host** browser (hard refresh):
 
 - Preferred (Frappe local): `http://SITE:8000/login`
 - Optional HTTPS: `https://SITE/login`
+
+**Fresh local install (before HTTPS):** after guided install you should see
+“Settling stack after install (clear assets_json …)” then another wait-ready.
+Only then open `http://SITE:8000/login` — expect **styled Sign In** without a
+guest reboot. (Setup Wizard appears after Administrator login.)
 
 **If it still fails:** follow the ladder in `docs/FRAPPE-FRONTEND-ASSETS.md` →
 `configure-local-ssl` → host `/etc/hosts` → `repair-frontend-assets` →
