@@ -54,6 +54,7 @@ targets=(
   scripts/test-staged-signature.sh
   scripts/test-host-os-output.sh
   scripts/test-install-self-path.sh
+  scripts/test-legacy-modular-bootstrap.sh
   scripts/test-engine-select.sh
   scripts/test-ui-render.sh
   scripts/test-dashboard-render.sh

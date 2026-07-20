@@ -347,6 +347,7 @@ menu_render_test() {
   NO_COLOR=1
   export FORCE_NO_COLOR NO_COLOR
   MENU_NO_CLEAR=1
+  export MENU_NO_CLEAR
   MENU_FORCE_ONE_COLUMN="${MENU_FORCE_ONE_COLUMN:-false}"
   UI_FORCE_ASCII="${UI_FORCE_ASCII:-0}"
   render_main_menu_screen
