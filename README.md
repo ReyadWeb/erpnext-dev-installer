@@ -25,12 +25,12 @@ engine that wraps the official `frappe_docker`, behind the same `erpnext-dev` CL
 
 > **OS support:** The native engine supports Ubuntu 24.04 / 26.04 LTS and Debian 13
 > (trixie). The Docker engine runs on any Docker-capable host and formally tracks
-> Ubuntu 24.04 / 26.04 and Debian 11 / 12 / 13. Automated integration coverage
-> runs on **Ubuntu 24.04 (release-gating)** plus **Ubuntu 26.04 (GitHub public-preview
-> runner, non-blocking)**; the 26.04 leg becomes a hard gate once that runner image
-> reaches general availability. Debian 13 uses the same Debian-family apt/systemd
-> install path (GitHub provides no Debian runner, so it is field-validated rather
-> than gated in CI).
+> Ubuntu 24.04 / 26.04 and Debian 11 / 12 / 13. Automated **release** integration
+> coverage runs on **Ubuntu 24.04 (release-gating)** plus Docker legs. **Ubuntu 26.04**
+> is a **canary** (weekly schedule / manual dispatch only) until its asset gate is
+> green; then it returns as a hard gate. Debian 13 uses the same Debian-family
+> apt/systemd install path (GitHub provides no Debian runner, so it is
+> field-validated rather than gated in CI).
 
 ![From fresh host to validated go-live](docs/assets/toolkit_lifecycle_flow_diagram.png)
 
@@ -67,8 +67,8 @@ The Docker engine has two modes:
 Native remains the longest-validated path. Docker **production** compose and
 HTTPS are shipped and release-gated in CI; native **Debian 13** uses the same
 Debian-family install path and is **field-validated** (GitHub has no Debian
-runner). Ubuntu **26.04** runs in integration CI as a non-blocking preview leg
-until the runner is generally available.
+runner). Ubuntu **26.04** is exercised as a weekly/manual CI canary (not on tag
+releases) until its browser-asset gate is stable enough to hard-gate.
 
 The guided Docker install finishes with the same post-install flow as native:
 verify access, host-mapping checkpoint, optional apps / first backup, then the

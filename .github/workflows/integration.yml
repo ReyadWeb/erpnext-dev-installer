@@ -16,18 +16,32 @@ on:
         description: "ERPNext site name to install"
         default: "erp.test"
         required: false
+      run_experimental_os:
+        description: "Also run ubuntu-26.04 canary (experimental; non-blocking)"
+        type: boolean
+        default: true
+        required: false
   schedule:
     # Mondays 06:00 UTC. Catches upstream package/repo drift once a week.
+    # Schedule always includes the ubuntu-26.04 canary.
     - cron: "0 6 * * 1"
   # Callable from release.yml so a release is GATED on a real install+restore+
   # production-conversion run. Not triggered directly on tags anymore (release.yml
   # invokes it) to avoid a duplicate multi-hour run per tag.
+  # Release calls leave run_experimental_os=false so tag checks stay all-green;
+  # ubuntu-26.04 is canary-only (schedule / manual dispatch) until its asset gate
+  # is stable enough to become a hard gate.
   workflow_call:
     inputs:
       site_name:
         description: "ERPNext site name to install"
         type: string
         default: "erp.test"
+        required: false
+      run_experimental_os:
+        description: "Also run ubuntu-26.04 canary (leave false for release gates)"
+        type: boolean
+        default: false
         required: false
 
 concurrency:
@@ -38,14 +52,40 @@ permissions:
   contents: read
 
 jobs:
+  resolve-matrix:
+    name: Resolve OS matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      include: ${{ steps.set.outputs.include }}
+    steps:
+      - name: Build matrix include JSON
+        id: set
+        run: |
+          set -euo pipefail
+          # Mandatory release-gating leg always present.
+          include='[{"os":"ubuntu-24.04","experimental":false}]'
+          run_exp="${{ inputs.run_experimental_os }}"
+          # schedule has no boolean input; always exercise the canary.
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            run_exp=true
+          fi
+          if [[ "${run_exp}" == "true" ]]; then
+            # Experimental / non-blocking until asset gate is green on canaries.
+            include='[{"os":"ubuntu-24.04","experimental":false},{"os":"ubuntu-26.04","experimental":true}]'
+          fi
+          echo "include=${include}" >> "$GITHUB_OUTPUT"
+          echo "event=${{ github.event_name }} run_experimental_os=${run_exp}"
+          echo "matrix=${include}"
+
   install-smoke:
     name: Install + smoke (${{ matrix.os }})
+    needs: resolve-matrix
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
-    # The 26.04 image is still a GitHub public preview (capacity/stability may
-    # vary), so its leg is marked experimental and runs non-blocking: it must
-    # execute and report on every tag, but a preview-only flake must never block
-    # a release. Ubuntu 24.04 remains the mandatory, release-gating leg.
+    # ubuntu-26.04 is canary-only (schedule / workflow_dispatch, or explicit
+    # run_experimental_os on workflow_call). When present it stays continue-on-error
+    # so a preview flake never blocks. Tag releases omit it so GitHub checks stay
+    # all-green; Ubuntu 24.04 remains the mandatory native gate.
     #
     # Ubuntu 26.04 gotcha (fixed v1.9.4+): sudo-rs ignores `sudo -E` and
     # readlink -f on a relative ./erpnext-dev.sh can return empty under some
@@ -57,15 +97,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Mandatory, release-gating integration leg.
-          - os: ubuntu-24.04
-            experimental: false
-          # Ubuntu 26.04 (public preview as of 2026-06). Steps are OS-agnostic;
-          # non-blocking until the image reaches GA, at which point flip
-          # experimental to false to make it a hard gate too.
-          - os: ubuntu-26.04
-            experimental: true
+        include: ${{ fromJson(needs.resolve-matrix.outputs.include) }}
     env:
       # erp.test keeps parity with the toolkit default; dispatch/call can override.
       SITE_NAME: ${{ inputs.site_name || 'erp.test' }}

@@ -324,7 +324,8 @@ pinned toolchain. Full detail: [`ROADMAP.md`](ROADMAP.md#external-security-revie
   and pinned-fingerprint bar as bootstrap `verify-signature`
 - **CI supply-chain hardening (v1.9.1):** every GitHub Action is pinned to an immutable
   commit SHA (not a moving tag), Dependabot bumps those pins deliberately, and the
-  Ubuntu 26.04 integration leg runs as a non-blocking preview leg alongside 24.04
+  Ubuntu 26.04 integration leg is a weekly/manual canary (omitted from tag release
+  checks) until its asset gate is green enough to hard-gate alongside 24.04
 - **Signing authority separation (v1.9.0):** signing key lives in the protected
   `release-signing` environment; a signed release requires reviewer approval, not just
   repository write access
