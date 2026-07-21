@@ -1,10 +1,10 @@
 # Testing guide
 
-**Current release:** v1.19.19-beta.2 · See [`ROADMAP.md`](ROADMAP.md) for what is CI-proven vs what requires field validation.
+**Current release:** v1.19.19 · See [`ROADMAP.md`](ROADMAP.md) for what is CI-proven vs what requires field validation.
 
 ---
 
-## v1.19.19-beta.2 frontend repair synchronization beta
+## v1.19.19 frontend repair synchronization beta
 
 Beta.2 adds a mandatory real repair transaction to integration testing. The gate must prove: watcher-free runtime, Redis available during `bench build`, core-runtime recovery after restart, stable `wait-ready`, and an independent `verify-frontend-assets` pass. On pushes to `beta`, Ubuntu 24.04 and Ubuntu 26.04 are both blocking integration legs.
 

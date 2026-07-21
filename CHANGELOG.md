@@ -1,4 +1,4 @@
-## v1.19.19-beta.2 - Frontend repair runtime synchronization beta
+## v1.19.19 - Frontend repair runtime synchronization beta
 
 ### Fixed
 
