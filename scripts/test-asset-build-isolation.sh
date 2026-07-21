@@ -14,6 +14,7 @@ pass() {
 }
 
 # Managed service must use a watcher-free Procfile.
+# shellcheck disable=SC2016
 grep -q 'ensure_toolkit_runtime_procfile "\$bench_dir"' lib/service.sh \
   || fail "managed service does not generate Procfile.toolkit"
 grep -q 'bench start --procfile Procfile.toolkit' lib/service.sh \
@@ -48,16 +49,38 @@ if grep -q 'maintenance_build' <<<"$wait_body"; then
 fi
 pass "wait-ready is read-only"
 
-# Explicit repair must stop runtime before build and start it afterward.
+# Explicit repair must keep Redis available while preventing the asset watcher
+# from competing with the one-shot production build.
 repair_body="$(awk '/^repair_frontend_assets\(\)/,/^}/' lib/service.sh)"
-stop_line="$(grep -n '_asset_build_runtime_stop' <<<"$repair_body" | head -n1 | cut -d: -f1)"
-build_line="$(grep -n 'maintenance_build' <<<"$repair_body" | head -n1 | cut -d: -f1)"
-start_line="$(grep -n '_asset_build_runtime_start' <<<"$repair_body" | tail -n1 | cut -d: -f1)"
-[[ -n "$stop_line" && -n "$build_line" && -n "$start_line" ]] \
-  || fail "repair transaction is missing stop/build/start stages"
-((stop_line < build_line && build_line < start_line)) \
-  || fail "repair transaction does not isolate build between runtime stop/start"
-pass "frontend repair isolates bench build from managed runtime"
+
+if grep -q '_asset_build_runtime_stop' <<<"$repair_body"; then
+  fail "repair still stops the complete runtime, including redis_cache, before bench build"
+fi
+
+grep -q '_prepare_asset_build_runtime' <<<"$repair_body" \
+  || fail "repair does not prepare a watcher-free runtime before building"
+
+grep -q 'maintenance_build' <<<"$repair_body" \
+  || fail "repair no longer performs the explicit isolated asset build"
+
+grep -q 'wait_for_core_runtime_ready' <<<"$repair_body" \
+  || fail "repair does not wait for runtime recovery before frontend verification"
+
+pass "frontend repair keeps runtime dependencies available and waits after restart"
+
+prepare_body="$(awk '/^_prepare_asset_build_runtime\(\)/,/^}/' lib/service.sh)"
+
+grep -q 'ensure_erpnext_service_definition' <<<"$prepare_body" \
+  || grep -q 'ensure_toolkit_runtime_procfile' <<<"$prepare_body" \
+  || fail "asset-build preparation does not establish the watcher-free runtime"
+
+grep -q 'systemctl.*restart' <<<"$prepare_body" \
+  || fail "asset-build preparation does not restart the managed runtime"
+
+grep -q 'wait_for_core_runtime_ready' <<<"$prepare_body" \
+  || fail "asset-build preparation does not wait for core runtime readiness"
+
+pass "watcher-free runtime is established before the isolated build"
 
 # Installation must not turn a browser-layer failure into a false core-install failure.
 install_tail="$(awk '/# Core installation success is separate from browser-asset readiness/,/post_install_validation_summary/' lib/install.sh)"
@@ -68,13 +91,25 @@ grep -q 'Overall state: DEGRADED' <<<"$install_tail" \
   || fail "degraded frontend state is not reported explicitly"
 pass "core install remains preserved when frontend readiness is degraded"
 
-# Beta channel must be a first-class mutable update channel.
+# Beta channel must be a first-class proving channel.
 grep -q 'beta) printf.*beta' lib/security.sh \
   || fail "beta update channel is not implemented"
+
 grep -q 'branches: \[ beta \]' .github/workflows/integration.yml \
   || fail "beta branch does not trigger real integration testing"
+
 grep -q 'branches: \[ main, beta \]' .github/workflows/ci.yml \
   || fail "beta branch does not trigger fast release validation"
-pass "beta branch has fast CI and real integration gates"
+
+grep -q 'repair-frontend-assets' .github/workflows/integration.yml \
+  || fail "beta integration does not execute the real frontend repair transaction"
+
+grep -q 'ubuntu-24.04' .github/workflows/integration.yml \
+  || fail "beta integration does not include Ubuntu 24.04"
+
+grep -q 'ubuntu-26.04' .github/workflows/integration.yml \
+  || fail "beta integration does not include Ubuntu 26.04"
+
+pass "beta branch has fast CI plus real install and frontend-repair gates"
 
 echo "test-asset-build-isolation: all checks passed"

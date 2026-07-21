@@ -1,3 +1,17 @@
+## v1.19.19-beta.2 - Frontend repair runtime synchronization beta
+
+### Fixed
+
+- **False repair failure after restart:** `repair-frontend-assets` now waits for the core Bench runtime and HTTP route to recover before running the stable frontend probe. Beta.1 restarted the service and probed immediately, which could report an empty/failed asset probe while :8000 was still starting.
+- **Redis kept available during build:** frontend repair no longer stops the complete Bench runtime before `bench build`. It first migrates/restarts into the watcher-free `Procfile.toolkit`, waits for Redis/web, then builds once with the watcher disabled so Frappe can update `assets_json` through `redis_cache`.
+- **Actionable probe diagnostics:** discovery failures now explain when `/login` could not expose a complete CSS+JavaScript manifest instead of printing an empty `Missing / failed required assets:` section.
+- **Beta integration hard gate:** the persistent `beta` branch now runs the real `repair-frontend-assets` transaction after installation and independently re-runs `wait-ready` plus `verify-frontend-assets`. Beta pushes also exercise both Ubuntu 24.04 and Ubuntu 26.04 as blocking integration legs.
+
+### Field evidence addressed
+
+- Beta.1 printed `Cannot connect to redis_cache to update assets_json` because the repair transaction stopped Redis before building.
+- Beta.1 then restarted `erpnext-dev.service` and immediately executed the stable asset probe with no runtime-recovery wait, producing a false repair failure with no individual missing asset listed.
+
 ## v1.19.19-beta.1 - Asset build isolation beta
 
 ### Fixed

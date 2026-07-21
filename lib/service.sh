@@ -100,6 +100,27 @@ bench_ports_ready() {
   port_listens 8000 && port_listens 9000 && port_listens 11000 && port_listens 13000
 }
 
+# Wait only for the runtime substrate required by frontend verification. This is
+# intentionally asset-agnostic so repair-frontend-assets can wait for Redis/web
+# after a restart without recursively depending on the asset gate it is fixing.
+wait_for_core_runtime_ready() {
+  local timeout="${1:-60}"
+  local interval="${2:-2}"
+  local elapsed=0
+
+  [[ "$timeout" =~ ^[0-9]+$ ]] || timeout=60
+  [[ "$interval" =~ ^[0-9]+$ ]] && ((interval >= 1)) || interval=2
+
+  while ((elapsed <= timeout)); do
+    if bench_ports_ready && bench_http_ready; then
+      return 0
+    fi
+    sleep "$interval"
+    elapsed=$((elapsed + interval))
+  done
+  return 1
+}
+
 bench_ready_count() {
   local count=0
   local port
@@ -214,7 +235,7 @@ bench_static_assets_ready_stable() {
 
 # Capture failing assets (for diagnostics) before a rebuild. Best-effort.
 record_frontend_asset_failures() {
-  local url host port line
+  local url host port line tmp probe_rc=0 fail_count=0
   # Prefer :8000 (Frappe local contract) so diagnostics match wait-ready.
   if port_listens 8000; then
     url="http://${SITE_NAME}:8000/login"
@@ -225,16 +246,33 @@ record_frontend_asset_failures() {
     host="$SITE_NAME"
     port=443
   else
+    echo "Frontend probe unavailable: neither :8000 nor :443 is listening yet."
     return 1
   fi
+
+  tmp="$(mktemp /tmp/erpnext-dev-asset-failures.XXXXXX)"
+  set +e
+  probe_login_frontend_assets_all "$url" "$host" "$port" "127.0.0.1" >"$tmp"
+  probe_rc=$?
+  set -e
 
   echo "Missing / failed required assets:"
   while IFS= read -r line; do
     [[ "$line" == FAIL\|* ]] || continue
+    fail_count=$((fail_count + 1))
     # FAIL|path|code|bytes|ctype|class
     printf '  %s\n' "$(printf '%s' "$line" | awk -F'|' '{printf "%s  HTTP %s  (%s)", $2, $3, $6}')"
-  done < <(probe_login_frontend_assets_all "$url" "$host" "$port" "127.0.0.1" 2>/dev/null || true)
-  return 0
+  done <"$tmp"
+  rm -f "$tmp"
+
+  if ((fail_count == 0)); then
+    case "$probe_rc" in
+      0) echo "  No individual asset failure was returned by the probe." ;;
+      2) echo "  Probe could not discover a complete CSS+JavaScript manifest from ${url}." ;;
+      *) echo "  Frontend probe failed before it could identify an individual asset (rc=${probe_rc})." ;;
+    esac
+  fi
+  return "$probe_rc"
 }
 
 # Rebuild missing login CSS/JS once without nesting wait_for_erpnext_ready
@@ -601,8 +639,30 @@ _asset_build_runtime_start() {
   return 0
 }
 
-# Rebuild assets as an isolated transaction: stop managed runtime, build once,
-# then restart and perform a read-only verification.
+# Prepare a watcher-free runtime before an explicit build while keeping Redis
+# available. Frappe's build step updates assets_json through redis_cache; stopping
+# the entire Bench service makes that update fail (observed in beta.1 as
+# "Cannot connect to redis_cache to update assets_json"). The isolation boundary
+# we need is watcher-vs-build, not Redis-vs-build.
+_prepare_asset_build_runtime() {
+  if deployment_engine_is_docker; then
+    docker_compose start >/dev/null 2>&1 || true
+    return 0
+  fi
+  if runtime_is_production && production_runtime_configured; then
+    return 0
+  fi
+
+  ensure_erpnext_service_definition || return 1
+  # Restart once so an older plain `bench start` control group (with watch) is
+  # replaced by Procfile.toolkit before bench build runs.
+  $SUDO systemctl restart "${ERPNEXT_SERVICE_NAME}" || return 1
+  wait_for_core_runtime_ready 60 2 || return 1
+  return 0
+}
+
+# Rebuild assets as an isolated watcher-free transaction. Redis and the core
+# runtime stay available during bench build; verification remains read-only.
 repair_frontend_assets() {
   require_sudo
   require_site_environment >/dev/null || fail "Site/bench environment is required before repairing frontend assets."
@@ -610,40 +670,42 @@ repair_frontend_assets() {
   ui_box_start "Repair frontend assets"
   status_line "Site" "INFO" "${SITE_NAME}"
   echo
-  echo "Pre-repair failures:"
+  echo "Pre-repair frontend probe:"
   record_frontend_asset_failures || true
   echo
-  log "Stopping managed ERPNext runtime before asset build"
-  _asset_build_runtime_stop || fail "Could not stop the managed runtime before rebuilding assets."
 
-  log "Building assets once with the watcher stopped"
+  log "Preparing watcher-free ERPNext runtime (Redis remains available)"
+  _prepare_asset_build_runtime || \
+    fail "Could not establish a watcher-free runtime with Redis/web ready before rebuilding assets."
+
+  log "Building assets once with the watcher disabled"
   if ! maintenance_build; then
-    _asset_build_runtime_start || true
     fail "bench build failed; fix the build error, then retry $(toolkit_cmd repair-frontend-assets)."
   fi
-
-  log "Starting managed ERPNext runtime after asset build"
-  _asset_build_runtime_start || fail "Could not start the managed runtime after asset rebuild."
-
-  # Give Redis/web processes a short chance to bind before cache cleanup.
-  local startup_wait=0
-  while ((startup_wait < 30)); do
-    if port_listens 8000 && port_listens 13000; then break; fi
-    sleep 2
-    startup_wait=$((startup_wait + 2))
-  done
 
   log "Clearing site cache / assets_json after isolated build"
   clear_bench_assets_json_cache || warn "cache cleanup reported an issue; continuing with verification."
   if declare -F flush_bench_redis_cache >/dev/null 2>&1; then
     flush_bench_redis_cache || warn "redis_cache FLUSHDB failed; continuing with verification"
   fi
+
   _soft_restart_erpnext_runtime || fail "Runtime restart failed after isolated asset rebuild."
+
+  log "Waiting for ERPNext core runtime before frontend verification"
+  if ! wait_for_core_runtime_ready 90 2; then
+    status_line "Runtime" "FAIL" "web/Redis did not become ready after rebuild"
+    err "Asset build completed, but the core runtime did not recover in time."
+    record_frontend_asset_failures || true
+    ui_box_end
+    return 1
+  fi
+
   if ssl_is_configured 2>/dev/null && port_listens 443; then
     log "Rewriting local SSL nginx (/assets from disk + HTTP→HTTPS)"
     write_local_ssl_nginx_config || true
     ensure_local_http_redirects_to_https || true
   fi
+
   echo
   if bench_static_assets_ready_stable; then
     status_line "Static assets" "OK" "stable login asset manifest (${ASSET_READY_STABLE_CHECKS:-3} checks)"
@@ -656,8 +718,9 @@ repair_frontend_assets() {
     ui_box_end
     return 0
   fi
+
   status_line "Static assets" "FAIL" "complete probe still failing after rebuild"
-  err "Assets still failing after build/clear-cache/restart."
+  err "Assets still failing after build/cache clear/runtime restart."
   record_frontend_asset_failures || true
   echo "Check: $(toolkit_cmd logs) · $(toolkit_cmd verify-frontend-assets) · $(toolkit_cmd verify-local-ssl)"
   ui_box_end
