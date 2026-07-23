@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression tests for Docker access / HTTPS / credentials / firewall routing (v1.19.20-beta.2).
+# Regression tests for Docker access / HTTPS / credentials / firewall / production optional-app image routing (v1.19.21-beta.1).
 # Hermetic: no Docker daemon, sudo, network, nginx, or UFW changes.
 set -Eeuo pipefail
 
@@ -71,6 +71,8 @@ erpnext_dev_init_terminal_colors 2>/dev/null || true
 source "${ROOT_DIR}/lib/config.sh"
 # shellcheck disable=SC1091
 source "${ROOT_DIR}/lib/docker.sh"
+# shellcheck disable=SC1091
+source "${ROOT_DIR}/lib/apps.sh"
 # shellcheck disable=SC1091
 source "${ROOT_DIR}/lib/engine.sh"
 # shellcheck disable=SC1091
@@ -363,6 +365,423 @@ else
   pass "production pre-HTTPS public 8080 is rejected"
 fi
 assert_contains "public 8080 failure is explicit" "$public_exposure_output" '8080 is publicly published before HTTPS'
+
+# 11. Production Docker optional apps must use a cumulative immutable image.
+# This protects against the v1.19.20 defect where bench get-app mutated only
+# the backend container while frontend, workers, scheduler, and websocket kept
+# running the original ERPNext-only image.
+echo "== production Docker optional-app image lifecycle =="
+
+DOCKER_CUSTOM_IMAGE_PROFILES_FILE="${DOCKER_WORKDIR}/test-custom-image-profiles"
+DOCKER_CUSTOM_IMAGE_APPS_FILE="${DOCKER_WORKDIR}/test-apps.json"
+DOCKER_CUSTOM_IMAGE_STATE_FILE="${DOCKER_WORKDIR}/test-custom-image.env"
+
+docker_resolve_default_branch() {
+  echo "develop"
+}
+
+DOCKER_TEST_LIST_APPS=""
+DOCKER_BENCH_CALLS="${TMP_ROOT}/docker-bench.calls"
+: >"$DOCKER_BENCH_CALLS"
+
+docker_bench() {
+  if [[ "$*" == *"list-apps"* ]]; then
+    printf '%s\n' "$DOCKER_TEST_LIST_APPS"
+    return 0
+  fi
+
+  printf '%s\n' "$*" >>"$DOCKER_BENCH_CALLS"
+  return 0
+}
+
+# Existing installed optional apps must be rediscovered and preserved when a
+# new custom image is generated.
+DOCKER_TEST_LIST_APPS=$'frappe 16.28.0 UNVERSIONED\nerpnext 16.29.0 UNVERSIONED\ncrm 1.79.1 main\nbuilder 1.0.0-dev develop'
+rm -f "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE"
+
+discovered_profiles="$(docker_collect_desired_app_profiles)"
+assert_eq \
+  "production image rediscovers all installed curated apps" \
+  $'crm\nbuilder' \
+  "$discovered_profiles"
+
+docker_write_apps_json crm builder
+
+persisted_profiles="$(cat "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE")"
+assert_eq \
+  "custom-image profiles persist across CLI invocations" \
+  $'crm\nbuilder' \
+  "$persisted_profiles"
+
+assert_eq \
+  "persistent profiles resolve to install-app names" \
+  "crm builder" \
+  "$(docker_custom_image_selected_app_names)"
+
+apps_json="$(cat "$DOCKER_CUSTOM_IMAGE_APPS_FILE")"
+assert_contains \
+  "custom image includes CRM repository" \
+  "$apps_json" \
+  '"https://github.com/frappe/crm"'
+
+assert_contains \
+  "custom image includes Builder repository" \
+  "$apps_json" \
+  '"https://github.com/frappe/builder"'
+
+# Dependencies must be accumulated into the desired image state.
+DOCKER_TEST_LIST_APPS=$'frappe 16.28.0 UNVERSIONED\nerpnext 16.29.0 UNVERSIONED'
+rm -f "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE"
+
+dependency_profiles="$(docker_collect_desired_app_profiles helpdesk)"
+assert_eq \
+  "Helpdesk production image includes Telephony dependency" \
+  $'telephony\nhelpdesk' \
+  "$dependency_profiles"
+
+# Reconciliation must refuse to guess repository information for an installed
+# app that is not represented by a curated profile.
+DOCKER_TEST_LIST_APPS=$'frappe\nerpnext\nunknown_custom_app'
+
+if docker_collect_installed_optional_profiles >/dev/null 2>&1; then
+  fail_case "unknown installed Docker app was silently accepted for reconciliation"
+else
+  pass "unknown installed Docker app safely blocks automatic reconciliation"
+fi
+
+# Production custom images must preserve the exact currently deployed Frappe
+# and ERPNext release versions instead of rebuilding from moving version-N
+# branches.
+echo "== production Docker custom-image core version pinning =="
+
+DOCKER_MODE="production"
+
+docker_custom_image_release_ref_exists() {
+  return 0
+}
+
+DOCKER_TEST_LIST_APPS=$'frappe 16.28.0 UNVERSIONED\nerpnext 16.29.0 UNVERSIONED\ncrm 1.79.1 main\nbuilder 1.0.0-dev develop'
+
+rm -f \
+  "$DOCKER_CUSTOM_IMAGE_CORE_FILE" \
+  "$DOCKER_CUSTOM_IMAGE_APPS_FILE" \
+  "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE"
+
+docker_write_apps_json crm builder
+
+assert_eq \
+  "production custom image captures Frappe version" \
+  "16.28.0" \
+  "$(docker_env_value "$DOCKER_CUSTOM_IMAGE_CORE_FILE" DOCKER_CUSTOM_IMAGE_FRAPPE_VERSION)"
+
+assert_eq \
+  "production custom image captures ERPNext version" \
+  "16.29.0" \
+  "$(docker_env_value "$DOCKER_CUSTOM_IMAGE_CORE_FILE" DOCKER_CUSTOM_IMAGE_ERPNEXT_VERSION)"
+
+assert_eq \
+  "production custom image derives compatible base-image line" \
+  "version-16" \
+  "$(docker_env_value "$DOCKER_CUSTOM_IMAGE_CORE_FILE" DOCKER_CUSTOM_IMAGE_BASE_TAG)"
+
+assert_eq \
+  "production custom image pins exact Frappe source tag" \
+  "v16.28.0" \
+  "$(docker_env_value "$DOCKER_CUSTOM_IMAGE_CORE_FILE" DOCKER_CUSTOM_IMAGE_FRAPPE_SOURCE_REF)"
+
+assert_eq \
+  "production custom image pins exact ERPNext source tag" \
+  "v16.29.0" \
+  "$(docker_env_value "$DOCKER_CUSTOM_IMAGE_CORE_FILE" DOCKER_CUSTOM_IMAGE_ERPNEXT_SOURCE_REF)"
+
+pinned_apps_json="$(cat "$DOCKER_CUSTOM_IMAGE_APPS_FILE")"
+
+assert_contains \
+  "production apps.json pins exact ERPNext release" \
+  "$pinned_apps_json" \
+  '"branch": "v16.29.0"'
+
+UPSTREAM_CONTAINERFILE="${TMP_ROOT}/layered.Containerfile"
+PINNED_CONTAINERFILE="${TMP_ROOT}/layered.Containerfile.erpnext-dev"
+
+cat >"$UPSTREAM_CONTAINERFILE" <<'EOF_TEST_CONTAINERFILE'
+ARG FRAPPE_BRANCH=version-16
+ARG FRAPPE_IMAGE_PREFIX=frappe
+
+FROM ${FRAPPE_IMAGE_PREFIX}/build:${FRAPPE_BRANCH} AS builder
+
+ARG FRAPPE_BRANCH=version-16
+ARG FRAPPE_PATH=https://github.com/frappe/frappe
+
+RUN bench init \
+  --frappe-branch=${FRAPPE_BRANCH} \
+  --frappe-path=${FRAPPE_PATH} \
+  /home/frappe/frappe-bench
+
+FROM ${FRAPPE_IMAGE_PREFIX}/base:${FRAPPE_BRANCH} AS backend
+EOF_TEST_CONTAINERFILE
+
+docker_custom_image_prepare_containerfile \
+  "$UPSTREAM_CONTAINERFILE" \
+  "$PINNED_CONTAINERFILE"
+
+pinned_containerfile="$(cat "$PINNED_CONTAINERFILE")"
+
+assert_contains \
+  "pinned Containerfile separates build image tag" \
+  "$pinned_containerfile" \
+  'FROM ${FRAPPE_IMAGE_PREFIX}/build:${FRAPPE_IMAGE_TAG} AS builder'
+
+assert_contains \
+  "pinned Containerfile separates Frappe source ref" \
+  "$pinned_containerfile" \
+  '--frappe-branch=${FRAPPE_SOURCE_REF}'
+
+assert_contains \
+  "pinned Containerfile separates backend image tag" \
+  "$pinned_containerfile" \
+  'FROM ${FRAPPE_IMAGE_PREFIX}/base:${FRAPPE_IMAGE_TAG} AS backend'
+
+assert_not_contains \
+  "pinned Containerfile removes coupled FRAPPE_BRANCH references" \
+  "$pinned_containerfile" \
+  '${FRAPPE_BRANCH}'
+
+docker_custom_image_image_app_version() {
+  local image="$1" app="$2"
+
+  case "$app" in
+    frappe)
+      printf '%s\n' "16.28.0"
+      ;;
+    erpnext)
+      printf '%s\n' "16.29.0"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+if docker_custom_image_verify_core_versions "test-pinned-image" >/dev/null; then
+  pass "custom-image core verification accepts unchanged core versions"
+else
+  fail_case "custom-image core verification rejected matching core versions"
+fi
+
+docker_custom_image_image_app_version() {
+  local image="$1" app="$2"
+
+  case "$app" in
+    frappe)
+      printf '%s\n' "16.28.0"
+      ;;
+    erpnext)
+      printf '%s\n' "16.30.0"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+if docker_custom_image_verify_core_versions "test-drifted-image" >/dev/null 2>&1; then
+  fail_case "custom-image core verification accepted an ERPNext version drift"
+else
+  pass "custom-image core verification blocks implicit ERPNext upgrades"
+fi
+
+# Normal production app installation must route through build + deploy rather
+# than mutating the backend container directly.
+DOCKER_MODE="production"
+DEPLOYMENT_MODE="public-vm"
+DOCKER_TEST_LIST_APPS=$'frappe 16.28.0 UNVERSIONED\nerpnext 16.29.0 UNVERSIONED'
+rm -f \
+  "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE" \
+  "$DOCKER_CUSTOM_IMAGE_APPS_FILE"
+
+IMAGE_WORKFLOW_CALLS="${TMP_ROOT}/custom-image-workflow.calls"
+: >"$IMAGE_WORKFLOW_CALLS"
+
+docker_build_custom_image() {
+  printf '%s\n' build >>"$IMAGE_WORKFLOW_CALLS"
+}
+
+docker_deploy_custom_image() {
+  printf '%s\n' deploy >>"$IMAGE_WORKFLOW_CALLS"
+}
+
+docker_install_app \
+  builder \
+  "Frappe Builder" \
+  "https://github.com/frappe/builder" \
+  "" \
+  >/dev/null
+
+image_workflow_calls="$(cat "$IMAGE_WORKFLOW_CALLS")"
+
+assert_eq \
+  "production optional app builds then deploys custom image" \
+  $'build\ndeploy' \
+  "$image_workflow_calls"
+
+assert_eq \
+  "production optional app persists requested profile" \
+  "builder" \
+  "$(cat "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE")"
+
+# Development mode intentionally retains the disposable runtime-install path.
+DOCKER_MODE="development"
+: >"$DOCKER_BENCH_CALLS"
+: >"$IMAGE_WORKFLOW_CALLS"
+
+docker_runtime_restart() {
+  return 0
+}
+
+docker_install_app \
+  builder \
+  "Frappe Builder" \
+  "https://github.com/frappe/builder" \
+  "" \
+  >/dev/null
+
+dev_bench_calls="$(cat "$DOCKER_BENCH_CALLS")"
+
+assert_contains \
+  "development Docker still permits runtime get-app" \
+  "$dev_bench_calls" \
+  "get-app https://github.com/frappe/builder"
+
+if [[ -s "$IMAGE_WORKFLOW_CALLS" ]]; then
+  fail_case "development Docker unexpectedly invoked production custom-image workflow"
+else
+  pass "development Docker does not invoke production custom-image workflow"
+fi
+
+# The production image override must pin every application-bearing service to
+# exactly the same immutable image.
+# Normal registry-backed production images must retain the upstream/default
+# pull behavior. pull_policy: never is reserved for Toolkit-built local images.
+DOCKER_ERPNEXT_IMAGE="frappe/erpnext:v16.26.2"
+docker_write_prod_image_override
+
+registry_override="$(cat "$(docker_prod_image_override_file)")"
+
+assert_not_contains \
+  "registry-backed production image is not forced local-only" \
+  "$registry_override" \
+  "pull_policy: never"
+
+# Toolkit-built production images are local artifacts unless explicitly pushed
+# elsewhere. All application-bearing services must use the local image without
+# attempting a registry pull.
+DOCKER_ERPNEXT_IMAGE="erpnext-dev/custom:test-regression"
+docker_write_prod_image_override never
+
+prod_override="$(cat "$(docker_prod_image_override_file)")"
+
+for svc in \
+  configurator \
+  backend \
+  frontend \
+  websocket \
+  queue-short \
+  queue-long \
+  scheduler; do
+  assert_contains \
+    "production image override includes ${svc}" \
+    "$prod_override" \
+    "  ${svc}:"
+done
+
+override_image_count="$(
+  grep -c 'image: erpnext-dev/custom:test-regression' \
+    "$(docker_prod_image_override_file)" \
+    || true
+)"
+
+assert_eq \
+  "all seven customizable services use the same image" \
+  "7" \
+  "$override_image_count"
+
+override_never_count="$(
+  grep -c 'pull_policy: never' \
+    "$(docker_prod_image_override_file)" \
+    || true
+)"
+
+assert_eq \
+  "all seven local custom-image services disable registry pulls" \
+  "7" \
+  "$override_never_count"
+
+deploy_function="$(
+  awk '/^docker_deploy_custom_image\(\)/,/^docker_reconcile_app_image\(\)/' \
+    lib/docker.sh
+)"
+
+assert_contains \
+  "custom-image deployment writes a local-only production override" \
+  "$deploy_function" \
+  "docker_write_prod_image_override never"
+
+# Runtime consistency verification must inspect every long-running application
+# service and reject the backend-only deployment shape that caused the original
+# CRM and Builder failure.
+RUNTIME_VERIFY_CALLS="${TMP_ROOT}/runtime-verify.calls"
+: >"$RUNTIME_VERIFY_CALLS"
+
+docker_compose() {
+  if [[ "${1:-}" == "ps" && "${2:-}" == "-q" ]]; then
+    printf 'cid-%s\n' "${3:-unknown}"
+    return 0
+  fi
+
+  if [[ "${1:-}" == "exec" ]]; then
+    printf 'compose:%s\n' "$*" >>"$RUNTIME_VERIFY_CALLS"
+    return 0
+  fi
+
+  return 0
+}
+
+docker() {
+  printf 'docker:%s\n' "$*" >>"$RUNTIME_VERIFY_CALLS"
+  return 0
+}
+
+if docker_custom_image_verify_runtime "crm builder"; then
+  pass "custom-image runtime consistency verification succeeds for uniform services"
+else
+  fail_case "custom-image runtime consistency verification unexpectedly failed"
+fi
+
+runtime_verify_calls="$(cat "$RUNTIME_VERIFY_CALLS")"
+
+for svc in \
+  backend \
+  frontend \
+  websocket \
+  queue-short \
+  queue-long \
+  scheduler; do
+  assert_contains \
+    "runtime verification checks ${svc}" \
+    "$runtime_verify_calls" \
+    "cid-${svc}"
+done
+
+assert_contains \
+  "runtime verification checks CRM frontend assets" \
+  "$runtime_verify_calls" \
+  "/home/frappe/frappe-bench/assets/crm"
+
+assert_contains \
+  "runtime verification checks Builder frontend assets" \
+  "$runtime_verify_calls" \
+  "/home/frappe/frappe-bench/assets/builder"
 
 if [[ "$failures" -gt 0 ]]; then
   echo "docker-access-routing tests: ${failures} failure(s)" >&2

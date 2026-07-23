@@ -67,6 +67,8 @@ DOCKER_CF_ORIGIN_DIR="${DOCKER_CF_ORIGIN_DIR:-${DOCKER_WORKDIR}/cloudflare-origi
 # step (data, not container) runs on deploy.
 DOCKER_CUSTOM_IMAGE_STATE_FILE="${DOCKER_CUSTOM_IMAGE_STATE_FILE:-${DOCKER_WORKDIR}/erpnext-dev.custom-image.env}"
 DOCKER_CUSTOM_IMAGE_APPS_FILE="${DOCKER_CUSTOM_IMAGE_APPS_FILE:-${DOCKER_WORKDIR}/erpnext-dev.apps.json}"
+DOCKER_CUSTOM_IMAGE_PROFILES_FILE="${DOCKER_CUSTOM_IMAGE_PROFILES_FILE:-${DOCKER_WORKDIR}/erpnext-dev.custom-image-profiles}"
+DOCKER_CUSTOM_IMAGE_CORE_FILE="${DOCKER_CUSTOM_IMAGE_CORE_FILE:-${DOCKER_WORKDIR}/erpnext-dev.custom-image-core.env}"
 DOCKER_CUSTOM_IMAGE_REPO="${DOCKER_CUSTOM_IMAGE_REPO:-erpnext-dev/custom}"
 
 docker_clone_dir() { printf '%s/frappe_docker\n' "$DOCKER_WORKDIR"; }
@@ -2371,6 +2373,271 @@ docker_frappe_branch() {
   fi
 }
 
+# Read the installed version of a core app from the active Docker site.
+docker_custom_image_site_app_version() {
+  require_sudo
+  local app="$1" site version
+
+  site="$(docker_site_name)"
+
+  version="$(
+    docker_bench --site "$site" list-apps 2>/dev/null |
+      awk -v wanted="$app" '$1 == wanted {print $2; exit}'
+  )"
+
+  version="${version#v}"
+
+  if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "$version"
+}
+
+# Confirm that an immutable release tag exists before relying on it for a
+# production custom-image build.
+docker_custom_image_release_ref_exists() {
+  local repo="$1" ref="$2"
+
+  git ls-remote \
+    --exit-code \
+    --tags \
+    "$repo" \
+    "refs/tags/${ref}" \
+    >/dev/null 2>&1
+}
+
+docker_custom_image_write_core_state() {
+  require_sudo
+  local base_tag="$1"
+  local frappe_version="$2"
+  local frappe_ref="$3"
+  local erpnext_version="$4"
+  local erpnext_ref="$5"
+
+  $SUDO mkdir -p "$DOCKER_WORKDIR"
+
+  $SUDO tee "$DOCKER_CUSTOM_IMAGE_CORE_FILE" >/dev/null <<EOF_DOCKER_CORE
+# ERPNext Developer Toolkit - pinned custom-image core state
+DOCKER_CUSTOM_IMAGE_BASE_TAG=${base_tag}
+DOCKER_CUSTOM_IMAGE_FRAPPE_VERSION=${frappe_version}
+DOCKER_CUSTOM_IMAGE_FRAPPE_SOURCE_REF=${frappe_ref}
+DOCKER_CUSTOM_IMAGE_ERPNEXT_VERSION=${erpnext_version}
+DOCKER_CUSTOM_IMAGE_ERPNEXT_SOURCE_REF=${erpnext_ref}
+DOCKER_CUSTOM_IMAGE_CORE_CAPTURED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+EOF_DOCKER_CORE
+
+  $SUDO chown root:root "$DOCKER_CUSTOM_IMAGE_CORE_FILE" 2>/dev/null || true
+  $SUDO chmod 644 "$DOCKER_CUSTOM_IMAGE_CORE_FILE" 2>/dev/null || true
+}
+
+# Capture the exact core versions currently serving the site before an optional
+# app image is generated. Production builds fail closed when an exact release
+# tag cannot be reconstructed.
+docker_custom_image_capture_core_state() {
+  require_sudo
+  local frappe_version erpnext_version
+  local frappe_ref erpnext_ref
+  local frappe_major erpnext_major base_tag
+
+  frappe_version="$(docker_custom_image_site_app_version frappe)" || {
+    err "Could not determine the currently deployed Frappe version."
+    return 1
+  }
+
+  erpnext_version="$(docker_custom_image_site_app_version erpnext)" || {
+    err "Could not determine the currently deployed ERPNext version."
+    return 1
+  }
+
+  frappe_major="${frappe_version%%.*}"
+  erpnext_major="${erpnext_version%%.*}"
+
+  if [[ "$frappe_major" != "$erpnext_major" ]]; then
+    err "Frappe ${frappe_version} and ERPNext ${erpnext_version} are on different major versions."
+    return 1
+  fi
+
+  frappe_ref="v${frappe_version}"
+  erpnext_ref="v${erpnext_version}"
+  base_tag="version-${frappe_major}"
+
+  if ! docker_custom_image_release_ref_exists \
+    "https://github.com/frappe/frappe" \
+    "$frappe_ref"; then
+    err "Exact Frappe release tag ${frappe_ref} was not found."
+    err "Refusing to replace it with the moving ${base_tag} branch."
+    return 1
+  fi
+
+  if ! docker_custom_image_release_ref_exists \
+    "https://github.com/frappe/erpnext" \
+    "$erpnext_ref"; then
+    err "Exact ERPNext release tag ${erpnext_ref} was not found."
+    err "Refusing to replace it with the moving ${base_tag} branch."
+    return 1
+  fi
+
+  docker_custom_image_write_core_state \
+    "$base_tag" \
+    "$frappe_version" \
+    "$frappe_ref" \
+    "$erpnext_version" \
+    "$erpnext_ref"
+}
+
+# The upstream layered Containerfile uses FRAPPE_BRANCH both as the base/build
+# image tag and as the Frappe source checkout ref. Generate a guarded derivative
+# that separates those concerns:
+#
+#   FRAPPE_IMAGE_TAG  -> frappe/build + frappe/base compatibility line
+#   FRAPPE_SOURCE_REF -> exact Frappe source tag
+docker_custom_image_prepare_containerfile() {
+  require_sudo
+  local source="$1" target="$2" tmp
+
+  [[ -f "$source" ]] || {
+    err "Upstream layered Containerfile not found: ${source}"
+    return 1
+  }
+
+  tmp="$(mktemp)" || return 1
+
+  if ! awk '
+    BEGIN {
+      branch_args = 0
+      build_from = 0
+      source_ref = 0
+      base_from = 0
+    }
+
+    /^ARG FRAPPE_BRANCH=/ {
+      branch_args++
+
+      if (branch_args == 1) {
+        sub(/^ARG FRAPPE_BRANCH=/, "ARG FRAPPE_IMAGE_TAG=")
+        print
+        next
+      }
+
+      if (branch_args == 2) {
+        sub(/^ARG FRAPPE_BRANCH=/, "ARG FRAPPE_SOURCE_REF=")
+        print
+        next
+      }
+    }
+
+    $0 == "FROM ${FRAPPE_IMAGE_PREFIX}/build:${FRAPPE_BRANCH} AS builder" {
+      print "FROM ${FRAPPE_IMAGE_PREFIX}/build:${FRAPPE_IMAGE_TAG} AS builder"
+      build_from = 1
+      next
+    }
+
+    /--frappe-branch=\$\{FRAPPE_BRANCH\}/ {
+      gsub(/\$\{FRAPPE_BRANCH\}/, "${FRAPPE_SOURCE_REF}")
+      source_ref = 1
+    }
+
+    $0 == "FROM ${FRAPPE_IMAGE_PREFIX}/base:${FRAPPE_BRANCH} AS backend" {
+      print "FROM ${FRAPPE_IMAGE_PREFIX}/base:${FRAPPE_IMAGE_TAG} AS backend"
+      base_from = 1
+      next
+    }
+
+    {
+      print
+    }
+
+    END {
+      if (branch_args != 2 || !build_from || !source_ref || !base_from) {
+        exit 42
+      }
+    }
+  ' "$source" >"$tmp"; then
+    rm -f "$tmp"
+    err "Could not safely transform the upstream layered Containerfile."
+    err "The upstream structure may have changed; refusing an unsafe build."
+    return 1
+  fi
+
+  $SUDO cp "$tmp" "$target"
+  rm -f "$tmp"
+
+  $SUDO chmod 644 "$target" 2>/dev/null || true
+
+  return 0
+}
+
+docker_custom_image_image_app_version() {
+  require_sudo
+  local image="$1" app="$2"
+
+  ${SUDO:-} docker run \
+    --rm \
+    --entrypoint sh \
+    "$image" \
+    -lc 'cd /home/frappe/frappe-bench && bench version 2>/dev/null' |
+    awk -v wanted="$app" '
+      $1 == wanted {
+        version = $2
+        sub(/^v/, "", version)
+        print version
+        exit
+      }
+    '
+}
+
+docker_custom_image_verify_core_versions() {
+  require_sudo
+  local image="$1"
+  local expected_frappe expected_erpnext
+  local actual_frappe actual_erpnext
+
+  expected_frappe="$(
+    docker_env_value \
+      "$DOCKER_CUSTOM_IMAGE_CORE_FILE" \
+      DOCKER_CUSTOM_IMAGE_FRAPPE_VERSION
+  )"
+
+  expected_erpnext="$(
+    docker_env_value \
+      "$DOCKER_CUSTOM_IMAGE_CORE_FILE" \
+      DOCKER_CUSTOM_IMAGE_ERPNEXT_VERSION
+  )"
+
+  [[ -n "$expected_frappe" && -n "$expected_erpnext" ]] || {
+    err "Pinned core-version state is incomplete."
+    return 1
+  }
+
+  actual_frappe="$(
+    docker_custom_image_image_app_version "$image" frappe
+  )"
+
+  actual_erpnext="$(
+    docker_custom_image_image_app_version "$image" erpnext
+  )"
+
+  if [[ "$actual_frappe" != "$expected_frappe" ]]; then
+    err "Custom image changed Frappe core version."
+    err "Expected ${expected_frappe}; built ${actual_frappe:-unknown}."
+    return 1
+  fi
+
+  if [[ "$actual_erpnext" != "$expected_erpnext" ]]; then
+    err "Custom image changed ERPNext core version."
+    err "Expected ${expected_erpnext}; built ${actual_erpnext:-unknown}."
+    return 1
+  fi
+
+  status_line \
+    "Core versions" \
+    "OK" \
+    "frappe ${actual_frappe}; erpnext ${actual_erpnext}"
+
+  return 0
+}
+
 # Resolve a repo's default branch (for library apps that pin no explicit branch),
 # so generated apps.json entries are always reproducible.
 docker_resolve_default_branch() {
@@ -2382,42 +2649,257 @@ docker_resolve_default_branch() {
 docker_env_value_from_state() { docker_env_value "$DOCKER_CUSTOM_IMAGE_STATE_FILE" "$1"; }
 
 # Write apps.json (base erpnext + selected library profiles). Args: profile names.
+docker_profile_for_app_name() {
+  local wanted="$1" profile
+
+  while IFS= read -r profile; do
+    [[ -n "$profile" ]] || continue
+    app_profile_defaults "$profile" >/dev/null 2>&1 || continue
+
+    if [[ "$LIB_APP_NAME" == "$wanted" ]]; then
+      printf '%s\n' "$profile"
+      return 0
+    fi
+  done < <(app_profile_list)
+
+  return 1
+}
+
+docker_profile_dependency_list() {
+  local profile="$1"
+
+  case "$profile" in
+    helpdesk)
+      printf '%s
+' telephony
+      ;;
+  esac
+}
+
+docker_custom_image_selected_app_names() {
+  require_sudo
+  local profile names=""
+
+  $SUDO test -f "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE" || return 0
+
+  while IFS= read -r profile; do
+    [[ -n "$profile" ]] || continue
+    app_profile_defaults "$profile" >/dev/null 2>&1 || continue
+    names="${names}${names:+ }${LIB_APP_NAME}"
+  done < <($SUDO cat "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE")
+
+  printf '%s\n' "$names"
+}
+
+docker_collect_installed_optional_profiles() {
+  require_sudo
+  local site app profile
+  local unknown=0
+
+  site="$(docker_site_name)"
+
+  while IFS=$' 	' read -r app _; do
+    [[ -n "$app" ]] || continue
+
+    case "$app" in
+      frappe|erpnext)
+        continue
+        ;;
+    esac
+
+    if profile="$(docker_profile_for_app_name "$app")"; then
+      printf '%s\n' "$profile"
+    else
+      printf 'ERROR: Installed Docker app "%s" is not in the curated app catalog.\n' "$app" >&2
+      printf '       Its repository cannot be reconstructed safely for a custom image.\n' >&2
+      unknown=1
+    fi
+  done < <(docker_bench --site "$site" list-apps 2>/dev/null)
+
+  [[ "$unknown" -eq 0 ]]
+}
+
+docker_collect_desired_app_profiles() {
+  require_sudo
+  local requested="${1:-}"
+  local profile dependency installed_profiles=""
+  local -A selected=()
+
+  if $SUDO test -f "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE"; then
+    while IFS= read -r profile; do
+      [[ -n "$profile" ]] || continue
+      selected["$profile"]=1
+    done < <($SUDO cat "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE")
+  fi
+
+  installed_profiles="$(docker_collect_installed_optional_profiles)" || return 1
+
+  while IFS= read -r profile; do
+    [[ -n "$profile" ]] || continue
+    selected["$profile"]=1
+  done <<< "$installed_profiles"
+
+  if [[ -n "$requested" ]]; then
+    while IFS= read -r dependency; do
+      [[ -n "$dependency" ]] || continue
+      selected["$dependency"]=1
+    done < <(docker_profile_dependency_list "$requested")
+
+    selected["$requested"]=1
+  fi
+
+  # Emit in canonical app-library order for deterministic apps.json output.
+  while IFS= read -r profile; do
+    [[ -n "${selected[$profile]:-}" ]] && printf '%s\n' "$profile"
+  done < <(app_profile_list)
+
+  return 0
+}
+
 docker_write_apps_json() {
   require_sudo
-  local frappe_branch erpnext_branch tmp profile repo branch
-  frappe_branch="$(docker_frappe_branch)"
-  erpnext_branch="${ERPNEXT_BRANCH:-$frappe_branch}"
+  local frappe_branch erpnext_branch tmp profiles_tmp profile repo branch
+  local -A seen=()
+
+  if docker_is_production; then
+    docker_custom_image_capture_core_state || return 1
+
+    erpnext_branch="$(
+      docker_env_value \
+        "$DOCKER_CUSTOM_IMAGE_CORE_FILE" \
+        DOCKER_CUSTOM_IMAGE_ERPNEXT_SOURCE_REF
+    )"
+  else
+    frappe_branch="$(docker_frappe_branch)"
+    erpnext_branch="${ERPNEXT_BRANCH:-$frappe_branch}"
+  fi
 
   tmp="$(mktemp)" || return 1
+  profiles_tmp="$(mktemp)" || {
+    rm -f "$tmp"
+    return 1
+  }
+
   {
     printf '[\n'
     printf '  {"url": "https://github.com/frappe/erpnext", "branch": "%s"}' "$erpnext_branch"
+
     for profile in "$@"; do
       [[ -n "$profile" ]] || continue
+
       if ! app_profile_defaults "$profile" >/dev/null 2>&1; then
         warn "Unknown app '${profile}', skipping."
         continue
       fi
-      app_profile_defaults "$profile" >/dev/null 2>&1
+
+      [[ -n "${seen[$LIB_APP_NAME]:-}" ]] && continue
+      seen["$LIB_APP_NAME"]=1
+
       repo="$LIB_APP_REPO"
       branch="$LIB_APP_BRANCH"
       [[ -n "$branch" ]] || branch="$(docker_resolve_default_branch "$repo")"
+
       printf ',\n  {"url": "%s", "branch": "%s"}' "$repo" "$branch"
+      printf '%s\n' "$profile" >> "$profiles_tmp"
+
     done
+
     printf '\n]\n'
   } > "$tmp"
 
   $SUDO mkdir -p "$DOCKER_WORKDIR"
+
   $SUDO cp "$tmp" "$DOCKER_CUSTOM_IMAGE_APPS_FILE"
-  rm -f "$tmp"
-  $SUDO chown root:root "$DOCKER_CUSTOM_IMAGE_APPS_FILE" 2>/dev/null || true
-  $SUDO chmod 644 "$DOCKER_CUSTOM_IMAGE_APPS_FILE" 2>/dev/null || true
-  # Record the selected app names (space separated) for the deploy install step.
-  local names=""
-  for profile in "$@"; do
-    app_profile_defaults "$profile" >/dev/null 2>&1 && names="${names}${LIB_APP_NAME} "
+  $SUDO cp "$profiles_tmp" "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE"
+
+  rm -f "$tmp" "$profiles_tmp"
+
+  $SUDO chown root:root \
+    "$DOCKER_CUSTOM_IMAGE_APPS_FILE" \
+    "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE" \
+    2>/dev/null || true
+
+  $SUDO chmod 644 \
+    "$DOCKER_CUSTOM_IMAGE_APPS_FILE" \
+    "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE" \
+    2>/dev/null || true
+
+}
+
+docker_custom_image_verify_image() {
+  require_sudo
+  local image="$1" apps="$2" app
+  local -a app_list=()
+
+  IFS=' ' read -r -a app_list <<< "$apps"
+
+  for app in "${app_list[@]}"; do
+    [[ -n "$app" ]] || continue
+
+    if ! ${SUDO:-} docker run --rm \
+      --entrypoint sh \
+      "$image" \
+      -lc "test -d '/home/frappe/frappe-bench/apps/${app}'"; then
+      err "Custom image verification failed: ${app} code is missing from ${image}."
+      return 1
+    fi
   done
-  DOCKER_CUSTOM_IMAGE_SELECTED_APPS="$(printf '%s' "$names" | sed -E 's/ +$//')"
+
+  return 0
+}
+
+docker_custom_image_verify_runtime() {
+  require_sudo
+  local apps="$1" svc app cid
+  local -a app_list=()
+  local -a services=(
+    backend
+    frontend
+    websocket
+    queue-short
+    queue-long
+    scheduler
+  )
+
+  IFS=' ' read -r -a app_list <<< "$apps"
+
+  for svc in "${services[@]}"; do
+    cid="$(docker_compose ps -q "$svc" 2>/dev/null | tail -n1)"
+
+    if [[ -z "$cid" ]]; then
+      err "Custom-image verification failed: ${svc} container was not found."
+      return 1
+    fi
+
+    for app in "${app_list[@]}"; do
+      [[ -n "$app" ]] || continue
+
+      if ! ${SUDO:-} docker exec "$cid" \
+        test -d "/home/frappe/frappe-bench/apps/${app}"; then
+        err "Custom-image verification failed: ${app} is missing from ${svc}."
+        return 1
+      fi
+    done
+  done
+
+  # Apps with frontend/public source trees must expose their built asset tree
+  # through the frontend service. This catches the production defect where only
+  # the backend container was mutated.
+  for app in "${app_list[@]}"; do
+    [[ -n "$app" ]] || continue
+
+    if docker_compose exec -T frontend sh -lc \
+      "test -d '/home/frappe/frappe-bench/apps/${app}/frontend' || test -d '/home/frappe/frappe-bench/apps/${app}/public'"; then
+
+      if ! docker_compose exec -T frontend sh -lc \
+        "test -e '/home/frappe/frappe-bench/assets/${app}' || test -e '/home/frappe/frappe-bench/sites/assets/${app}'"; then
+        err "Custom-image verification failed: frontend assets for ${app} are missing."
+        return 1
+      fi
+    fi
+  done
+
+  return 0
 }
 
 # Select apps for the custom image and generate apps.json. Non-interactive/-y
@@ -2449,7 +2931,9 @@ docker_custom_image_config() {
   docker_write_apps_json "${chosen[@]}"
   ui_box_start "Custom-App Image Configured"
   status_line "apps.json" "OK" "$DOCKER_CUSTOM_IMAGE_APPS_FILE"
-  status_line "Apps" "INFO" "erpnext ${DOCKER_CUSTOM_IMAGE_SELECTED_APPS:-(none extra)}"
+  local selected_apps
+  selected_apps="$(docker_custom_image_selected_app_names)"
+  status_line "Apps" "INFO" "erpnext ${selected_apps:-(none extra)}"
   echo
   echo "apps.json contents:"
   $SUDO sed 's/^/  /' "$DOCKER_CUSTOM_IMAGE_APPS_FILE"
@@ -2477,59 +2961,175 @@ EOF_DOCKER_CUSTOM_IMG
 # Build the immutable custom image via frappe_docker's layered Containerfile.
 docker_build_custom_image() {
   require_sudo
-  local clone containerfile tag image image_id branch apps
+  local clone upstream_containerfile build_containerfile
+  local tag image image_id branch apps
+  local base_tag frappe_source_ref
+  local expected_frappe expected_erpnext
 
   clone="$(docker_clone_dir)"
-  containerfile="${clone}/images/layered/Containerfile"
-  if [[ ! -f "$containerfile" ]]; then
+  upstream_containerfile="${clone}/images/layered/Containerfile"
+
+  if [[ ! -f "$upstream_containerfile" ]]; then
     log "frappe_docker checkout not ready; provisioning it first"
     docker_provision_workdir
   fi
-  [[ -f "$containerfile" ]] || fail "Layered Containerfile not found at ${containerfile}."
-  $SUDO test -s "$DOCKER_CUSTOM_IMAGE_APPS_FILE" || fail "No apps.json. Run $(toolkit_cmd docker-custom-image-config) first."
 
-  docker_binary_present || fail "Docker is not installed. Run $(toolkit_cmd install) first."
+  [[ -f "$upstream_containerfile" ]] \
+    || fail "Layered Containerfile not found at ${upstream_containerfile}."
+
+  $SUDO test -s "$DOCKER_CUSTOM_IMAGE_APPS_FILE" \
+    || fail "No apps.json. Run $(toolkit_cmd docker-custom-image-config) first."
+
+  docker_binary_present \
+    || fail "Docker is not installed. Run $(toolkit_cmd install) first."
+
   branch="$(docker_frappe_branch)"
+  build_containerfile="$upstream_containerfile"
+
+  if docker_is_production; then
+    $SUDO test -s "$DOCKER_CUSTOM_IMAGE_CORE_FILE" \
+      || fail "No pinned core state. Regenerate the custom-image configuration first."
+
+    base_tag="$(
+      docker_env_value \
+        "$DOCKER_CUSTOM_IMAGE_CORE_FILE" \
+        DOCKER_CUSTOM_IMAGE_BASE_TAG
+    )"
+
+    frappe_source_ref="$(
+      docker_env_value \
+        "$DOCKER_CUSTOM_IMAGE_CORE_FILE" \
+        DOCKER_CUSTOM_IMAGE_FRAPPE_SOURCE_REF
+    )"
+
+    expected_frappe="$(
+      docker_env_value \
+        "$DOCKER_CUSTOM_IMAGE_CORE_FILE" \
+        DOCKER_CUSTOM_IMAGE_FRAPPE_VERSION
+    )"
+
+    expected_erpnext="$(
+      docker_env_value \
+        "$DOCKER_CUSTOM_IMAGE_CORE_FILE" \
+        DOCKER_CUSTOM_IMAGE_ERPNEXT_VERSION
+    )"
+
+    [[ -n "$base_tag" && -n "$frappe_source_ref" ]] \
+      || fail "Pinned core build state is incomplete."
+
+    build_containerfile="${clone}/images/layered/Containerfile.erpnext-dev"
+
+    docker_custom_image_prepare_containerfile \
+      "$upstream_containerfile" \
+      "$build_containerfile" \
+      || fail "Could not prepare the pinned-core layered Containerfile."
+  else
+    base_tag="$branch"
+    frappe_source_ref="$branch"
+  fi
+
   tag="$(date +%Y%m%d%H%M%S)"
   image="${DOCKER_CUSTOM_IMAGE_REPO}:${tag}"
 
   ui_box_start "Build Custom-App Image"
   status_line "Image" "INFO" "$image"
-  status_line "Frappe branch" "INFO" "$branch"
+
+  if docker_is_production; then
+    status_line "Base image line" "INFO" "$base_tag"
+    status_line "Frappe source" "INFO" "$frappe_source_ref"
+    status_line "Frappe version" "INFO" "$expected_frappe"
+    status_line "ERPNext version" "INFO" "$expected_erpnext"
+  else
+    status_line "Frappe branch" "INFO" "$branch"
+  fi
+
   status_line "apps.json" "INFO" "$DOCKER_CUSTOM_IMAGE_APPS_FILE"
   status_line "Context" "INFO" "$clone"
+
   echo
   echo "apps.json:"
   $SUDO sed 's/^/  /' "$DOCKER_CUSTOM_IMAGE_APPS_FILE"
+
   echo
-  echo "Building an immutable image. Running containers are NOT modified."
+
+  if docker_is_production; then
+    echo "Production core versions are pinned to the currently deployed releases."
+    echo "The build will fail before deployment if Frappe or ERPNext changes."
+  else
+    echo "Building an immutable image. Running containers are NOT modified."
+  fi
+
   ui_box_end
 
   if [[ -t 0 && "${ASSUME_YES:-0}" -ne 1 ]]; then
-    confirm "Build ${image} now? (this can take several minutes)" || { warn "Build cancelled."; return 0; }
+    confirm "Build ${image} now? (this can take several minutes)" \
+      || {
+        warn "Build cancelled."
+        return 0
+      }
   fi
 
   log "Building ${image} (BuildKit)"
-  if ! ${SUDO:-} env DOCKER_BUILDKIT=1 docker build \
+
+  if docker_is_production; then
+    if ! ${SUDO:-} env DOCKER_BUILDKIT=1 docker build \
+      --secret "id=apps_json,src=${DOCKER_CUSTOM_IMAGE_APPS_FILE}" \
+      --build-arg "FRAPPE_IMAGE_TAG=${base_tag}" \
+      --build-arg "FRAPPE_SOURCE_REF=${frappe_source_ref}" \
+      --build-arg "FRAPPE_PATH=https://github.com/frappe/frappe" \
+      --tag "$image" \
+      --file "$build_containerfile" \
+      "$clone"; then
+      fail "Pinned-core custom image build failed. Review the build output above."
+    fi
+  else
+    if ! ${SUDO:-} env DOCKER_BUILDKIT=1 docker build \
       --secret "id=apps_json,src=${DOCKER_CUSTOM_IMAGE_APPS_FILE}" \
       --build-arg "FRAPPE_BRANCH=${branch}" \
       --build-arg "FRAPPE_PATH=https://github.com/frappe/frappe" \
       --tag "$image" \
-      --file "$containerfile" \
+      --file "$build_containerfile" \
       "$clone"; then
-    fail "Custom image build failed. Review the build output above."
+      fail "Custom image build failed. Review the build output above."
+    fi
   fi
 
-  image_id="$(${SUDO:-} docker inspect --format '{{.Id}}' "$image" 2>/dev/null || echo unknown)"
-  apps="$(docker_env_value "$DOCKER_CUSTOM_IMAGE_STATE_FILE" DOCKER_CUSTOM_IMAGE_APPS 2>/dev/null || true)"
-  [[ -n "${DOCKER_CUSTOM_IMAGE_SELECTED_APPS:-}" ]] && apps="$DOCKER_CUSTOM_IMAGE_SELECTED_APPS"
+  image_id="$(
+    ${SUDO:-} docker inspect \
+      --format '{{.Id}}' \
+      "$image" \
+      2>/dev/null ||
+      echo unknown
+  )"
+
+  apps="$(docker_custom_image_selected_app_names)"
+
+  docker_custom_image_verify_image "$image" "$apps" \
+    || fail "Custom image was built, but required app code is missing."
+
+  if docker_is_production; then
+    docker_custom_image_verify_core_versions "$image" \
+      || fail "Custom image core-version verification failed. Deployment is blocked."
+  fi
+
   docker_custom_image_write_state "$image" "$image_id" "$apps"
 
   ui_box_start "Custom-App Image Built"
   status_line "Image" "OK" "$image"
   status_line "Image ID" "INFO" "$image_id"
   status_line "Apps" "INFO" "erpnext ${apps:-}"
-  ui_next "$(toolkit_cmd docker-deploy-custom-image)" "$(toolkit_cmd docker-custom-image-status)"
+
+  if docker_is_production; then
+    status_line \
+      "Core pin" \
+      "OK" \
+      "frappe ${expected_frappe}; erpnext ${expected_erpnext}"
+  fi
+
+  ui_next \
+    "$(toolkit_cmd docker-deploy-custom-image)" \
+    "$(toolkit_cmd docker-custom-image-status)"
+
   ui_box_end
 }
 
@@ -2552,59 +3152,155 @@ docker_env_file_set() {
 # is mutated in place.
 docker_deploy_custom_image() {
   require_sudo
-  local image apps site app
+  local image apps site app installed svc
+  local -a app_list=()
+  local -a services=(
+    backend
+    frontend
+    websocket
+    queue-short
+    queue-long
+    scheduler
+  )
+
   docker_object_backup_load_config >/dev/null 2>&1 || true
+
   image="$(docker_env_value "$DOCKER_CUSTOM_IMAGE_STATE_FILE" DOCKER_CUSTOM_IMAGE)"
   apps="$(docker_env_value "$DOCKER_CUSTOM_IMAGE_STATE_FILE" DOCKER_CUSTOM_IMAGE_APPS)"
-  [[ -n "$image" ]] || fail "No custom image built yet. Run $(toolkit_cmd docker-build-custom-image) first."
+
+  [[ -n "$image" ]] \
+    || fail "No custom image built yet. Run $(toolkit_cmd docker-build-custom-image) first."
+
   site="$(docker_site_name)"
+  IFS=' ' read -r -a app_list <<< "$apps"
 
   ui_box_start "Deploy Custom-App Image"
   status_line "Image" "INFO" "$image"
   status_line "Apps to install" "INFO" "${apps:-none extra}"
-  status_line "Stack" "INFO" "recreate on new image (immutable deploy)"
+  status_line "Stack" "INFO" "recreate every application service on one immutable image"
   echo
   echo "Recommended: take a backup first ($(toolkit_cmd backup-files))."
   ui_box_end
+
   if [[ -t 0 && "${ASSUME_YES:-0}" -ne 1 ]]; then
-    confirm "Recreate the stack on ${image} and install the apps onto ${site}?" || { warn "Deploy cancelled."; return 0; }
+    confirm "Recreate the stack on ${image} and reconcile apps on ${site}?" \
+      || {
+        warn "Deploy cancelled."
+        return 0
+      }
   fi
 
+  docker_custom_image_verify_image "$image" "$apps" \
+    || fail "The custom image failed pre-deployment verification."
+
   DOCKER_ERPNEXT_IMAGE="$image"
+
   if docker_is_production; then
-    docker_write_prod_image_override
+    # This image was built locally by docker_build_custom_image and may not
+    # exist in any registry. Override the upstream Compose pull policy so every
+    # application service uses the verified local image instead of attempting
+    # a registry pull.
+    docker_write_prod_image_override never
     docker_env_file_set "$(docker_prod_env_file)" ERPNEXT_VERSION "$(docker_image_tag)" || true
   else
     docker_env_file_set "$(docker_env_file)" DOCKER_ERPNEXT_IMAGE "$image" || true
   fi
 
   log "Recreating the stack on ${image}"
-  docker_compose up -d --remove-orphans --force-recreate || fail "docker compose up failed. Inspect with: $(toolkit_cmd logs)"
-  docker_wait_service_running backend 300 || warn "backend did not reach running state in time."
 
-  # Install the baked apps onto the site (idempotent; app code is already present
-  # in the image, this only creates each app's schema in the site DB).
-  local installed
-  installed="$(docker_bench --site "$site" list-apps 2>/dev/null | tr -d '\r' | awk '{print $1}')"
-  for app in $apps; do
+  docker_compose up -d --remove-orphans --force-recreate \
+    || fail "docker compose up failed. Inspect with: $(toolkit_cmd logs)"
+
+  for svc in "${services[@]}"; do
+    docker_wait_service_running "$svc" 300 \
+      || fail "${svc} did not reach running state after custom-image deployment."
+  done
+
+  installed="$(
+    docker_bench --site "$site" list-apps 2>/dev/null \
+      | tr -d '\r' \
+      | awk '{print $1}'
+  )"
+
+  for app in "${app_list[@]}"; do
     [[ -n "$app" ]] || continue
+
     if printf '%s\n' "$installed" | grep -qx "$app"; then
       status_line "install-app ${app}" "OK" "already installed"
       continue
     fi
-    if docker_bench --site "$site" install-app "$app" >/dev/null 2>&1; then
+
+    if docker_bench --site "$site" install-app "$app"; then
       status_line "install-app ${app}" "OK" "installed"
     else
-      status_line "install-app ${app}" "WARN" "install reported an issue; check $(toolkit_cmd logs)"
+      fail "Could not install ${app} on ${site}."
     fi
   done
 
-  docker_bench --site "$site" migrate || warn "migrate reported an issue."
-  docker_runtime_restart || true
+  docker_bench --site "$site" migrate \
+    || fail "Site migration failed after custom-image deployment."
+
+  docker_bench --site "$site" clear-cache \
+    || warn "clear-cache reported an issue."
+
+  docker_runtime_restart \
+    || fail "The Docker runtime could not be restarted after app deployment."
+
+  for svc in "${services[@]}"; do
+    docker_wait_service_running "$svc" 300 \
+      || fail "${svc} did not return to running state after restart."
+  done
+
+  docker_custom_image_verify_runtime "$apps" \
+    || fail "Custom-image runtime consistency verification failed."
+
   docker_write_pins || true
 
-  ok "Deployed custom image ${image} and installed apps onto ${site}."
+  ok "Deployed custom image ${image} and reconciled apps on ${site}."
   docker_verify_access
+}
+
+docker_reconcile_app_image() {
+  require_sudo
+  local profiles=""
+  local -a desired_profiles=()
+
+  docker_is_production \
+    || fail "App-image reconciliation is intended for Docker production deployments."
+
+  profiles="$(docker_collect_desired_app_profiles)" \
+    || fail "Could not safely reconstruct the installed optional-app set."
+
+  if [[ -z "$profiles" ]]; then
+    ok "No optional apps are installed. The standard ERPNext image is already sufficient."
+    return 0
+  fi
+
+  mapfile -t desired_profiles <<< "$profiles"
+
+  ui_box_start "Reconcile Docker Optional Apps"
+  status_line "Site" "INFO" "$(docker_site_name)"
+  status_line "Profiles" "INFO" "$(printf '%s ' "${desired_profiles[@]}" | sed -E 's/ +$//')"
+  echo
+  echo "The toolkit will:"
+  echo "  1. Generate a cumulative apps.json."
+  echo "  2. Build one immutable image containing every installed curated app."
+  echo "  3. Recreate backend, frontend, workers, scheduler, and websocket on that image."
+  echo "  4. Migrate the site and verify app code/assets across the runtime."
+  ui_box_end
+
+  if [[ -t 0 && "${ASSUME_YES:-0}" -ne 1 ]]; then
+    confirm "Build and deploy the reconciled custom image now?" \
+      || {
+        warn "Reconciliation cancelled."
+        return 0
+      }
+  fi
+
+  docker_write_apps_json "${desired_profiles[@]}"
+
+  ASSUME_YES=1 docker_build_custom_image || return 1
+  ASSUME_YES=1 docker_deploy_custom_image || return 1
 }
 
 docker_custom_image_status() {
@@ -2631,32 +3327,75 @@ docker_custom_image_status() {
   ui_box_end
 }
 
-# Install an app inside the running container. Container app installs are not
-# persisted across image upgrades (the recommended path is a custom image); we
-# warn accordingly. args: app_name display repo branch notes
+# Install an app for the active Docker deployment.
+# Development mode may mutate the disposable runtime. Production mode must
+# rebuild/redeploy one immutable image shared by all application services.
 docker_install_app() {
   require_sudo
   local app_name="$1" display="$2" repo="$3" branch="$4"
-  local site
+  local site profile profiles=""
+  local -a desired_profiles=()
+
   site="$(docker_site_name)"
 
-  warn "Docker engine: apps are installed into the running container."
-  warn "This is ideal for evaluation. For durable deployments, build a custom image: $(toolkit_cmd docker-build-custom-image)."
+  if docker_is_production; then
+    profile="$(docker_profile_for_app_name "$app_name")" \
+      || fail "Production Docker app installs require a curated app profile. Custom Git apps must be added through a custom-image workflow."
 
-  if ! confirm "Install ${display} into the ERPNext container now?"; then
+    profiles="$(docker_collect_desired_app_profiles "$profile")" \
+      || fail "Could not safely reconstruct the desired Docker app image."
+
+    mapfile -t desired_profiles <<< "$profiles"
+
+    ui_box_start "Install ${display} - Docker Production"
+    status_line "Site" "INFO" "$site"
+    status_line "Deployment" "INFO" "immutable custom image"
+    status_line "Requested app" "INFO" "$app_name"
+    status_line "Image profiles" "INFO" "$(printf '%s ' "${desired_profiles[@]}" | sed -E 's/ +$//')"
+    echo
+    echo "Production Docker apps are baked into one shared image so backend,"
+    echo "frontend, workers, scheduler, and websocket always run identical code."
+    ui_box_end
+
+    if ! confirm "Build and deploy the production image containing ${display}?"; then
+      warn "App installation cancelled."
+      return 0
+    fi
+
+    docker_write_apps_json "${desired_profiles[@]}"
+
+    ASSUME_YES=1 docker_build_custom_image || return 1
+    ASSUME_YES=1 docker_deploy_custom_image || return 1
+
+    ok "${display} is deployed through the production custom-image workflow."
+    return 0
+  fi
+
+  warn "Docker development mode: installing the app into the running container."
+  warn "This runtime mutation is intended for disposable development environments."
+
+  if ! confirm "Install ${display} into the development container now?"; then
     warn "App installation cancelled."
     return 0
   fi
 
   if [[ -n "$branch" ]]; then
-    docker_bench get-app "$repo" --branch "$branch" || fail "Could not fetch ${display} in the container."
+    docker_bench get-app "$repo" --branch "$branch" \
+      || fail "Could not fetch ${display} in the container."
   else
-    docker_bench get-app "$repo" || fail "Could not fetch ${display} in the container."
+    docker_bench get-app "$repo" \
+      || fail "Could not fetch ${display} in the container."
   fi
-  docker_bench --site "$site" install-app "$app_name" || fail "Could not install ${display} on ${site}."
-  docker_bench --site "$site" migrate || warn "migrate reported an issue."
+
+  docker_bench --site "$site" install-app "$app_name" \
+    || fail "Could not install ${display} on ${site}."
+
+  docker_bench --site "$site" migrate \
+    || warn "migrate reported an issue."
+
   docker_runtime_restart || true
-  ok "${display} installed into the ERPNext container."
+
+  ok "${display} installed into the Docker development container."
 }
 
 docker_print_access() {
@@ -3085,7 +3824,7 @@ EOF_DOCKER_PROD_ENV
 # pins (the upstream CUSTOM_IMAGE/CUSTOM_TAG split cannot express a digest).
 docker_write_prod_image_override() {
   require_sudo
-  local f svc
+  local f svc pull_policy="${1:-}"
   f="$(docker_prod_image_override_file)"
   $SUDO mkdir -p "$DOCKER_WORKDIR"
   {
@@ -3093,6 +3832,9 @@ docker_write_prod_image_override() {
     for svc in configurator backend frontend websocket queue-short queue-long scheduler; do
       echo "  ${svc}:"
       echo "    image: ${DOCKER_ERPNEXT_IMAGE}"
+      if [[ -n "$pull_policy" ]]; then
+        echo "    pull_policy: ${pull_policy}"
+      fi
     done
   } | $SUDO tee "$f" >/dev/null
   $SUDO chown root:root "$f" 2>/dev/null || true

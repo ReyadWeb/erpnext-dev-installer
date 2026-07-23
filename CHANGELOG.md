@@ -1,3 +1,89 @@
+## v1.19.21 - Production Docker optional-app image reliability
+
+### Added
+
+- **Cumulative production custom images:** Docker production optional applications are delivered through one durable immutable image shared by all application-bearing services.
+- **Core-version preservation:** production custom-image builds capture and preserve the exact deployed Frappe and ERPNext release versions.
+- **Immutable source pinning:** Frappe and ERPNext source checkouts use verified release tags instead of silently following moving major-version branches.
+- **Custom-image reconciliation:** installed curated applications can be rediscovered and reconstructed into the cumulative production image.
+- **Core drift verification:** a newly built production image is blocked from deployment when its Frappe or ERPNext versions differ from the captured production baseline.
+
+### Fixed
+
+- Fixed optional applications being installed only into the backend container while frontend, websocket, queues, and scheduler continued running the original ERPNext image.
+- Fixed missing CRM and Builder application code and frontend assets across Docker production services.
+- Fixed Compose attempting to pull locally built `erpnext-dev/custom` images from a registry during deployment.
+- Added `pull_policy: never` for verified locally built production custom images while preserving normal pull behavior for registry-backed images.
+- Fixed optional-app image rebuilds silently advancing Frappe and ERPNext through moving `version-N` branches.
+- Decoupled the Frappe Docker base-image compatibility tag from the exact Frappe source release ref.
+
+### Production validation
+
+- Unified custom image deployed successfully across backend, frontend, websocket, queue-short, queue-long, and scheduler.
+- CRM and Builder application code was present across all required services.
+- Builder JavaScript and CSS assets were served successfully with correct MIME types.
+- ERPNext, CRM, and Builder opened successfully through the production browser workflow.
+- Final pinned rebuild preserved Frappe `16.28.0` and ERPNext `16.29.0`.
+- The accepted production image was `erpnext-dev/custom:20260723092757`.
+- The final stack survived a complete VPS reboot with all long-running application services restored.
+- MariaDB returned healthy and production HTTPS remained operational after reboot.
+
+## v1.19.21-beta.3 - Docker custom-image core-version pinning
+
+### Fixed
+
+- **Implicit core upgrades:** production optional-app image builds no longer rebuild Frappe and ERPNext from moving `version-N` branches without preserving the deployed core versions.
+- **Exact production core capture:** the custom-image workflow records the active site's exact Frappe and ERPNext versions before generating the production image.
+- **Immutable core refs:** exact upstream release tags are verified and used for the Frappe and ERPNext source checkouts.
+- **Decoupled layered build:** the Frappe Docker base/build image compatibility tag remains on the required `version-N` line while the Frappe source checkout uses its exact release tag.
+- **Exact ERPNext pinning:** production `apps.json` pins ERPNext to the captured immutable release tag instead of the moving major-version branch.
+- **Fail-closed version safety:** production image generation refuses to continue when the exact deployed core versions or their release tags cannot be reconstructed safely.
+- **Pre-deployment core verification:** a built custom image must report exactly the captured Frappe and ERPNext versions before deployment is allowed.
+
+### Validation
+
+- Added regression coverage for exact Frappe and ERPNext version capture and immutable release refs.
+- Added regression coverage for safe separation of Frappe base-image tags and source refs.
+- Added a hard regression gate proving an implicit ERPNext core-version change blocks deployment.
+- Preserved the validated cumulative optional-app image lifecycle across backend, frontend, websocket, queues, and scheduler.
+- Preserved local custom-image deployment using `pull_policy: never`.
+- Real VPS validation is required to confirm a rebuilt CRM/Builder image preserves Frappe 16.28.0 and ERPNext 16.29.0.
+
+## v1.19.21-beta.2 - Docker local custom-image deployment pull policy
+
+### Fixed
+
+- **Local custom-image deployment:** production deployment no longer attempts to pull Toolkit-built `erpnext-dev/custom:<tag>` images from a registry. The generated production override now sets `pull_policy: never` for locally built custom images.
+- **Registry behavior preserved:** standard registry-backed production images continue using their normal Compose pull behavior; the local-only policy is scoped specifically to the custom-image deployment workflow.
+- **Seven-service consistency:** configurator, backend, frontend, websocket, queue-short, queue-long, and scheduler all receive the same custom image and local-only pull policy.
+
+### Validation
+
+- Added hermetic regression coverage proving registry-backed images are not forced local-only.
+- Added regression coverage proving all seven customizable services receive `pull_policy: never` for locally built custom images.
+- The first production VPS field test successfully built `erpnext-dev/custom:20260723061909` containing CRM and Builder, then exposed the Compose pull-policy defect before any running production container was replaced.
+- Real VPS acceptance remains required by deploying the already-built image, verifying CRM and Builder frontend behavior and runtime consistency, and completing a reboot test.
+
+## v1.19.21-beta.1 - Docker production optional-app immutable-image lifecycle
+
+### Fixed
+
+- **Production Docker optional-app consistency:** optional apps no longer mutate only the running backend container. Production installs now build and deploy one cumulative immutable image shared by every application-bearing service.
+- **Existing deployment reconciliation:** added `docker-reconcile-app-image` to reconstruct a custom image from curated apps already installed on the site, including deployments affected by the v1.19.20 backend-only installation behavior.
+- **Persistent desired-app state:** custom-image profile selection is stored on disk so configure, build, deploy, and later reconciliation operations retain the same application set across separate Toolkit invocations.
+- **Cumulative application images:** newly requested apps are combined with existing installed curated apps rather than replacing them in the next image.
+- **Dependency expansion:** curated production-image dependencies are included automatically; Helpdesk brings Telephony into the same image.
+- **Pre-deployment image verification:** custom images are checked for required application code before the production stack is recreated.
+- **Cross-service runtime verification:** backend, frontend, websocket, queue-short, queue-long, and scheduler are checked for consistent optional-app code after deployment.
+- **Frontend asset verification:** applications exposing frontend or public trees are checked for corresponding built assets, directly covering the CRM and Builder 404 failure reproduced on a real production VPS.
+- **Development behavior preserved:** disposable Docker development environments retain the existing runtime `bench get-app` installation path.
+
+### Validation
+
+- Expanded `scripts/test-docker-access-routing.sh` with production optional-app image lifecycle regression coverage.
+- Verified cumulative CRM and Builder discovery, persistent profile state, Helpdesk/Telephony dependency expansion, production build/deploy routing, development-mode isolation, identical image assignment across all seven customizable production services, and cross-container runtime checks.
+- Real VPS acceptance remains required before stable promotion: reconcile the existing broken CRM/Builder production deployment, verify application assets and routes, and confirm persistence after reboot.
+
 ## v1.19.20 - Validated Docker production deployment and credentials parity
 
 - Fixed Docker local access routing and standardized direct Docker access on port 8080.
