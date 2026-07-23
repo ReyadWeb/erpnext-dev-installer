@@ -1,3 +1,24 @@
+## v1.19.21-beta.3 - Docker custom-image core-version pinning
+
+### Fixed
+
+- **Implicit core upgrades:** production optional-app image builds no longer rebuild Frappe and ERPNext from moving `version-N` branches without preserving the deployed core versions.
+- **Exact production core capture:** the custom-image workflow records the active site's exact Frappe and ERPNext versions before generating the production image.
+- **Immutable core refs:** exact upstream release tags are verified and used for the Frappe and ERPNext source checkouts.
+- **Decoupled layered build:** the Frappe Docker base/build image compatibility tag remains on the required `version-N` line while the Frappe source checkout uses its exact release tag.
+- **Exact ERPNext pinning:** production `apps.json` pins ERPNext to the captured immutable release tag instead of the moving major-version branch.
+- **Fail-closed version safety:** production image generation refuses to continue when the exact deployed core versions or their release tags cannot be reconstructed safely.
+- **Pre-deployment core verification:** a built custom image must report exactly the captured Frappe and ERPNext versions before deployment is allowed.
+
+### Validation
+
+- Added regression coverage for exact Frappe and ERPNext version capture and immutable release refs.
+- Added regression coverage for safe separation of Frappe base-image tags and source refs.
+- Added a hard regression gate proving an implicit ERPNext core-version change blocks deployment.
+- Preserved the validated cumulative optional-app image lifecycle across backend, frontend, websocket, queues, and scheduler.
+- Preserved local custom-image deployment using `pull_policy: never`.
+- Real VPS validation is required to confirm a rebuilt CRM/Builder image preserves Frappe 16.28.0 and ERPNext 16.29.0.
+
 ## v1.19.21-beta.2 - Docker local custom-image deployment pull policy
 
 ### Fixed
