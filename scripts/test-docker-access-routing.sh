@@ -396,7 +396,7 @@ docker_bench() {
 
 # Existing installed optional apps must be rediscovered and preserved when a
 # new custom image is generated.
-DOCKER_TEST_LIST_APPS=$'frappe\nerpnext\ncrm\nbuilder'
+DOCKER_TEST_LIST_APPS=$'frappe 16.28.0 UNVERSIONED\nerpnext 16.29.0 UNVERSIONED\ncrm 1.79.1 main\nbuilder 1.0.0-dev develop'
 rm -f "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE"
 
 discovered_profiles="$(docker_collect_desired_app_profiles)"
@@ -430,7 +430,7 @@ assert_contains \
   '"https://github.com/frappe/builder"'
 
 # Dependencies must be accumulated into the desired image state.
-DOCKER_TEST_LIST_APPS=$'frappe\nerpnext'
+DOCKER_TEST_LIST_APPS=$'frappe 16.28.0 UNVERSIONED\nerpnext 16.29.0 UNVERSIONED'
 rm -f "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE"
 
 dependency_profiles="$(docker_collect_desired_app_profiles helpdesk)"
@@ -449,11 +449,153 @@ else
   pass "unknown installed Docker app safely blocks automatic reconciliation"
 fi
 
+# Production custom images must preserve the exact currently deployed Frappe
+# and ERPNext release versions instead of rebuilding from moving version-N
+# branches.
+echo "== production Docker custom-image core version pinning =="
+
+DOCKER_MODE="production"
+
+docker_custom_image_release_ref_exists() {
+  return 0
+}
+
+DOCKER_TEST_LIST_APPS=$'frappe 16.28.0 UNVERSIONED\nerpnext 16.29.0 UNVERSIONED\ncrm 1.79.1 main\nbuilder 1.0.0-dev develop'
+
+rm -f \
+  "$DOCKER_CUSTOM_IMAGE_CORE_FILE" \
+  "$DOCKER_CUSTOM_IMAGE_APPS_FILE" \
+  "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE"
+
+docker_write_apps_json crm builder
+
+assert_eq \
+  "production custom image captures Frappe version" \
+  "16.28.0" \
+  "$(docker_env_value "$DOCKER_CUSTOM_IMAGE_CORE_FILE" DOCKER_CUSTOM_IMAGE_FRAPPE_VERSION)"
+
+assert_eq \
+  "production custom image captures ERPNext version" \
+  "16.29.0" \
+  "$(docker_env_value "$DOCKER_CUSTOM_IMAGE_CORE_FILE" DOCKER_CUSTOM_IMAGE_ERPNEXT_VERSION)"
+
+assert_eq \
+  "production custom image derives compatible base-image line" \
+  "version-16" \
+  "$(docker_env_value "$DOCKER_CUSTOM_IMAGE_CORE_FILE" DOCKER_CUSTOM_IMAGE_BASE_TAG)"
+
+assert_eq \
+  "production custom image pins exact Frappe source tag" \
+  "v16.28.0" \
+  "$(docker_env_value "$DOCKER_CUSTOM_IMAGE_CORE_FILE" DOCKER_CUSTOM_IMAGE_FRAPPE_SOURCE_REF)"
+
+assert_eq \
+  "production custom image pins exact ERPNext source tag" \
+  "v16.29.0" \
+  "$(docker_env_value "$DOCKER_CUSTOM_IMAGE_CORE_FILE" DOCKER_CUSTOM_IMAGE_ERPNEXT_SOURCE_REF)"
+
+pinned_apps_json="$(cat "$DOCKER_CUSTOM_IMAGE_APPS_FILE")"
+
+assert_contains \
+  "production apps.json pins exact ERPNext release" \
+  "$pinned_apps_json" \
+  '"branch": "v16.29.0"'
+
+UPSTREAM_CONTAINERFILE="${TMP_ROOT}/layered.Containerfile"
+PINNED_CONTAINERFILE="${TMP_ROOT}/layered.Containerfile.erpnext-dev"
+
+cat >"$UPSTREAM_CONTAINERFILE" <<'EOF_TEST_CONTAINERFILE'
+ARG FRAPPE_BRANCH=version-16
+ARG FRAPPE_IMAGE_PREFIX=frappe
+
+FROM ${FRAPPE_IMAGE_PREFIX}/build:${FRAPPE_BRANCH} AS builder
+
+ARG FRAPPE_BRANCH=version-16
+ARG FRAPPE_PATH=https://github.com/frappe/frappe
+
+RUN bench init \
+  --frappe-branch=${FRAPPE_BRANCH} \
+  --frappe-path=${FRAPPE_PATH} \
+  /home/frappe/frappe-bench
+
+FROM ${FRAPPE_IMAGE_PREFIX}/base:${FRAPPE_BRANCH} AS backend
+EOF_TEST_CONTAINERFILE
+
+docker_custom_image_prepare_containerfile \
+  "$UPSTREAM_CONTAINERFILE" \
+  "$PINNED_CONTAINERFILE"
+
+pinned_containerfile="$(cat "$PINNED_CONTAINERFILE")"
+
+assert_contains \
+  "pinned Containerfile separates build image tag" \
+  "$pinned_containerfile" \
+  'FROM ${FRAPPE_IMAGE_PREFIX}/build:${FRAPPE_IMAGE_TAG} AS builder'
+
+assert_contains \
+  "pinned Containerfile separates Frappe source ref" \
+  "$pinned_containerfile" \
+  '--frappe-branch=${FRAPPE_SOURCE_REF}'
+
+assert_contains \
+  "pinned Containerfile separates backend image tag" \
+  "$pinned_containerfile" \
+  'FROM ${FRAPPE_IMAGE_PREFIX}/base:${FRAPPE_IMAGE_TAG} AS backend'
+
+assert_not_contains \
+  "pinned Containerfile removes coupled FRAPPE_BRANCH references" \
+  "$pinned_containerfile" \
+  '${FRAPPE_BRANCH}'
+
+docker_custom_image_image_app_version() {
+  local image="$1" app="$2"
+
+  case "$app" in
+    frappe)
+      printf '%s\n' "16.28.0"
+      ;;
+    erpnext)
+      printf '%s\n' "16.29.0"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+if docker_custom_image_verify_core_versions "test-pinned-image" >/dev/null; then
+  pass "custom-image core verification accepts unchanged core versions"
+else
+  fail_case "custom-image core verification rejected matching core versions"
+fi
+
+docker_custom_image_image_app_version() {
+  local image="$1" app="$2"
+
+  case "$app" in
+    frappe)
+      printf '%s\n' "16.28.0"
+      ;;
+    erpnext)
+      printf '%s\n' "16.30.0"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+if docker_custom_image_verify_core_versions "test-drifted-image" >/dev/null 2>&1; then
+  fail_case "custom-image core verification accepted an ERPNext version drift"
+else
+  pass "custom-image core verification blocks implicit ERPNext upgrades"
+fi
+
 # Normal production app installation must route through build + deploy rather
 # than mutating the backend container directly.
 DOCKER_MODE="production"
 DEPLOYMENT_MODE="public-vm"
-DOCKER_TEST_LIST_APPS=$'frappe\nerpnext'
+DOCKER_TEST_LIST_APPS=$'frappe 16.28.0 UNVERSIONED\nerpnext 16.29.0 UNVERSIONED'
 rm -f \
   "$DOCKER_CUSTOM_IMAGE_PROFILES_FILE" \
   "$DOCKER_CUSTOM_IMAGE_APPS_FILE"
