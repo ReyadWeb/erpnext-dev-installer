@@ -705,7 +705,7 @@ show_local_development_menu() {
       "3) Service controls" \
       "4) Access & networking" \
       "5) HTTPS & domains" \
-      "6) Applications" \
+      "6) Apps" \
       "7) Credentials" \
       "8) Environment check" \
       "9) Setup lifecycle guide"
