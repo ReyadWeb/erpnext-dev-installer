@@ -789,6 +789,34 @@ show_production_setup_menu() {
   done
 }
 
+https_domains_menu_is_production() {
+  case "${HTTPS_DOMAINS_MENU_CONTEXT:-auto}" in
+    production)
+      return 0
+      ;;
+    local)
+      return 1
+      ;;
+  esac
+
+  if declare -F docker_is_production >/dev/null 2>&1 \
+    && docker_is_production 2>/dev/null; then
+    return 0
+  fi
+
+  if declare -F is_public_vm_workflow >/dev/null 2>&1 \
+    && is_public_vm_workflow 2>/dev/null; then
+    return 0
+  fi
+
+  return 1
+}
+
+https_domains_engine_is_docker() {
+  declare -F deployment_engine_is_docker >/dev/null 2>&1 \
+    && deployment_engine_is_docker 2>/dev/null
+}
+
 https_domains_menu_render_option() {
   local key="$1"
   local label="$2"
@@ -818,7 +846,7 @@ https_domains_menu_render_pair() {
   ui_row_end
 }
 
-render_https_domains_menu_options() {
+render_local_https_domains_menu_options() {
   local width
 
   width="$(ui_panel_width)"
@@ -826,79 +854,283 @@ render_https_domains_menu_options() {
   ui_box_line top "$width"
 
   if ((width >= 80)); then
-    https_domains_menu_render_pair \
-      "$width" "1" "Local HTTPS" \
-      "5" "Local domain / DNS status"
+    https_domains_menu_render_pair "$width" "1" "Status" "4" "Domain & DNS"
+    https_domains_menu_render_pair "$width" "2" "HTTPS setup" "5" "Browser trust"
+    https_domains_menu_render_pair "$width" "3" "Verify HTTPS" "6" "Certificates"
 
-    https_domains_menu_render_pair \
-      "$width" "2" "Production HTTPS" \
-      "6" "SSL / HTTPS roadmap"
+    ui_box_line mid "$width"
 
-    https_domains_menu_render_pair \
-      "$width" "3" "Domain configuration" \
-      "7" "SSL mode status & guide"
-
-    https_domains_menu_render_pair \
-      "$width" "4" "Change local domain" \
-      "8" "Production readiness"
+    https_domains_menu_render_pair "$width" "G" "Guides" "R" "Recovery"
   else
-    https_domains_menu_render_pair "$width" "1" "Local HTTPS"
-    https_domains_menu_render_pair "$width" "2" "Production HTTPS"
-    https_domains_menu_render_pair "$width" "3" "Domain configuration"
-    https_domains_menu_render_pair "$width" "4" "Change local domain"
-    https_domains_menu_render_pair "$width" "5" "Local domain / DNS status"
-    https_domains_menu_render_pair "$width" "6" "SSL / HTTPS roadmap"
-    https_domains_menu_render_pair "$width" "7" "SSL mode status & guide"
-    https_domains_menu_render_pair "$width" "8" "Production readiness"
+    https_domains_menu_render_pair "$width" "1" "Status"
+    https_domains_menu_render_pair "$width" "2" "HTTPS setup"
+    https_domains_menu_render_pair "$width" "3" "Verify HTTPS"
+    https_domains_menu_render_pair "$width" "4" "Domain & DNS"
+    https_domains_menu_render_pair "$width" "5" "Browser trust"
+    https_domains_menu_render_pair "$width" "6" "Certificates"
+
+    ui_box_line mid "$width"
+
+    https_domains_menu_render_pair "$width" "G" "Guides"
+    https_domains_menu_render_pair "$width" "R" "Recovery"
   fi
 
   ui_box_line bot "$width"
 }
 
+render_production_https_domains_menu_options() {
+  local width
+
+  width="$(ui_panel_width)"
+
+  ui_box_line top "$width"
+
+  if ((width >= 80)); then
+    https_domains_menu_render_pair "$width" "1" "Status" "4" "Domain & DNS"
+    https_domains_menu_render_pair "$width" "2" "HTTPS setup" "5" "SSL mode"
+    https_domains_menu_render_pair "$width" "3" "Verify / readiness" "6" "Provider & certificates"
+
+    ui_box_line mid "$width"
+
+    https_domains_menu_render_pair "$width" "G" "Guides" "R" "Recovery"
+  else
+    https_domains_menu_render_pair "$width" "1" "Status"
+    https_domains_menu_render_pair "$width" "2" "HTTPS setup"
+    https_domains_menu_render_pair "$width" "3" "Verify / readiness"
+    https_domains_menu_render_pair "$width" "4" "Domain & DNS"
+    https_domains_menu_render_pair "$width" "5" "SSL mode"
+    https_domains_menu_render_pair "$width" "6" "Provider & certificates"
+
+    ui_box_line mid "$width"
+
+    https_domains_menu_render_pair "$width" "G" "Guides"
+    https_domains_menu_render_pair "$width" "R" "Recovery"
+  fi
+
+  ui_box_line bot "$width"
+}
+
+https_domains_show_production_status() {
+  if https_domains_engine_is_docker \
+    && declare -F docker_https_status >/dev/null 2>&1; then
+    docker_https_status
+  else
+    show_production_ssl_status
+  fi
+}
+
+https_domains_run_production_setup() {
+  if https_domains_engine_is_docker \
+    && declare -F docker_https_wizard >/dev/null 2>&1; then
+    docker_https_wizard
+  else
+    production_ssl_wizard
+  fi
+}
+
+https_domains_verify_production() {
+  https_domains_show_production_status || true
+
+  echo
+  show_production_readiness || true
+}
+
+https_domains_show_local_domain_page() {
+  show_domain_config
+
+  echo
+  show_local_domain_status
+
+  echo
+  echo "Domain management:"
+  echo "  Change domain:  $(toolkit_cmd change-local-domain)"
+  echo "  Host mapping:   $(toolkit_cmd hosts-command)"
+}
+
+https_domains_show_production_domain_page() {
+  show_domain_config
+
+  echo
+  show_production_domain_plan
+
+  echo
+  show_production_domain_guide
+}
+
+https_domains_show_local_guides() {
+  show_local_ssl_guide
+
+  echo
+  show_mkcert_local_ssl_guide
+
+  echo
+  show_ssl_roadmap_guide
+}
+
+https_domains_show_production_guides() {
+  show_production_ssl_guide
+
+  echo
+  show_ssl_mode_guide
+
+  echo
+  show_ssl_roadmap_guide
+}
+
+https_domains_show_local_recovery() {
+  local shown=0
+
+  if declare -F show_ssl_rollback_guide >/dev/null 2>&1; then
+    show_ssl_rollback_guide
+    shown=1
+  fi
+
+  if declare -F verify_ssl_rollback >/dev/null 2>&1; then
+    echo
+    verify_ssl_rollback || true
+    shown=1
+  fi
+
+  if ((shown == 0)); then
+    show_local_ssl_menu
+  else
+    echo
+    echo "To disable or reconfigure HTTPS:"
+    echo "  $(toolkit_cmd local-ssl-menu)"
+  fi
+}
+
+https_domains_show_production_provider() {
+  if https_domains_engine_is_docker \
+    && declare -F docker_https_wizard >/dev/null 2>&1; then
+    docker_https_wizard
+  else
+    show_production_ssl_menu
+  fi
+}
+
+https_domains_show_production_recovery() {
+  https_domains_show_production_status || true
+
+  echo
+  echo "Open the provider and certificate workflow to switch providers,"
+  echo "replace certificates, or disable HTTPS safely."
+  echo
+  echo "  $(toolkit_cmd production-ssl-menu)"
+}
+
 show_https_domains_menu() {
+  local production_mode=0
+
+  https_domains_menu_is_production && production_mode=1
+
   while true; do
+    if ((production_mode == 1)); then
+      ui_submenu_header "HTTPS & Domains" \
+        "Manage production domains, DNS, certificates, and HTTPS."
 
-    ui_submenu_header "HTTPS & Domains" \
-      "Local trust, production certificates, domains, and SSL guidance"
+      render_production_https_domains_menu_options
+    else
+      ui_submenu_header "HTTPS & Domains" \
+        "Secure local ERPNext access and browser trust."
 
-    render_https_domains_menu_options
+      render_local_https_domains_menu_options
+    fi
 
     ui_submenu_footer
+
     local choice=""
     menu_read_choice choice
 
-    case "$choice" in
-      1) show_local_ssl_menu ;;
-      2) show_production_ssl_menu ;;
-      3)
-        show_domain_config
-        pause_after_screen "Press Enter to return to HTTPS & Domains..."
-        ;;
-      4)
-        change_local_domain_wizard
-        pause_after_screen "Press Enter to return to HTTPS & Domains..."
-        ;;
-      5)
-        show_local_domain_status
-        pause_after_screen "Press Enter to return to HTTPS & Domains..."
-        ;;
-      6)
-        show_ssl_roadmap_guide
-        pause_after_screen "Press Enter to return to HTTPS & Domains..."
-        ;;
-      7)
-        show_ssl_mode_status
-        show_ssl_mode_guide
-        pause_after_screen "Press Enter to return to HTTPS & Domains..."
-        ;;
-      8)
-        show_production_readiness
-        pause_after_screen "Press Enter to return to HTTPS & Domains..."
-        ;;
-      b | B | "") return 0 ;;
-      q | Q) exit 0 ;;
-      *) warn "Invalid option" ;;
-    esac
+    if ((production_mode == 1)); then
+      case "$choice" in
+        1)
+          https_domains_show_production_status
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        2)
+          https_domains_run_production_setup
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        3)
+          https_domains_verify_production
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        4)
+          https_domains_show_production_domain_page
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        5)
+          show_ssl_mode_status
+          echo
+          show_ssl_mode_guide
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        6)
+          https_domains_show_production_provider
+          ;;
+        g | G)
+          https_domains_show_production_guides
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        r | R)
+          https_domains_show_production_recovery
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        b | B | "")
+          return 0
+          ;;
+        q | Q)
+          exit 0
+          ;;
+        *)
+          warn "Invalid option"
+          ;;
+      esac
+    else
+      case "$choice" in
+        1)
+          show_ssl_status
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        2)
+          run_local_ssl_wizard
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        3)
+          verify_local_ssl
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        4)
+          https_domains_show_local_domain_page
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        5)
+          show_browser_trust_check_guide
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        6)
+          show_local_ssl_menu
+          ;;
+        g | G)
+          https_domains_show_local_guides
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        r | R)
+          https_domains_show_local_recovery
+          pause_after_screen "Press Enter to return to HTTPS & Domains..."
+          ;;
+        b | B | "")
+          return 0
+          ;;
+        q | Q)
+          exit 0
+          ;;
+        *)
+          warn "Invalid option"
+          ;;
+      esac
+    fi
   done
 }
 
