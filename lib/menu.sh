@@ -841,21 +841,132 @@ show_https_domains_menu() {
   done
 }
 
+operations_menu_render_option() {
+  local key="$1"
+  local label="$2"
+
+  ui_row_add_colored cyan "[$key]"
+  ui_row_add " $label"
+}
+
+operations_menu_render_pair() {
+  local width="$1"
+  local left_key="$2"
+  local left_label="$3"
+  local right_key="${4:-}"
+  local right_label="${5:-}"
+  local second_column
+
+  second_column=$((width / 2))
+
+  ui_row_begin
+  operations_menu_render_option "$left_key" "$left_label"
+
+  if [[ -n "$right_key" ]]; then
+    ui_row_pad_to "$second_column"
+    operations_menu_render_option "$right_key" "$right_label"
+  fi
+
+  ui_row_end
+}
+
+render_operations_menu_options() {
+  local width
+
+  width="$(ui_panel_width)"
+
+  ui_box_line top "$width"
+
+  if ((width >= 80)); then
+    operations_menu_render_pair "$width" "1" "Dashboard" "4" "Updates"
+    operations_menu_render_pair "$width" "2" "Services" "5" "Production"
+    operations_menu_render_pair "$width" "3" "Maintenance" "6" "Recovery plan"
+
+    ui_box_line mid "$width"
+
+    operations_menu_render_pair "$width" "F" "Final QA" "N" "Next step"
+  else
+    operations_menu_render_pair "$width" "1" "Dashboard"
+    operations_menu_render_pair "$width" "2" "Services"
+    operations_menu_render_pair "$width" "3" "Maintenance"
+    operations_menu_render_pair "$width" "4" "Updates"
+    operations_menu_render_pair "$width" "5" "Production"
+    operations_menu_render_pair "$width" "6" "Recovery plan"
+
+    ui_box_line mid "$width"
+
+    operations_menu_render_pair "$width" "F" "Final QA"
+    operations_menu_render_pair "$width" "N" "Next step"
+  fi
+
+  ui_box_line bot "$width"
+}
+
+operations_menu_footer() {
+  echo
+  ui_text cyan "B."
+  printf ' Back'
+  printf '                        '
+  ui_text orange "Q."
+  printf ' Quit
+'
+}
+
+show_operations_updates_menu() {
+  while true; do
+    ui_submenu_header "Updates" \
+      "Check readiness and update ERPNext safely."
+
+    local width
+    width="$(ui_panel_width)"
+
+    ui_box_line top "$width"
+
+    if ((width >= 80)); then
+      operations_menu_render_pair "$width" "1" "Update check" "2" "Safe update"
+    else
+      operations_menu_render_pair "$width" "1" "Update check"
+      operations_menu_render_pair "$width" "2" "Safe update"
+    fi
+
+    ui_box_line bot "$width"
+
+    operations_menu_footer
+
+    local choice=""
+    menu_read_choice choice
+
+    case "$choice" in
+      1)
+        run_update_preflight
+        pause_after_screen "Press Enter to return to Updates..."
+        ;;
+      2)
+        run_safe_update_wizard
+        pause_after_screen "Press Enter to return to Updates..."
+        ;;
+      b | B | "")
+        return 0
+        ;;
+      q | Q)
+        exit 0
+        ;;
+      *)
+        warn "Invalid option"
+        ;;
+    esac
+  done
+}
+
 show_operations_menu() {
   while true; do
     ui_submenu_header "Operations" \
-      "Runtime control, maintenance, updates, production operations, and QA"
-    print_two_column_menu \
-      "1) Operations dashboard" \
-      "2) Service manager" \
-      "3) Maintenance" \
-      "4) Update preflight" \
-      "5) Safe ERPNext update" \
-      "6) Production operations" \
-      "7) Final QA" \
-      "8) Next recommended action" \
-      "9) Service recovery plan"
-    menu_footer back "Main menu"
+      "Monitor, control, maintain, update, and recover ERPNext."
+
+    render_operations_menu_options
+
+    operations_menu_footer
+
     local choice=""
     menu_read_choice choice
 
@@ -864,32 +975,39 @@ show_operations_menu() {
         run_operations_dashboard
         pause_after_screen "Press Enter to return to Operations..."
         ;;
-      2) show_service_menu ;;
-      3) run_maintenance_menu ;;
+      2)
+        show_service_menu
+        ;;
+      3)
+        run_maintenance_menu
+        ;;
       4)
-        run_update_preflight
-        pause_after_screen "Press Enter to return to Operations..."
+        show_operations_updates_menu
         ;;
       5)
-        run_safe_update_wizard
-        pause_after_screen "Press Enter to return to Operations..."
+        production_ops_wizard
         ;;
-      6) production_ops_wizard ;;
-      7)
-        final_qa_wizard
-        pause_after_screen "Press Enter to return to Operations..."
-        ;;
-      8)
-        show_next_step
-        pause_after_screen "Press Enter to return to Operations..."
-        ;;
-      9)
+      6)
         show_service_recovery_plan
         pause_after_screen "Press Enter to return to Operations..."
         ;;
-      b | B | "") return 0 ;;
-      q | Q) exit 0 ;;
-      *) warn "Invalid option" ;;
+      f | F)
+        final_qa_wizard
+        pause_after_screen "Press Enter to return to Operations..."
+        ;;
+      n | N)
+        show_next_step
+        pause_after_screen "Press Enter to return to Operations..."
+        ;;
+      b | B | "")
+        return 0
+        ;;
+      q | Q)
+        exit 0
+        ;;
+      *)
+        warn "Invalid option"
+        ;;
     esac
   done
 }
