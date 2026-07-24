@@ -69,16 +69,14 @@ if ! grep -qE '\[1\].*\[7\]' "$tmp2"; then
 else
   pass "two-column menu at COLUMNS=100"
 fi
-grep -qE 'Go-live[[:space:]]+[+!x-]' "$tmp" || note_fail "wide layout missing Go-live status indicator"
-grep -qE 'Go-live[[:space:]]+-' "$tmp" || note_fail "local mode should render Go-live as a neutral indicator"
-grep -qE 'HTTPS:[[:space:]]*(None|mkcert|Self-signed|OK)' "$tmp2" \
-  grep -qE 'HTTPS[[:space:]]+-' "$tmp" || note_fail "local mode without configured HTTPS should render a neutral HTTPS indicator"
-# Status badges must wrap: Go-live must not share a line with HTTPS.
-if grep -E 'HTTPS:.*Go-live:' "$tmp2" >/dev/null 2>&1; then
-  note_fail "Go-live still on the same status row as HTTPS (overflow risk)"
-  echo "----- wide render -----" >&2
-  cat "$tmp2" >&2 || true
-fi
+grep -qE 'Go-live[[:space:]]+[+!x-]' "$tmp" \
+  || note_fail "layout missing Go-live status indicator"
+grep -qE 'Go-live[[:space:]]+-' "$tmp" \
+  || note_fail "local mode should render Go-live as a neutral indicator"
+grep -qE 'HTTPS[[:space:]]+[+!x-]' "$tmp" \
+  || note_fail "layout missing HTTPS status indicator"
+grep -qE 'HTTPS[[:space:]]+-' "$tmp" \
+  || note_fail "local mode without configured HTTPS should render a neutral HTTPS indicator"
 if grep -q $'\033' "$tmp2"; then
   note_fail "ANSI escape codes in wide layout with NO_COLOR=1"
 fi
@@ -282,10 +280,22 @@ access_tmp="$(mktemp /tmp/erpnext-dev-ui-access.XXXXXX)"
 if ! printf 'q\n' | ./erpnext-dev.sh access >"$access_tmp" 2>/dev/null; then
   note_fail "access menu render failed"
 fi
-grep -q "Browser access information" "$access_tmp" || note_fail "Access missing browser access information"
-grep -q "Local network & stable IP" "$access_tmp" || note_fail "Access missing local network routing"
-grep -q "Hostname & hosts mapping" "$access_tmp" || note_fail "Access missing hostname / hosts routing"
-grep -q "HTTPS & domains" "$access_tmp" || note_fail "Access missing HTTPS & domains routing"
+grep -q "Access overview" "$access_tmp" \
+  || note_fail "Access missing Access overview routing"
+grep -q "Verify access" "$access_tmp" \
+  || note_fail "Access missing Verify access routing"
+grep -q "Network status" "$access_tmp" \
+  || note_fail "Access missing Network status routing"
+grep -q "Network & IP" "$access_tmp" \
+  || note_fail "Access missing local Network & IP routing"
+grep -q "Hostname & mapping" "$access_tmp" \
+  || note_fail "Access missing local Hostname & mapping routing"
+grep -q "Credentials" "$access_tmp" \
+  || note_fail "Access missing Credentials routing"
+grep -q "Access doctor" "$access_tmp" \
+  || note_fail "Access missing local Access doctor routing"
+grep -q "HTTPS & domains" "$access_tmp" \
+  || note_fail "Access missing HTTPS & domains routing"
 if grep -q "29) Show host access test guide" "$access_tmp"; then
   note_fail "Access still exposes the legacy 29-item flat menu"
 fi
